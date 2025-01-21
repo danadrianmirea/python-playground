@@ -4,8 +4,8 @@ import time
 
 # Initialize Reddit API client
 reddit = praw.Reddit(
-    client_id="5upF4oYw0y3itVvyyC2aOQ",
-    client_secret="SMLNeZaB0DCiPLw2j96qzmubLK3mYQ",
+    client_id="",
+    client_secret="",
     user_agent="subScraper by /u/Positive_Lunch",
 )
 
