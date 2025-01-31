@@ -32,4 +32,4 @@ print(f"ressqrt: {ressqrt}")
 
 nutsRadius = float(input("Enter the radius of deez nuts: "))
 areaNuts = math.pi * pow(nutsRadius, 2)
-print(f"The area of deez nuts is: {areaNuts}")5
+print(f"The area of deez nuts is: {areaNuts}")
