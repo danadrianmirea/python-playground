@@ -2,7 +2,7 @@ import os
 
 def is_unity_project(folder):
     """Check if a folder is a Unity project by looking for key subfolders."""
-    required_folders = {"Assets", "ProjectSettings"}
+    required_folders = {"Assets", "ProjectSettings", "assets", "projectSettings"}
     folder_contents = set(os.listdir(folder))
 
     return required_folders.issubset(folder_contents)
