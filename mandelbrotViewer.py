@@ -126,6 +126,12 @@ try:
     # Cache for color lookup tables
     color_lookup_cache = {}
     
+    # Smooth zoom settings
+    smooth_zooming = False
+    smooth_zoom_factor = 1.02  # Per-frame zoom factor (1.02 = 2% closer per frame)
+    smooth_zoom_out = False    # Flag to indicate if we're zooming out instead of in
+    mouse_pos = (WIDTH // 2, HEIGHT // 2)  # Default to center of screen
+    
     # Zoom history stack to store previous viewports
     zoom_history = []
     # Store initial view as the first item in history
@@ -682,6 +688,8 @@ try:
             "Controls:",
             "Left click and drag: Select zoom area",
             "Right click: Zoom out",
+            "W (hold): Smooth zoom in toward cursor",
+            "S (hold): Smooth zoom out from cursor",
             "C: Change color mode",
             "Left/Right: Shift colors",
             "I/D: Increase/Decrease iterations", 
@@ -1142,6 +1150,53 @@ try:
         
         print("View reset to initial state")
 
+    def smooth_zoom_to_cursor():
+        """Perform a smooth zoom step centered on the current mouse position"""
+        global x_min, x_max, y_min, y_max, current_pixels
+        
+        # Get the current width and height in the complex plane
+        width = x_max - x_min
+        height = y_max - y_min
+        
+        # Map mouse position to complex coordinates
+        cx = x_min + width * mouse_pos[0] / WIDTH
+        cy = y_max - height * mouse_pos[1] / HEIGHT
+        
+        # Calculate new bounds with a small zoom step
+        # The zoom factor is applied relative to the cursor position
+        if smooth_zoom_out:
+            # When zooming out, multiply by the factor instead of dividing
+            new_width = width * smooth_zoom_factor
+            new_height = height * smooth_zoom_factor
+        else:
+            # Normal zoom in
+            new_width = width / smooth_zoom_factor
+            new_height = height / smooth_zoom_factor
+        
+        # Calculate new bounds while keeping the cursor point at the same relative position
+        # We need to maintain the ratio between cursor position and the edge distances
+        cursor_ratio_x = (cx - x_min) / width
+        cursor_ratio_y = (y_max - cy) / height
+        
+        # Apply ratios to calculate new bounds
+        new_x_min = cx - new_width * cursor_ratio_x
+        new_x_max = new_x_min + new_width
+        new_y_max = cy + new_height * cursor_ratio_y
+        new_y_min = new_y_max - new_height
+        
+        # Apply the new bounds
+        x_min, x_max = new_x_min, new_x_max
+        y_min, y_max = new_y_min, new_y_max
+        
+        # Reset current pixels to force recalculation
+        current_pixels = None
+        
+        # In debug mode, log the new coordinates
+        if debug_coordinates:
+            zoom_type = "out" if smooth_zoom_out else "in"
+            print(f"Smooth zoom {zoom_type} to: ({cx:.6f}, {cy:.6f})")
+            print(f"New bounds: x=[{x_min:.6f}, {x_max:.6f}], y=[{y_min:.6f}, {y_max:.6f}]")
+
     # Print a message indicating successful initialization
     print("Mandelbrot Viewer successfully initialized...")
     
@@ -1153,7 +1208,30 @@ try:
     current_pixels = None
     draw_mandelbrot()
     
+    # Save history at regular intervals during smooth zoom
+    smooth_zoom_history_counter = 0
+    smooth_zoom_history_interval = 30  # Save every 30 frames of smooth zooming
+    
     while running:
+        # Check if we're in smooth zoom mode and W or S key is still pressed
+        # Get the mouse position before handling events
+        if smooth_zooming:
+            mouse_pos = pygame.mouse.get_pos()
+            smooth_zoom_to_cursor()
+            
+            # Update the display
+            update_mandelbrot()
+            
+            # Save zoom history periodically during smooth zoom
+            smooth_zoom_history_counter += 1
+            if smooth_zoom_history_counter >= smooth_zoom_history_interval:
+                smooth_zoom_history_counter = 0
+                # Save current view to history
+                zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
+                # Limit history size
+                if len(zoom_history) > 50:
+                    zoom_history.pop(0)
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -1192,6 +1270,10 @@ try:
                         start_pos = None
                         current_pos = None
             elif event.type == pygame.MOUSEMOTION:
+                # Always update mouse position for smooth zoom
+                mouse_pos = event.pos
+                
+                # Handle rectangle drawing
                 if drawing:
                     current_pos = event.pos
                     # Draw the selection rectangle without recalculating the Mandelbrot set
@@ -1202,8 +1284,32 @@ try:
                     drawing = False
                     start_pos = None
                     current_pos = None
+                
+                if event.key == pygame.K_w:
+                    # Start smooth zooming in when W key is pressed
+                    smooth_zooming = True
+                    smooth_zoom_out = False  # Ensure we're zooming in
+                    mouse_pos = pygame.mouse.get_pos()
+                    smooth_zoom_history_counter = 0
                     
-                if event.key == pygame.K_c:
+                    # Save current view to history before starting smooth zoom
+                    zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
+                    # Limit history size
+                    if len(zoom_history) > 50:
+                        zoom_history.pop(0)
+                elif event.key == pygame.K_s:
+                    # Start smooth zooming out when S key is pressed
+                    smooth_zooming = True
+                    smooth_zoom_out = True  # We're zooming out
+                    mouse_pos = pygame.mouse.get_pos()
+                    smooth_zoom_history_counter = 0
+                    
+                    # Save current view to history before starting smooth zoom
+                    zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
+                    # Limit history size
+                    if len(zoom_history) > 50:
+                        zoom_history.pop(0)
+                elif event.key == pygame.K_c:
                     # Change color mode
                     color_mode = (color_mode + 1) % 9
                     draw_mandelbrot()
@@ -1252,6 +1358,10 @@ try:
                 elif event.key == pygame.K_r:
                     # Reset view
                     reset_view()
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_w or event.key == pygame.K_s:
+                    # Stop smooth zooming when W or S key is released
+                    smooth_zooming = False
         
         # Limit the frame rate
         clock.tick(30)
