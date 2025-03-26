@@ -8,6 +8,9 @@ import traceback
 USE_NUMBA = True
 TRANSPOSE_NUMBA_OUTPUT = True
 
+# Add GPU acceleration flag
+USE_GPU = True
+
 # Add Numba import for JIT compilation
 try:
     import numba
@@ -22,6 +25,114 @@ except ImportError:
     HAVE_NUMBA = False
     USE_NUMBA = False
     print("Numba not found - using standard Python (install Numba for better performance)")
+
+# Try to import PyOpenCL for GPU acceleration
+try:
+    import pyopencl as cl
+    import pyopencl.array
+    HAVE_GPU = True
+    # Keep GPU disabled by default, letting the user toggle it
+    print("PyOpenCL found - GPU acceleration is available")
+except ImportError:
+    HAVE_GPU = False
+    USE_GPU = False
+    print("PyOpenCL not found - GPU acceleration not available (install PyOpenCL for GPU support)")
+
+# Define OpenCL context and queue for GPU computation
+cl_ctx = None
+cl_queue = None
+cl_program = None
+
+# OpenCL kernel code for Mandelbrot computation
+OPENCL_KERNEL = """
+__kernel void mandelbrot(__global int *output,
+                         __global double *x_array,
+                         __global double *y_array,
+                         const int width,
+                         const int height,
+                         const int max_iter)
+{
+    // Get the index of the current element
+    int gid_x = get_global_id(0); // column index
+    int gid_y = get_global_id(1); // row index
+    
+    // Check if we're within bounds
+    if (gid_x < width && gid_y < height) {
+        // Get the complex coordinates
+        double x0 = x_array[gid_x];
+        double y0 = y_array[gid_y];
+        
+        // Initialize z = 0
+        double x = 0.0;
+        double y = 0.0;
+        
+        // Initialize iteration counter
+        int iteration = 0;
+        double x2 = 0.0;
+        double y2 = 0.0;
+        
+        // Main iteration loop
+        while (x2 + y2 < 4.0 && iteration < max_iter) {
+            // z -> z^2 + c
+            y = 2.0 * x * y + y0;
+            x = x2 - y2 + x0;
+            x2 = x * x;
+            y2 = y * y;
+            iteration++;
+        }
+        
+        // Store the result
+        output[gid_y * width + gid_x] = iteration;
+    }
+}
+"""
+
+def init_gpu():
+    """Initialize OpenCL context, queue and program if not already initialized"""
+    global cl_ctx, cl_queue, cl_program
+    
+    if cl_ctx is None and HAVE_GPU:
+        try:
+            # Create context and queue
+            platforms = cl.get_platforms()
+            if not platforms:
+                print("No OpenCL platforms found. GPU acceleration unavailable.")
+                return False
+                
+            # Try to get a GPU device, fall back to CPU if no GPU
+            try:
+                gpu_devices = platforms[0].get_devices(device_type=cl.device_type.GPU)
+                if gpu_devices:
+                    cl_ctx = cl.Context(devices=gpu_devices)
+                    print(f"Using GPU: {gpu_devices[0].name}")
+                else:
+                    cpu_devices = platforms[0].get_devices(device_type=cl.device_type.CPU)
+                    if cpu_devices:
+                        cl_ctx = cl.Context(devices=cpu_devices)
+                        print(f"No GPU found, using CPU OpenCL: {cpu_devices[0].name}")
+                    else:
+                        print("No OpenCL devices found.")
+                        return False
+            except:
+                print("Error initializing OpenCL context. Using fallback.")
+                return False
+                
+            # Create command queue
+            cl_queue = cl.CommandQueue(cl_ctx)
+            
+            # Build program
+            cl_program = cl.Program(cl_ctx, OPENCL_KERNEL).build()
+            
+            print("GPU acceleration initialized successfully")
+            return True
+        except Exception as e:
+            print(f"Failed to initialize GPU acceleration: {e}")
+            cl_ctx = None
+            cl_queue = None
+            cl_program = None
+            return False
+    
+    return cl_ctx is not None
 
 try:
     # Initialize Pygame
@@ -179,8 +290,53 @@ try:
                     
             return output
     
-    def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
-        """Calculate the Mandelbrot set"""
+    def mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter):
+        """Calculate Mandelbrot set using GPU acceleration"""
+        if not init_gpu():
+            print("GPU acceleration unavailable, falling back to CPU")
+            return mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+        
+        try:
+            # Generate coordinate arrays
+            x = np.linspace(x_min, x_max, w, dtype=np.float64)  # X coordinates
+            y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Y coordinates (inverted for screen)
+            
+            # Create output array
+            output = np.zeros((h, w), dtype=np.int32)
+            
+            # Create OpenCL buffers
+            x_buf = cl.Buffer(cl_ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=x)
+            y_buf = cl.Buffer(cl_ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=y)
+            output_buf = cl.Buffer(cl_ctx, cl.mem_flags.WRITE_ONLY, output.nbytes)
+            
+            # Execute the kernel
+            global_size = (w, h)  # Global work size - one work item per pixel
+            local_size = None     # Let OpenCL choose the local work size
+            
+            # Call the kernel
+            cl_program.mandelbrot(cl_queue, global_size, local_size,
+                                 output_buf, x_buf, y_buf,
+                                 np.int32(w), np.int32(h), np.int32(max_iter))
+            
+            # Copy result back to host
+            cl.enqueue_copy(cl_queue, output, output_buf)
+            
+            # Wait for completion
+            cl_queue.finish()
+            
+            # If transpose flag is set, transpose the output to match expected orientation
+            if TRANSPOSE_NUMBA_OUTPUT:
+                output = output.T
+            
+            return output
+            
+        except Exception as e:
+            print(f"GPU computation failed: {e}")
+            print("Falling back to CPU computation")
+            return mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+
+    def mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter):
+        """Calculate the Mandelbrot set using CPU (either Numba or NumPy)"""
         # Use float64 for better precision
         # Set up the x and y ranges with correct orientation:
         # x increases from left to right: x_min at left, x_max at right
@@ -217,6 +373,13 @@ try:
                 mask = mask_new
         
         return output
+
+    def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
+        """Select the appropriate Mandelbrot calculation method based on settings"""
+        if USE_GPU and HAVE_GPU:
+            return mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+        else:
+            return mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter)
 
     def create_smooth_colormap():
         """Create a lookup table for smooth color mapping"""
@@ -720,6 +883,7 @@ try:
             "Y: Toggle high quality mode",
             "V: Toggle debug mode",
             "N: Toggle Numba/NumPy",
+            "G: Toggle GPU acceleration",
             "R: Reset view",
             "P: Print current settings",
             "Backspace: Zoom out",
@@ -747,7 +911,9 @@ try:
         debug_text = "Debug ON" if debug_coordinates else "Debug OFF"
         
         # Implementation indicator
-        if HAVE_NUMBA:
+        if HAVE_GPU and USE_GPU:
+            impl_text = "GPU (OpenCL)"
+        elif HAVE_NUMBA:
             if USE_NUMBA:
                 impl_text = "NumPy" if force_numpy else "Numba"
             else:
@@ -1263,6 +1429,26 @@ try:
             direction_str = "+".join(current_direction) if current_direction else "none"
             print(f"Panning {direction_str}: New bounds x=[{x_min:.6f}, {x_max:.6f}], y=[{y_min:.6f}, {y_max:.6f}]")
 
+    def toggle_gpu_mode():
+        """Toggle between GPU and CPU implementations"""
+        global USE_GPU, current_pixels
+        
+        # Only toggle if GPU is available
+        if HAVE_GPU:
+            USE_GPU = not USE_GPU
+            current_pixels = None  # Force recalculation
+            
+            # Update status in console
+            if USE_GPU:
+                print("Using GPU acceleration for Mandelbrot calculations")
+            else:
+                print("Using CPU implementation for Mandelbrot calculations")
+                
+            # Update the display
+            update_mandelbrot()
+        else:
+            print("GPU acceleration not available (install PyOpenCL for GPU support)")
+
     # Print a message indicating successful initialization
     print("Mandelbrot Viewer successfully initialized...")
     
@@ -1477,6 +1663,9 @@ try:
                 elif event.key == pygame.K_d:
                     key_pressed["right"] = True
                     panning = True
+                elif event.key == pygame.K_g:
+                    # Toggle GPU mode
+                    toggle_gpu_mode()
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_e or event.key == pygame.K_q:
                     # Stop smooth zooming when E or Q key is released
