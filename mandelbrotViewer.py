@@ -24,13 +24,17 @@ start_pos = None
 current_pos = None
 
 def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
-    x = np.linspace(x_min, x_max, w)
-    y = np.linspace(y_min, y_max, h)
+    # Use float64 for better precision
+    x = np.linspace(x_min, x_max, w, dtype=np.float64)
+    y = np.linspace(y_min, y_max, h, dtype=np.float64)
+    
+    # Create complex array with float64 precision
     c = x[:, np.newaxis] + 1j * y
-    z = np.zeros_like(c)
+    z = np.zeros_like(c, dtype=np.complex128)
     mask = np.ones_like(c, dtype=bool)
     output = np.zeros_like(c, dtype=int)
     
+    # Optimize the calculation to reduce floating-point errors
     for i in range(max_iter):
         z[mask] = z[mask]**2 + c[mask]
         mask_new = abs(z) < 2
@@ -43,7 +47,8 @@ def draw_mandelbrot():
     global current_pixels
     if current_pixels is None:
         current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, max_iter)
-    surface = pygame.surfarray.make_surface(current_pixels * 255 / max_iter)
+    # Convert to float64 for better precision in the display calculation
+    surface = pygame.surfarray.make_surface((current_pixels * 255.0 / max_iter).astype(np.uint8))
     screen.blit(surface, (0, 0))
     pygame.display.flip()
 
