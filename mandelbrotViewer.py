@@ -10,6 +10,7 @@ TRANSPOSE_NUMBA_OUTPUT = True
 
 # Add GPU acceleration flag
 USE_GPU = True
+APPLY_SMOOTH_COLORING = True
 
 # Add Numba import for JIT compilation
 try:
@@ -857,12 +858,11 @@ try:
     def mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter):
         """Calculate the Mandelbrot set using CPU (either Numba or NumPy)"""
         # Use float64 for better precision
-        # Set up the x and y ranges with correct orientation:
+        # Set up the x and y ranges with the same orientation as GPU:
         # x increases from left to right: x_min at left, x_max at right
-        # y is flipped for screen coordinates: y_max at top, y_min at bottom
-        # This is because in the complex plane y increases upward, but screen coordinates increase downward
+        # y now matches GPU implementation and increases from bottom to top
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
-        y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Note: y inverted for screen coordinates
+        y = np.linspace(y_min, y_max, h, dtype=np.float64)  # Changed from y_max, y_min to match GPU orientation
         
         if USE_NUMBA and HAVE_NUMBA and not force_numpy:
             # Use Numba-accelerated kernel
@@ -877,8 +877,8 @@ try:
             # Use the original NumPy implementation
             # Broadcasting creates a 2D grid of complex numbers where:
             # c[i,j] = x[j] + 1j * y[i]
-            # This makes c[0,0] = x[0] + 1j * y[0] = top-left corner
-            # And maps screen coordinates directly to the complex plane
+            # This makes c[0,0] = x[0] + 1j * y[0] = bottom-left corner now
+            # And maps screen coordinates directly to the complex plane with the same orientation as GPU
             c = x[:, np.newaxis] + 1j * y
             z = np.zeros_like(c, dtype=np.complex128)
             mask = np.ones_like(c, dtype=bool)
@@ -919,13 +919,7 @@ try:
                         
                         # If dimensions don't align perfectly, crop or pad
                         colored_pixels = resize_array(colored_pixels, (h, w, 3))
-                else:
-                    # Apply coloring to the iterations if we fell back to CPU
-                    if APPLY_SMOOTH_COLORING:
-                        colored_pixels = smooth_colormap(iterations, max_iter, color_mode, color_shift)
-                    else:
-                        colored_pixels = basic_colormap(iterations, max_iter, color_mode)
-                        
+                else:     
                     # Upscale the colored pixels to the target resolution
                     if scaled_w != w or scaled_h != h:
                         scale_x = w // scaled_w
@@ -936,13 +930,7 @@ try:
                 return iterations
             else:
                 iterations = mandelbrot_cpu(scaled_h, scaled_w, xa, xb, ya, yb, max_iter)
-                
-                # Apply coloring to the iterations
-                if APPLY_SMOOTH_COLORING:
-                    colored_pixels = smooth_colormap(iterations, max_iter, color_mode, color_shift)
-                else:
-                    colored_pixels = basic_colormap(iterations, max_iter, color_mode)
-                
+
                 # Upscale the colored pixels to the target resolution
                 if scaled_w != w or scaled_h != h:
                     # Upscale using NumPy's repeat function (faster than interpolation for this purpose)
@@ -961,23 +949,10 @@ try:
             # Store the colored pixels for immediate use if not None
             if rgb_array is not None:
                 colored_pixels = rgb_array
-            else:
-                # Apply CPU coloring if we fell back
-                if APPLY_SMOOTH_COLORING:
-                    colored_pixels = smooth_colormap(iterations, max_iter, color_mode, color_shift)
-                else:
-                    colored_pixels = basic_colormap(iterations, max_iter, color_mode)
             return iterations
         else:
             # CPU calculation
             iterations = mandelbrot_cpu(h, w, xa, xb, ya, yb, max_iter)
-            
-            # Apply coloring to the CPU-calculated iterations
-            if APPLY_SMOOTH_COLORING:
-                colored_pixels = smooth_colormap(iterations, max_iter, color_mode, color_shift)
-            else:
-                colored_pixels = basic_colormap(iterations, max_iter, color_mode)
-            
             return iterations
 
     def create_smooth_colormap():
