@@ -36,6 +36,9 @@ try:
     start_pos = None
     current_pos = None
     
+    # UI visibility control
+    show_ui_panels = False  # Initially hide the UI panels
+    
     # Color palette settings
     color_mode = 2  # 0: Smooth colormap, 1: Classic rainbow, 2: Fire palette
     color_shift = 0.0  # color rotation value
@@ -219,8 +222,36 @@ try:
         
         return rgb_array
 
+    # Add a function to draw the top help message
+    def draw_top_message():
+        """Draw a help message at the top of the screen"""
+        message = "Press H to toggle help and debug info"
+        message_font = pygame.font.SysFont('Arial', 14, bold=True)
+        text_surface = message_font.render(message, True, (255, 255, 255))
+        
+        # Create a semi-transparent background
+        text_rect = text_surface.get_rect()
+        text_rect.centerx = WIDTH // 2
+        text_rect.top = 10
+        
+        bg_rect = text_rect.inflate(20, 10)
+        bg_surface = pygame.Surface((bg_rect.width, bg_rect.height))
+        bg_surface.set_alpha(180)
+        bg_surface.fill((20, 20, 40))
+        
+        # Draw background and text
+        screen.blit(bg_surface, bg_rect)
+        screen.blit(text_surface, text_rect)
+        
+        # Add a subtle border
+        pygame.draw.rect(screen, (100, 100, 150), bg_rect, 1)
+
     def draw_ui_panel():
         """Draw UI panels with matching styling"""
+        # If panels are hidden, return immediately
+        if not show_ui_panels:
+            return
+            
         # Help panel (left)
         help_texts = [
             "Controls:",
@@ -231,6 +262,7 @@ try:
             "I/D: Increase/Decrease iterations", 
             "P: Print current settings",
             "Backspace: Zoom out",
+            "H: Toggle help panels",
             "ESC: Exit"
         ]
         
@@ -317,7 +349,10 @@ try:
         # Display the surface
         screen.blit(base_surface, (0, 0))
         
-        # Draw UI panels (help and settings)
+        # Always draw the top message
+        draw_top_message()
+        
+        # Draw UI panels (help and settings) if enabled
         draw_ui_panel()
         
         pygame.display.flip()
@@ -481,7 +516,10 @@ try:
         pygame.draw.line(screen, (255, 255, 0), (int(center_x) - 5, int(center_y)), (int(center_x) + 5, int(center_y)), 1)
         pygame.draw.line(screen, (255, 255, 0), (int(center_x), int(center_y) - 5), (int(center_x), int(center_y) + 5), 1)
         
-        # Draw UI panels
+        # Always draw the top message
+        draw_top_message()
+        
+        # Draw UI panels if enabled
         draw_ui_panel()
         
         pygame.display.flip()
@@ -607,6 +645,11 @@ try:
                     print(f"Current settings: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}, max_iter={max_iter}")
                     print(f"Color mode: {color_mode}, Color shift: {color_shift}")
                     print(f"Zoom history depth: {len(zoom_history)}")
+                # Toggle UI panels with H key
+                elif event.key == pygame.K_h:
+                    # Toggle UI visibility without global declaration
+                    globals()['show_ui_panels'] = not show_ui_panels
+                    draw_mandelbrot()
                 # Add escape key to exit
                 elif event.key == pygame.K_ESCAPE:
                     running = False
