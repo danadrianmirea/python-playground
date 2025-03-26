@@ -46,26 +46,34 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN:
             # Get mouse position and convert to complex coordinates
             mouse_x, mouse_y = event.pos
+            print(f"\nMouse click at screen coordinates: ({mouse_x}, {mouse_y})")
+            
             # Convert screen coordinates to complex plane coordinates
             x = x_min + (x_max - x_min) * mouse_x / WIDTH
             y = y_min + (y_max - y_min) * (HEIGHT - mouse_y) / HEIGHT
+            print(f"Converted to complex plane coordinates: ({x:.4f}, {y:.4f})")
+            print(f"Current view bounds: x=[{x_min:.4f}, {x_max:.4f}], y=[{y_min:.4f}, {y_max:.4f}]")
             
             # Zoom factor (0.1 for zoom in, 10 for zoom out)
             zoom_factor = 0.1 if event.button == 1 else 10.0
+            print(f"Zoom factor: {zoom_factor}")
             
             # Calculate new view parameters
             x_span = (x_max - x_min) * zoom_factor
             y_span = (y_max - y_min) * zoom_factor
+            print(f"New spans: x_span={x_span:.4f}, y_span={y_span:.4f}")
             
             # Calculate the relative position of the clicked point
             rel_x = (x - x_min) / (x_max - x_min)
             rel_y = (y - y_min) / (y_max - y_min)
+            print(f"Relative position: ({rel_x:.4f}, {rel_y:.4f})")
             
             # Calculate new bounds while maintaining the clicked point's relative position
             x_min = x - x_span * rel_x
             x_max = x + x_span * (1 - rel_x)
             y_min = y - y_span * rel_y
             y_max = y + y_span * (1 - rel_y)
+            print(f"New view bounds: x=[{x_min:.4f}, {x_max:.4f}], y=[{y_min:.4f}, {y_max:.4f}]")
             
             # Redraw
             draw_mandelbrot()
