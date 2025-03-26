@@ -58,7 +58,7 @@ try:
     show_ui_panels = False  # Initially hide the UI panels
     
     # Color palette settings
-    color_mode = 2  # 0: Smooth colormap, 1: Classic rainbow, 2: Fire palette
+    color_mode = 2  # 0: Smooth colormap, 1: Classic rainbow, 2: Fire palette, 3: Electric blue, 4: Twilight, 5: Greyscale, 6: Neon, 7: Deep Ocean, 8: Vintage
     color_shift = 0.0  # color rotation value
     
     # Add a global variable to store colored pixels
@@ -170,7 +170,7 @@ try:
             mask_indices = np.where(mask)
             rgb_array[mask_indices[0], mask_indices[1]] = cmap[indices]
         
-        elif mode == 1:  # Rainbow palette using sine waves
+        elif mode == 1:  # Classic rainbow palette using sine waves
             # Direct RGB calculation for rainbow palette
             norm_values = np.zeros_like(iterations, dtype=np.float64)
             norm_values[mask] = iterations[mask] / max_iter
@@ -241,6 +241,275 @@ try:
             rgb_array[..., 1] = (g * 255).astype(np.uint8)
             rgb_array[..., 2] = (b * 255).astype(np.uint8)
         
+        elif mode == 3:  # Electric blue
+            # Electric blue with vibrant cyan to deep blue transitions
+            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values[mask] = iterations[mask] / max_iter
+            
+            # Apply shift
+            values = (norm_values + shift) % 1.0
+            
+            # Allocate arrays
+            r = np.zeros_like(values)
+            g = np.zeros_like(values)
+            b = np.zeros_like(values)
+            
+            # Blue component: Always high but with some variation
+            b[mask] = 0.7 + 0.3 * np.sin(values[mask] * np.pi * 4)
+            
+            # Green component: Higher in the middle
+            g[mask] = 0.4 * np.sin(values[mask] * np.pi * 2) ** 2
+            g[mask & (values < 0.5)] += 0.2 + 0.6 * values[mask & (values < 0.5)]
+            
+            # Red component: Low but with some highlights
+            r[mask] = 0.1 * np.sin(values[mask] * np.pi * 8) ** 2
+            
+            # Add white spark effect for lower values (recently escaped points)
+            low_values_mask = mask & (values < 0.15)
+            spark = 1.0 - values[low_values_mask] / 0.15
+            r[low_values_mask] += spark
+            g[low_values_mask] += spark
+            
+            # Scale to 0-255 and convert to uint8
+            rgb_array[..., 0] = (np.clip(r, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
+        
+        elif mode == 4:  # Twilight palette (purple to orange)
+            # Twilight-inspired color gradient
+            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values[mask] = iterations[mask] / max_iter
+            
+            # Apply shift
+            values = (norm_values + shift) % 1.0
+            
+            # Allocate arrays
+            r = np.zeros_like(values)
+            g = np.zeros_like(values)
+            b = np.zeros_like(values)
+            
+            # Define the twilight gradient: deep purples to oranges
+            # Purple to blue
+            mask1 = mask & (values < 0.3)
+            r[mask1] = 0.5 + 0.2 * values[mask1] / 0.3
+            g[mask1] = 0.2 * values[mask1] / 0.3
+            b[mask1] = 0.8 - 0.2 * values[mask1] / 0.3
+            
+            # Blue to teal
+            mask2 = mask & (values >= 0.3) & (values < 0.5)
+            r[mask2] = 0.7 * (values[mask2] - 0.3) / 0.2
+            g[mask2] = 0.2 + 0.4 * (values[mask2] - 0.3) / 0.2
+            b[mask2] = 0.6 + 0.2 * (values[mask2] - 0.3) / 0.2
+            
+            # Teal to golden
+            mask3 = mask & (values >= 0.5) & (values < 0.7)
+            r[mask3] = 0.7 + 0.3 * (values[mask3] - 0.5) / 0.2
+            g[mask3] = 0.6 + 0.2 * (values[mask3] - 0.5) / 0.2
+            b[mask3] = 0.8 - 0.8 * (values[mask3] - 0.5) / 0.2
+            
+            # Golden to deep red
+            mask4 = mask & (values >= 0.7)
+            r[mask4] = 1.0
+            g[mask4] = 0.8 - 0.8 * (values[mask4] - 0.7) / 0.3
+            b[mask4] = 0.0
+            
+            # Scale to 0-255 and convert to uint8
+            rgb_array[..., 0] = (np.clip(r, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
+        
+        elif mode == 5:  # Grayscale with smooth log mapping
+            # Simple grayscale palette
+            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values[mask] = iterations[mask] / max_iter
+            
+            # Apply logarithmic smoothing
+            log_values = np.zeros_like(norm_values)
+            log_values[mask] = np.log(norm_values[mask] * 0.5 + 0.5) / np.log(1.5)
+            
+            # Apply shift by cycling the values (0-1 range)
+            values = (log_values + shift) % 1.0
+            
+            # Set all RGB channels to the same value for grayscale
+            # Use a bit of contrast enhancement
+            value = np.zeros_like(values)
+            value[mask] = np.clip(values[mask] * 1.2, 0, 1)
+            
+            # Scale to 0-255 and convert to uint8
+            rgb_array[..., 0] = (value * 255).astype(np.uint8)
+            rgb_array[..., 1] = (value * 255).astype(np.uint8)
+            rgb_array[..., 2] = (value * 255).astype(np.uint8)
+        
+        elif mode == 6:  # Neon palette with bright glows and dark backgrounds
+            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values[mask] = iterations[mask] / max_iter
+            
+            # Apply shift
+            values = (norm_values + shift) % 1.0
+            
+            # Allocate arrays
+            r = np.zeros_like(values)
+            g = np.zeros_like(values)
+            b = np.zeros_like(values)
+            
+            # Create a striated neon effect based on value
+            phase = np.zeros_like(values)
+            phase[mask] = values[mask] * 15  # Multiple cycles for striations
+            
+            # Use sine waves with different frequencies for color pulsing
+            r[mask] = 0.5 * np.sin(phase[mask] * 1.0 + 0.0) + 0.5
+            g[mask] = 0.5 * np.sin(phase[mask] * 1.0 + 2.0) + 0.5
+            b[mask] = 0.5 * np.sin(phase[mask] * 1.0 + 4.0) + 0.5
+            
+            # Apply a glow effect - brighten colors based on original value
+            # This makes recently escaped points brighter
+            glow_mask = mask & (values < 0.2)
+            
+            if np.any(glow_mask):
+                glow_strength = 1.0 - values[glow_mask] / 0.2
+                
+                # Calculate glow phase for each pixel in the glow mask
+                glow_phase = np.zeros_like(values)
+                glow_phase[glow_mask] = (values[glow_mask] * 3.0) % 3.0
+                
+                # Create separate masks for each color channel's glow
+                r_glow = glow_mask & (glow_phase < 1.0)
+                g_glow = glow_mask & (glow_phase >= 1.0) & (glow_phase < 2.0)
+                b_glow = glow_mask & (glow_phase >= 2.0)
+                
+                # Apply glows to respective channels
+                if np.any(r_glow):
+                    r[r_glow] = r[r_glow] * 0.5 + 0.5 * (1.0 - values[r_glow] / 0.2)
+                
+                if np.any(g_glow):
+                    g[g_glow] = g[g_glow] * 0.5 + 0.5 * (1.0 - values[g_glow] / 0.2)
+                
+                if np.any(b_glow):
+                    b[b_glow] = b[b_glow] * 0.5 + 0.5 * (1.0 - values[b_glow] / 0.2)
+            
+            # Add secondary glow around edges with sharp contrast
+            edge_mask = mask & (values > 0.2) & (values < 0.25)
+            if np.any(edge_mask):
+                edge_intensity = (values[edge_mask] - 0.2) / 0.05
+                
+                r[edge_mask] = r[edge_mask] * 0.7 + (1.0 - edge_intensity) * 0.3
+                g[edge_mask] = g[edge_mask] * 0.7 + (1.0 - edge_intensity) * 0.3
+                b[edge_mask] = b[edge_mask] * 0.7 + (1.0 - edge_intensity) * 0.3
+            
+            # Darken the background (high iteration values)
+            dark_mask = mask & (values >= 0.25)
+            if np.any(dark_mask):
+                darkness = np.minimum(1.0, (values[dark_mask] - 0.25) * 2)
+                
+                r[dark_mask] = r[dark_mask] * (1.0 - darkness * 0.8)
+                g[dark_mask] = g[dark_mask] * (1.0 - darkness * 0.8)
+                b[dark_mask] = b[dark_mask] * (1.0 - darkness * 0.8)
+            
+            # Scale to 0-255 and convert to uint8
+            rgb_array[..., 0] = (np.clip(r, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
+        
+        elif mode == 7:  # Deep Ocean
+            # Ocean-inspired palette with blues and teals
+            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values[mask] = iterations[mask] / max_iter
+            
+            # Apply logarithmic smoothing to enhance contrast
+            log_values = np.zeros_like(norm_values)
+            log_values[mask] = np.log(norm_values[mask] * 0.5 + 0.5) / np.log(1.5)
+            
+            # Apply shift
+            values = (log_values + shift) % 1.0
+            
+            # Allocate arrays
+            r = np.zeros_like(values)
+            g = np.zeros_like(values)
+            b = np.zeros_like(values)
+            
+            # Blue-green gradient for ocean depths
+            # Start with darkest deep blues (lowest values)
+            r[mask] = 0.0
+            g[mask] = 0.0
+            b[mask] = 0.3 + values[mask] * 0.3  # 0.3-0.6 range for blue
+            
+            # Add green/teal for mid-range values
+            midrange_mask = mask & (values > 0.3) & (values < 0.7)
+            mid_intensity = (values[midrange_mask] - 0.3) / 0.4
+            g[midrange_mask] = mid_intensity * 0.6
+            
+            # Surface waters with light teal and white foam for high values
+            surface_mask = mask & (values >= 0.7) & (values < 0.9)
+            surface_intensity = (values[surface_mask] - 0.7) / 0.2
+            r[surface_mask] = surface_intensity * 0.3
+            g[surface_mask] = 0.6 + surface_intensity * 0.3
+            b[surface_mask] = 0.6 + surface_intensity * 0.3
+            
+            # White foam/highlight at the very highest values
+            foam_mask = mask & (values >= 0.9)
+            foam_intensity = (values[foam_mask] - 0.9) / 0.1
+            
+            r[foam_mask] = 0.3 + foam_intensity * 0.7
+            g[foam_mask] = 0.9 + foam_intensity * 0.1
+            b[foam_mask] = 0.9 + foam_intensity * 0.1
+            
+            # Add shimmer effect with sine waves
+            shimmer_mask = mask & (values > 0.5)
+            shimmer = 0.05 * np.sin(values[shimmer_mask] * 50)
+            r[shimmer_mask] += shimmer
+            g[shimmer_mask] += shimmer
+            b[shimmer_mask] += shimmer
+            
+            # Scale to 0-255 and convert to uint8
+            rgb_array[..., 0] = (np.clip(r, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
+        
+        elif mode == 8:  # Vintage/Sepia
+            # Vintage/sepia tones with a worn look
+            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values[mask] = iterations[mask] / max_iter
+            
+            # Apply shift
+            values = (norm_values + shift) % 1.0
+            
+            # Create base grayscale value with contrast
+            gray = np.zeros_like(values)
+            gray[mask] = values[mask] ** 0.8  # Slight gamma adjustment for contrast
+            
+            # Allocate arrays 
+            r = np.zeros_like(values)
+            g = np.zeros_like(values)
+            b = np.zeros_like(values)
+            
+            # Apply sepia toning - different multipliers for RGB
+            r[mask] = np.clip(gray[mask] * 1.2, 0, 1)  # More red
+            g[mask] = np.clip(gray[mask] * 0.9, 0, 1)  # Medium green 
+            b[mask] = np.clip(gray[mask] * 0.6, 0, 1)  # Less blue
+            
+            # Add a vignette effect (darker at edges)
+            # This would require knowing pixel positions, so we simulate with value
+            vignette = np.zeros_like(values)
+            vignette[mask] = 1.0 - 0.2 * np.sin(values[mask] * np.pi) ** 2
+            
+            r[mask] *= vignette[mask]
+            g[mask] *= vignette[mask]
+            b[mask] *= vignette[mask]
+            
+            # Add some "aging" noise to simulate vintage look
+            # Use a deterministic pattern based on values to avoid pure randomness
+            aging_effect = np.zeros_like(values)
+            aging_effect[mask] = 0.05 * np.sin(values[mask] * 37.0) * np.sin(values[mask] * 23.0)
+            
+            r[mask] += aging_effect[mask]
+            g[mask] += aging_effect[mask]
+            b[mask] += aging_effect[mask]
+            
+            # Scale to 0-255 and convert to uint8
+            rgb_array[..., 0] = (np.clip(r, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
+            rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
+        
         return rgb_array
 
     # Add a function to draw the top help message
@@ -297,13 +566,16 @@ try:
         initial_width = 3.0  # Initial x_min=-2, x_max=1 width
         zoom_level = initial_width / width
         
+        # Get the name of the current color palette
+        color_names = ['Smooth', 'Rainbow', 'Fire', 'Electric Blue', 'Twilight', 'Grayscale', 'Neon', 'Deep Ocean', 'Vintage']
+        
         settings_texts = [
             "Current Settings:",
             f"Center: ({x_center:.6f}, {y_center:.6f})",
             f"Width: {width:.6f}",
             f"Zoom: {zoom_level:.2f}x",
             f"Iterations: {max_iter}",
-            f"Color: {['Smooth', 'Rainbow', 'Fire'][color_mode]} (Shift: {color_shift:.1f})",
+            f"Color: {color_names[color_mode]} (Shift: {color_shift:.1f})",
             f"Resolution: {WIDTH}x{HEIGHT}"
         ]
         
@@ -429,6 +701,10 @@ try:
         rect_height = rect_y2 - rect_y1
         zoom_length = max(rect_width, rect_height)
         
+        # Ensure zoom_length is not zero to prevent division by zero later
+        # Set a minimum size of 5 pixels
+        zoom_length = max(5.0, zoom_length)
+        
         # Calculate the square bounds centered at the original center point
         # Store as floats to maintain precision
         square_x1 = center_x - zoom_length / 2
@@ -456,6 +732,9 @@ try:
         
         # Calculate the width in the complex plane corresponding to zoom_length
         complex_width = (x_max - x_min) * zoom_length / WIDTH
+        
+        # Ensure complex_width is not zero to prevent division by zero
+        complex_width = max(complex_width, 1e-10)
         
         # Calculate zoom factor based on the ratio of current width to new width
         current_width = x_max - x_min
@@ -680,7 +959,7 @@ try:
                     
                 if event.key == pygame.K_c:
                     # Change color mode
-                    color_mode = (color_mode + 1) % 3
+                    color_mode = (color_mode + 1) % 9
                     draw_mandelbrot()
                 elif event.key == pygame.K_LEFT:
                     # Shift colors left
