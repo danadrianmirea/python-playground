@@ -15,6 +15,11 @@ x_min, x_max = -2, 1
 y_min, y_max = -1.5, 1.5
 max_iter = 100
 
+# Rectangle drawing variables
+drawing = False
+start_pos = None
+current_pos = None
+
 def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
     x = np.linspace(x_min, x_max, w)
     y = np.linspace(y_min, y_max, h)
@@ -35,6 +40,17 @@ def draw_mandelbrot():
     pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, max_iter)
     surface = pygame.surfarray.make_surface(pixels * 255 / max_iter)
     screen.blit(surface, (0, 0))
+    
+    # Draw the rectangle if we're currently drawing
+    if drawing and start_pos and current_pos:
+        rect = pygame.Rect(
+            min(start_pos[0], current_pos[0]),
+            min(start_pos[1], current_pos[1]),
+            abs(current_pos[0] - start_pos[0]),
+            abs(current_pos[1] - start_pos[1])
+        )
+        pygame.draw.rect(screen, (255, 255, 255), rect, 1)
+    
     pygame.display.flip()
 
 # Main loop
@@ -44,39 +60,69 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         elif event.type == pygame.MOUSEBUTTONDOWN:
-            # Get mouse position and convert to complex coordinates
-            mouse_x, mouse_y = event.pos
-            print(f"\nMouse click at screen coordinates: ({mouse_x}, {mouse_y})")
-            
-            # Convert screen coordinates to complex plane coordinates
-            x = x_min + (x_max - x_min) * mouse_x / WIDTH
-            y = y_min + (y_max - y_min) * (HEIGHT - mouse_y) / HEIGHT
-            print(f"Converted to complex plane coordinates: ({x:.4f}, {y:.4f})")
-            print(f"Current view bounds: x=[{x_min:.4f}, {x_max:.4f}], y=[{y_min:.4f}, {y_max:.4f}]")
-            
-            # Zoom factor (0.1 for zoom in, 10 for zoom out)
-            zoom_factor = 0.1 if event.button == 1 else 10.0
-            print(f"Zoom factor: {zoom_factor}")
-            
-            # Calculate new view parameters
-            x_span = (x_max - x_min) * zoom_factor
-            y_span = (y_max - y_min) * zoom_factor
-            print(f"New spans: x_span={x_span:.4f}, y_span={y_span:.4f}")
-            
-            # Calculate the relative position of the clicked point
-            rel_x = (x - x_min) / (x_max - x_min)
-            rel_y = (y - y_min) / (y_max - y_min)
-            print(f"Relative position: ({rel_x:.4f}, {rel_y:.4f})")
-            
-            # Calculate new bounds while maintaining the clicked point's relative position
-            x_min = x - x_span * rel_x
-            x_max = x + x_span * (1 - rel_x)
-            y_min = y - y_span * rel_y
-            y_max = y + y_span * (1 - rel_y)
-            print(f"New view bounds: x=[{x_min:.4f}, {x_max:.4f}], y=[{y_min:.4f}, {y_max:.4f}]")
-            
-            # Redraw
-            draw_mandelbrot()
+            if event.button == 1:  # Left click
+                drawing = True
+                start_pos = event.pos
+                current_pos = event.pos
+            elif event.button == 3:  # Right click
+                # Zoom out by a factor of 10
+                center_x = (x_min + x_max) / 2
+                center_y = (y_min + y_max) / 2
+                width = (x_max - x_min) * 10
+                height = (y_max - y_min) * 10
+                x_min = center_x - width / 2
+                x_max = center_x + width / 2
+                y_min = center_y - height / 2
+                y_max = center_y + height / 2
+                draw_mandelbrot()
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1 and drawing:  # Left click release
+                drawing = False
+                if start_pos and current_pos:
+                    # Calculate the rectangle bounds
+                    rect_x1 = min(start_pos[0], current_pos[0])
+                    rect_x2 = max(start_pos[0], current_pos[0])
+                    rect_y1 = min(start_pos[1], current_pos[1])
+                    rect_y2 = max(start_pos[1], current_pos[1])
+                    
+                    # Convert rectangle coordinates to complex plane coordinates
+                    new_x_min = x_min + (x_max - x_min) * rect_x1 / WIDTH
+                    new_x_max = x_min + (x_max - x_min) * rect_x2 / WIDTH
+                    new_y_min = y_min + (y_max - y_min) * (HEIGHT - rect_y2) / HEIGHT
+                    new_y_max = y_min + (y_max - y_min) * (HEIGHT - rect_y1) / HEIGHT
+                    
+                    # Calculate aspect ratios
+                    screen_ratio = WIDTH / HEIGHT
+                    rect_ratio = (rect_x2 - rect_x1) / (rect_y2 - rect_y1)
+                    
+                    # Adjust bounds to maintain aspect ratio
+                    if rect_ratio > screen_ratio:
+                        # Rectangle is wider than screen ratio
+                        center_y = (new_y_min + new_y_max) / 2
+                        height = (new_x_max - new_x_min) / screen_ratio
+                        new_y_min = center_y - height / 2
+                        new_y_max = center_y + height / 2
+                    else:
+                        # Rectangle is taller than screen ratio
+                        center_x = (new_x_min + new_x_max) / 2
+                        width = (new_y_max - new_y_min) * screen_ratio
+                        new_x_min = center_x - width / 2
+                        new_x_max = center_x + width / 2
+                    
+                    # Update view bounds
+                    x_min, x_max = new_x_min, new_x_max
+                    y_min, y_max = new_y_min, new_y_max
+                    
+                    # Reset drawing variables
+                    start_pos = None
+                    current_pos = None
+                    
+                    # Redraw with new bounds
+                    draw_mandelbrot()
+        elif event.type == pygame.MOUSEMOTION:
+            if drawing:
+                current_pos = event.pos
+                draw_mandelbrot()
     
     # Initial draw
     if running:
