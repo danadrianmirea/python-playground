@@ -2295,14 +2295,23 @@ try:
                 elif event.key == pygame.K_c:
                     # Change color mode
                     color_mode = (color_mode + 1) % 9
+                    # Force recalculation when using GPU to ensure the color mode is applied
+                    if USE_GPU:
+                        current_pixels = None
                     draw_mandelbrot()
                 elif event.key == pygame.K_z:
                     # Shift colors left
                     color_shift = (color_shift - 0.1) % 1.0
+                    # Force recalculation when using GPU to ensure the color shift is applied
+                    if USE_GPU:
+                        current_pixels = None
                     draw_mandelbrot()
                 elif event.key == pygame.K_x:
                     # Shift colors right
                     color_shift = (color_shift + 0.1) % 1.0
+                    # Force recalculation when using GPU to ensure the color shift is applied
+                    if USE_GPU:
+                        current_pixels = None
                     draw_mandelbrot()
                 elif event.key == pygame.K_i:
                     # Increase max iterations
