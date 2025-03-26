@@ -59,8 +59,11 @@ try:
     
     def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
         # Use float64 for better precision
+        # Set up the x and y ranges with correct orientation
+        # x increases from left to right: x_min at left, x_max at right
+        # y increases from top to bottom: y_max at top, y_min at bottom (flipped for complex plane)
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
-        y = np.linspace(y_min, y_max, h, dtype=np.float64)
+        y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Note: y inverted for screen coordinates
         
         # Create complex array with float64 precision
         c = x[:, np.newaxis] + 1j * y
@@ -75,7 +78,7 @@ try:
             output[mask & ~mask_new] = i
             mask = mask_new
         
-        return output.T
+        return output
 
     def create_smooth_colormap():
         """Create a lookup table for smooth color mapping"""
@@ -344,6 +347,7 @@ try:
         colored_pixels = color_map(current_pixels, max_iter, color_mode, color_shift)
         
         # Create and save the base surface for later use
+        # Ensure the surface is in the correct format for pygame
         base_surface = pygame.surfarray.make_surface(colored_pixels)
         
         # Display the surface
@@ -406,26 +410,46 @@ try:
         square_x2 = center_x + zoom_length / 2
         square_y2 = center_y + zoom_length / 2
         
-        # Calculate the complex plane coordinates of the center point
-        # Use floating point division for precision
+        # Ensure square is within screen bounds
+        square_x1 = max(0, square_x1)
+        square_y1 = max(0, square_y1)
+        square_x2 = min(WIDTH, square_x2)
+        square_y2 = min(HEIGHT, square_y2)
+        
+        # Recalculate center if square was adjusted
+        center_x = (square_x1 + square_x2) / 2
+        center_y = (square_y1 + square_y2) / 2
+        
+        # Map the center point from screen coordinates to complex plane
+        # With our updated mandelbrot function, we directly map:
+        # - x from 0 to WIDTH maps to x_min to x_max
+        # - y from 0 to HEIGHT maps to y_max to y_min (inverted)
+        
         complex_center_x = x_min + (x_max - x_min) * center_x / WIDTH
-        # For y coordinate, remember screen y increases downward but complex plane y increases upward
         complex_center_y = y_max - (y_max - y_min) * center_y / HEIGHT
         
-        # Calculate the size in the complex plane that will be zoomed into
+        # Calculate the width in the complex plane corresponding to zoom_length
         complex_width = (x_max - x_min) * zoom_length / WIDTH
         
-        # Calculate zoom factor based on the zoom length relative to screen size
-        zoom_factor = WIDTH / zoom_length
+        # Calculate zoom factor based on the ratio of current width to new width
+        current_width = x_max - x_min
+        zoom_factor = current_width / complex_width
         
         # Cap the zoom factor to avoid extreme zooms
         zoom_factor = min(zoom_factor, 10.0)
         
+        # If zoom was capped, recalculate the complex_width
+        if zoom_factor < current_width / complex_width:
+            complex_width = current_width / zoom_factor
+        
         # Calculate the new boundaries in the complex plane
         new_x_min = complex_center_x - complex_width / 2
         new_x_max = complex_center_x + complex_width / 2
-        new_y_min = complex_center_y - complex_width / 2
-        new_y_max = complex_center_y + complex_width / 2
+        
+        # Maintain aspect ratio for y coordinates
+        complex_height = complex_width
+        new_y_min = complex_center_y - complex_height / 2
+        new_y_max = complex_center_y + complex_height / 2
         
         return {
             "rect": (rect_x1, rect_y1, rect_width, rect_height),
@@ -442,7 +466,7 @@ try:
         """Draw the current Mandelbrot set with a selection rectangle overlay"""
         if base_surface is None or start_pos is None or current_pos is None:
             return
-        
+            
         # Create a copy of the base surface to avoid modifying it
         screen.blit(base_surface, (0, 0))
         
@@ -457,6 +481,7 @@ try:
         zoom_length = zoom_area["zoom_length"]
         complex_width = zoom_area["complex_width"]
         zoom_factor = zoom_area["zoom_factor"]
+        new_x_min, new_x_max, new_y_min, new_y_max = zoom_area["new_bounds"]
         
         # Draw the original rectangle (dimmed)
         original_rect = pygame.Rect(rect_x1, rect_y1, rect_width, rect_height)
@@ -475,7 +500,7 @@ try:
         # Display zoom coordinates in the square
         zoom_info_font = pygame.font.SysFont('Arial', 10)
         
-        # Show the center coordinates
+        # Show the center coordinates - use the exact coordinates we'll zoom to
         zoom_text1 = zoom_info_font.render(
             f"Center: ({complex_center_x:.4f}, {complex_center_y:.4f})", 
             True, 
@@ -485,7 +510,7 @@ try:
         zoom_text_rect1.centerx = int(center_x)
         zoom_text_rect1.y = int(square_y1) + 4
         
-        # Show the zoom factor
+        # Show the zoom factor - use the actual calculated factor that will be applied
         zoom_text2 = zoom_info_font.render(
             f"Zoom: {zoom_factor:.1f}x", 
             True, 
@@ -534,6 +559,7 @@ try:
         # Extract the values we need for zooming
         complex_center_x, complex_center_y = zoom_area["complex_center"]
         zoom_factor = zoom_area["zoom_factor"]
+        complex_width = zoom_area["complex_width"]
         new_x_min, new_x_max, new_y_min, new_y_max = zoom_area["new_bounds"]
         
         # Save current view to history
