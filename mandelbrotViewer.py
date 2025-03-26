@@ -45,12 +45,91 @@ cl_program = None
 
 # OpenCL kernel code for Mandelbrot computation
 OPENCL_KERNEL = """
-__kernel void mandelbrot(__global int *output,
+// Color mapping utilities for the kernel
+float3 hsv_to_rgb(float h, float s, float v) {
+    float c = v * s;
+    float x = c * (1.0f - fabs(fmod(h * 6.0f, 2.0f) - 1.0f));
+    float m = v - c;
+    
+    float3 rgb;
+    if (h < 1.0f/6.0f)
+        rgb = (float3)(c, x, 0.0f);
+    else if (h < 2.0f/6.0f)
+        rgb = (float3)(x, c, 0.0f);
+    else if (h < 3.0f/6.0f)
+        rgb = (float3)(0.0f, c, x);
+    else if (h < 4.0f/6.0f)
+        rgb = (float3)(0.0f, x, c);
+    else if (h < 5.0f/6.0f)
+        rgb = (float3)(x, 0.0f, c);
+    else
+        rgb = (float3)(c, 0.0f, x);
+    
+    return rgb + (float3)(m, m, m);
+}
+
+// Apply log smoothing to normalized value
+float apply_log_smooth(float val) {
+    return log(val * 0.5f + 0.5f) / log(1.5f);
+}
+
+// Smooth colormap (mode 0)
+float3 smooth_colormap(float norm_iter, float shift) {
+    // Apply shift and wrap to [0,1]
+    float t = fmod(apply_log_smooth(norm_iter) + shift, 1.0f);
+    
+    // Calculate HSV
+    float h = t;  // hue = normalized value
+    float s = 0.8f;  // saturation
+    float v = (t < 0.95f) ? 1.0f : (1.0f - t) * 20.0f;  // falloff for high values
+    
+    // Convert HSV to RGB
+    return hsv_to_rgb(h, s, v);
+}
+
+// Fire palette (mode 2)
+float3 fire_palette(float norm_iter, float shift) {
+    // Apply shift and wrap to [0,1]
+    float t = fmod(norm_iter + shift, 1.0f);
+    
+    float3 rgb = (float3)(0.0f, 0.0f, 0.0f);
+    
+    // Red component: 0→1 in first quarter, then stay at 1
+    if (t < 0.25f)
+        rgb.x = t * 4.0f;
+    else
+        rgb.x = 1.0f;
+        
+    // Green component: 0 in first quarter, 0→1 in second quarter, then 1
+    if (t >= 0.25f && t < 0.5f)
+        rgb.y = (t - 0.25f) * 4.0f;
+    else if (t >= 0.5f)
+        rgb.y = 1.0f;
+        
+    // Blue component: 0 in first half, 0→1 in third quarter, then 1
+    if (t >= 0.5f && t < 0.75f)
+        rgb.z = (t - 0.5f) * 4.0f;
+    else if (t >= 0.75f)
+        rgb.z = 1.0f;
+        
+    // Apply intensity reduction in the last quarter
+    if (t >= 0.75f) {
+        float intensity = 1.0f - (t - 0.75f) * 0.8f;
+        rgb *= intensity;
+    }
+    
+    return rgb;
+}
+
+__kernel void mandelbrot(__global int *iterations_out,
+                         __global uchar *rgb_out,
                          __global double *x_array,
                          __global double *y_array,
                          const int width,
                          const int height,
-                         const int max_iter)
+                         const int max_iter,
+                         const int color_mode,
+                         const float color_shift)
 {
     // Get the index of the current element
     int gid_x = get_global_id(0); // column index
@@ -81,8 +160,41 @@ __kernel void mandelbrot(__global int *output,
             iteration++;
         }
         
-        // Store the result
-        output[gid_y * width + gid_x] = iteration;
+        // Store the iteration count in the output buffer
+        iterations_out[gid_y * width + gid_x] = iteration;
+        
+        // Calculate pixel index in the rgb buffer (3 bytes per pixel)
+        int rgb_idx = 3 * (gid_y * width + gid_x);
+        
+        // Apply coloring based on the iteration value
+        if (iteration == max_iter) {
+            // Inside the set - black
+            rgb_out[rgb_idx] = 0;      // R
+            rgb_out[rgb_idx + 1] = 0;  // G
+            rgb_out[rgb_idx + 2] = 0;  // B
+        } else {
+            // Normalize the iteration count
+            float norm_iter = (float)iteration / (float)max_iter;
+            float3 rgb;
+            
+            // Apply coloring based on selected mode
+            switch (color_mode) {
+                case 0: // Smooth colormap
+                    rgb = smooth_colormap(norm_iter, color_shift);
+                    break;
+                case 2: // Fire palette
+                    rgb = fire_palette(norm_iter, color_shift);
+                    break;
+                default: // Default - simple grayscale
+                    rgb = (float3)(norm_iter, norm_iter, norm_iter);
+                    break;
+            }
+            
+            // Store RGB values in output buffer
+            rgb_out[rgb_idx] = (uchar)(rgb.x * 255.0f);      // R
+            rgb_out[rgb_idx + 1] = (uchar)(rgb.y * 255.0f);  // G
+            rgb_out[rgb_idx + 2] = (uchar)(rgb.z * 255.0f);  // B
+        }
     }
 }
 """
@@ -208,6 +320,7 @@ try:
     # High-quality rendering flag
     high_quality_mode = True
     high_quality_multiplier = 4  # 4x more iterations in high quality mode
+    min_quality_multiplier = 2   # Minimum multiplier value
     
     # Debug modes
     debug_coordinates = False    # Debug coordinate mappings
@@ -290,8 +403,16 @@ try:
                     
             return output
     
-    def mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter):
-        """Calculate Mandelbrot set using GPU acceleration"""
+    def mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter, color_mode=None, color_shift=None):
+        """Calculate Mandelbrot set using GPU acceleration, with optional color mapping"""
+        global cl_ctx, cl_queue, cl_program, colored_pixels
+        
+        # Use default color parameters if not provided
+        if color_mode is None:
+            color_mode = globals()['color_mode']
+        if color_shift is None:
+            color_shift = globals()['color_shift']
+        
         if not init_gpu():
             print("GPU acceleration unavailable, falling back to CPU")
             return mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter)
@@ -301,35 +422,54 @@ try:
             x = np.linspace(x_min, x_max, w, dtype=np.float64)  # X coordinates
             y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Y coordinates (inverted for screen)
             
-            # Create output array
-            output = np.zeros((h, w), dtype=np.int32)
+            # Create output arrays
+            iterations = np.zeros((h, w), dtype=np.int32)
+            rgb_array = np.zeros((h, w, 3), dtype=np.uint8)
             
             # Create OpenCL buffers
             x_buf = cl.Buffer(cl_ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=x)
             y_buf = cl.Buffer(cl_ctx, cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR, hostbuf=y)
-            output_buf = cl.Buffer(cl_ctx, cl.mem_flags.WRITE_ONLY, output.nbytes)
+            
+            # Buffer for iteration counts
+            iterations_buf = cl.Buffer(cl_ctx, cl.mem_flags.WRITE_ONLY, iterations.nbytes)
+            
+            # Flattened RGB buffer (h*w*3)
+            rgb_size = h * w * 3
+            rgb_buf = cl.Buffer(cl_ctx, cl.mem_flags.WRITE_ONLY, rgb_size)
             
             # Execute the kernel
             global_size = (w, h)  # Global work size - one work item per pixel
             local_size = None     # Let OpenCL choose the local work size
             
-            # Call the kernel
+            # Call the kernel with color parameters
             cl_program.mandelbrot(cl_queue, global_size, local_size,
-                                 output_buf, x_buf, y_buf,
-                                 np.int32(w), np.int32(h), np.int32(max_iter))
+                                 iterations_buf, rgb_buf, x_buf, y_buf,
+                                 np.int32(w), np.int32(h), np.int32(max_iter),
+                                 np.int32(color_mode), np.float32(color_shift))
             
-            # Copy result back to host
-            cl.enqueue_copy(cl_queue, output, output_buf)
+            # Copy iteration counts back to host
+            cl.enqueue_copy(cl_queue, iterations, iterations_buf)
+            
+            # Copy RGB values back to host as flat array
+            rgb_flat = np.zeros(rgb_size, dtype=np.uint8)
+            cl.enqueue_copy(cl_queue, rgb_flat, rgb_buf)
+            
+            # Reshape RGB values to 3D array (height, width, 3)
+            rgb_array = rgb_flat.reshape(h, w, 3)
             
             # Wait for completion
             cl_queue.finish()
             
-            # If transpose flag is set, transpose the output to match expected orientation
+            # If transpose flag is set, transpose the outputs to match expected orientation
             if TRANSPOSE_NUMBA_OUTPUT:
-                output = output.T
+                iterations = iterations.T
+                rgb_array = np.transpose(rgb_array, (1, 0, 2))
             
-            return output
+            # Store the colored pixels for immediate use
+            colored_pixels = rgb_array
             
+            return iterations
+                
         except Exception as e:
             print(f"GPU computation failed: {e}")
             print("Falling back to CPU computation")
@@ -376,7 +516,7 @@ try:
 
     def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
         """Select the appropriate Mandelbrot calculation method based on settings"""
-        global render_scale
+        global render_scale, colored_pixels
         
         # Apply render scaling for faster rendering during panning/zooming
         if adaptive_render_scale and render_scale < 1.0:
@@ -386,7 +526,8 @@ try:
             
             # Calculate at reduced resolution
             if USE_GPU and HAVE_GPU:
-                result = mandelbrot_gpu(scaled_h, scaled_w, x_min, x_max, y_min, y_max, max_iter)
+                # GPU calculation with color mapping
+                result = mandelbrot_gpu(scaled_h, scaled_w, x_min, x_max, y_min, y_max, max_iter, color_mode, color_shift)
             else:
                 result = mandelbrot_cpu(scaled_h, scaled_w, x_min, x_max, y_min, y_max, max_iter)
             
@@ -400,15 +541,24 @@ try:
                 # Repeat the elements along both axes
                 result = np.repeat(np.repeat(result, h_repeat, axis=0), w_repeat, axis=1)
                 
+                # Also upscale the colored pixels if using GPU
+                if USE_GPU and HAVE_GPU and colored_pixels is not None:
+                    colored_pixels = np.repeat(np.repeat(colored_pixels, h_repeat, axis=0), w_repeat, axis=1, method="nearest")
+                
                 # Trim to exact dimensions if the repeated array is too large
                 if result.shape[0] > h:
                     result = result[:h, :]
+                    if colored_pixels is not None:
+                        colored_pixels = colored_pixels[:h, :, :]
                 if result.shape[1] > w:
                     result = result[:, :w]
+                    if colored_pixels is not None:
+                        colored_pixels = colored_pixels[:, :w, :]
         else:
             # Full resolution rendering
             if USE_GPU and HAVE_GPU:
-                result = mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+                # GPU calculation with color mapping
+                result = mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter, color_mode, color_shift)
             else:
                 result = mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter)
         
@@ -943,6 +1093,7 @@ try:
             "C: Change color mode",
             "Z/X: Shift colors left/right",
             "I/O: Increase/Decrease iterations", 
+            "J/K: Decrease/Increase quality multiplier",
             "T: Toggle adaptive render scaling",
             "Y: Toggle high quality mode",
             "V: Toggle debug mode",
@@ -968,7 +1119,7 @@ try:
         color_names = ['Smooth', 'Rainbow', 'Fire', 'Electric Blue', 'Twilight', 'Grayscale', 'Neon', 'Deep Ocean', 'Vintage']
         
         # Add high quality indicator to iteration count
-        quality_text = "HQ" if high_quality_mode else "Standard"
+        quality_text = f"HQ {high_quality_multiplier}x" if high_quality_mode else "Standard"
         hq_iterations = max_iter * high_quality_multiplier if high_quality_mode else max_iter
         
         # Debug mode indicator
@@ -1070,10 +1221,15 @@ try:
             effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
             current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, effective_iter)
         
-        # Always recalculate the colored pixels to reflect current color_mode and color_shift
-        # Use the effective iterations for coloring
-        effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
-        colored_pixels = color_map(current_pixels, effective_iter, color_mode, color_shift)
+        # If colored_pixels is not already calculated by GPU, do it on CPU now
+        if USE_GPU and HAVE_GPU and colored_pixels is not None:
+            # GPU has already calculated the colors
+            pass
+        else:
+            # CPU coloring
+            # Use the effective iterations for coloring
+            effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
+            colored_pixels = color_map(current_pixels, effective_iter, color_mode, color_shift)
         
         # Create and save the base surface for later use
         # Ensure the surface is in the correct format for pygame
@@ -1111,12 +1267,41 @@ try:
         # Update status in console
         if high_quality_mode:
             effective_iter = max_iter * high_quality_multiplier
-            print(f"High quality mode enabled: {effective_iter} iterations")
+            print(f"High quality mode enabled: {effective_iter} iterations (multiplier: {high_quality_multiplier}x)")
         else:
             print(f"Standard quality mode: {max_iter} iterations")
         
         # Update the display
         update_mandelbrot()
+
+    def adjust_quality_multiplier(increase=True):
+        """Adjust the high quality multiplier up or down"""
+        global high_quality_multiplier, current_pixels
+        
+        # Store the old value for reporting
+        old_multiplier = high_quality_multiplier
+        
+        if increase:
+            # Double the multiplier (maximum reasonable value is 32)
+            high_quality_multiplier = min(high_quality_multiplier * 2, 32)
+        else:
+            # Halve the multiplier, but don't go below the minimum
+            high_quality_multiplier = max(high_quality_multiplier // 2, min_quality_multiplier)
+        
+        # Only update if the value actually changed
+        if old_multiplier != high_quality_multiplier:
+            # Force recalculation if we're in high quality mode
+            if high_quality_mode:
+                current_pixels = None
+                
+            # Log the change
+            effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
+            print(f"Quality multiplier {'increased' if increase else 'decreased'} to {high_quality_multiplier}x")
+            print(f"Effective iterations: {effective_iter}")
+            
+            # Update the display if in high quality mode
+            if high_quality_mode:
+                update_mandelbrot()
 
     def zoom_out():
         """Revert to the previous view from history"""
@@ -1760,6 +1945,12 @@ try:
                         print("Adaptive render scaling disabled - always renders at full resolution")
                         render_scale = 1.0  # Reset to full resolution
                     draw_mandelbrot()
+                elif event.key == pygame.K_j:
+                    # Decrease high quality multiplier
+                    adjust_quality_multiplier(increase=False)
+                elif event.key == pygame.K_k:
+                    # Increase high quality multiplier
+                    adjust_quality_multiplier(increase=True)
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_e or event.key == pygame.K_q:
                     # Stop smooth zooming when E or Q key is released
