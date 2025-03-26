@@ -6,8 +6,6 @@ import traceback
 
 # Set this to False to disable Numba even if available
 USE_NUMBA = True
-
-# Set this to True if the Numba output appears rotated compared to NumPy
 TRANSPOSE_NUMBA_OUTPUT = True
 
 # Add Numba import for JIT compilation
@@ -1127,27 +1125,6 @@ try:
         else:
             print("Numba not available or disabled in configuration, using NumPy implementation only")
 
-    # Add a function to toggle Numba output transposition
-    def toggle_numba_transpose():
-        """Toggle whether Numba output should be transposed"""
-        global TRANSPOSE_NUMBA_OUTPUT, current_pixels
-        
-        # Only toggle if we're using Numba
-        if USE_NUMBA and HAVE_NUMBA and not force_numpy:
-            TRANSPOSE_NUMBA_OUTPUT = not TRANSPOSE_NUMBA_OUTPUT
-            current_pixels = None  # Force recalculation
-            
-            # Update status in console
-            if TRANSPOSE_NUMBA_OUTPUT:
-                print("Numba output will be transposed")
-            else:
-                print("Numba output will not be transposed")
-                
-            # Update the display
-            update_mandelbrot()
-        else:
-            print("Not using Numba, so transposition toggle has no effect")
-
     def reset_view():
         """Reset to initial view"""
         global x_min, x_max, y_min, y_max, max_iter, current_pixels
@@ -1272,9 +1249,6 @@ try:
                 elif event.key == pygame.K_n:
                     # Toggle NumPy mode
                     toggle_numpy_mode()
-                elif event.key == pygame.K_t:
-                    # Toggle Numba transpose
-                    toggle_numba_transpose()
                 elif event.key == pygame.K_r:
                     # Reset view
                     reset_view()
