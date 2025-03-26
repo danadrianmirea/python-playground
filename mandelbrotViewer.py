@@ -14,9 +14,21 @@ try:
         print("Error: pygame.display could not be initialized.")
         sys.exit(1)
     
-    # Set up display
-    WIDTH = 600
-    HEIGHT = 600  # Changed to match WIDTH for square window
+    # Get the user's display info
+    display_info = pygame.display.Info()
+    screen_width = display_info.current_w
+    screen_height = display_info.current_h
+    
+    # Calculate the largest square that fits on the screen
+    # Leave some margin for taskbars and window borders
+    margin = 100  # Pixels of margin to leave around the edges
+    max_size = min(screen_width - margin, screen_height - margin)
+    
+    # Set up display with the largest square possible
+    WIDTH = max_size
+    HEIGHT = max_size
+    print(f"Setting up display with dimensions: {WIDTH}x{HEIGHT}")
+    
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Mandelbrot Set")
     
