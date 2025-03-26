@@ -691,10 +691,10 @@ try:
             "W (hold): Smooth zoom in toward cursor",
             "S (hold): Smooth zoom out from cursor",
             "C: Change color mode",
-            "Left/Right: Shift colors",
+            "Z/X: Shift colors left/right",
             "I/D: Increase/Decrease iterations", 
             "Q: Toggle high quality mode",
-            "X: Toggle debug mode",
+            "V: Toggle debug mode",
             "N: Toggle Numba/NumPy",
             "T: Toggle Numba transpose",
             "R: Reset view",
@@ -1313,11 +1313,11 @@ try:
                     # Change color mode
                     color_mode = (color_mode + 1) % 9
                     draw_mandelbrot()
-                elif event.key == pygame.K_LEFT:
+                elif event.key == pygame.K_z:
                     # Shift colors left
                     color_shift = (color_shift - 0.1) % 1.0
                     draw_mandelbrot()
-                elif event.key == pygame.K_RIGHT:
+                elif event.key == pygame.K_x:
                     # Shift colors right
                     color_shift = (color_shift + 0.1) % 1.0
                     draw_mandelbrot()
@@ -1348,7 +1348,7 @@ try:
                 elif event.key == pygame.K_q:
                     # Toggle quality mode
                     toggle_quality_mode()
-                elif event.key == pygame.K_x:
+                elif event.key == pygame.K_v:
                     # Toggle debug mode
                     globals()['debug_coordinates'] = not debug_coordinates
                     draw_mandelbrot()
