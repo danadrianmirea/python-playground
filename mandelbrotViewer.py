@@ -4,14 +4,22 @@ from colorsys import hsv_to_rgb
 import sys
 import traceback
 
+# Set this to False to disable Numba even if available
+USE_NUMBA = True
+
 # Add Numba import for JIT compilation
 try:
     import numba
     from numba import jit, prange
     HAVE_NUMBA = True
-    print("Numba found - JIT compilation enabled for better performance")
+    print("Numba found - JIT compilation is available")
+    if USE_NUMBA:
+        print("Numba JIT compilation enabled for better performance")
+    else:
+        print("Numba disabled by user configuration - using standard NumPy")
 except ImportError:
     HAVE_NUMBA = False
+    USE_NUMBA = False
     print("Numba not found - using standard Python (install Numba for better performance)")
 
 try:
@@ -46,8 +54,8 @@ try:
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Mandelbrot Set")
     
-    # Show loading screen while Numba compiles (if available)
-    if HAVE_NUMBA:
+    # Show loading screen while Numba compiles (if available and enabled)
+    if USE_NUMBA and HAVE_NUMBA:
         # Fill screen with dark background
         screen.fill((20, 20, 40))
         
@@ -158,7 +166,7 @@ try:
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
         y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Note: y inverted for screen coordinates
         
-        if HAVE_NUMBA and not force_numpy:
+        if USE_NUMBA and HAVE_NUMBA and not force_numpy:
             # Use Numba-accelerated kernel
             output = mandelbrot_kernel(x, y, max_iter)
         else:
@@ -264,7 +272,7 @@ try:
             # Use the cached colormap
             cmap = color_lookup_cache[cache_key]
             
-            if HAVE_NUMBA and mode == 0:
+            if USE_NUMBA and HAVE_NUMBA and mode == 0:
                 # Use Numba-accelerated coloring for the smooth colormap
                 rgb_array = apply_smooth_colormap(iterations, max_iter, cmap, in_set, shift)
             else:
@@ -695,7 +703,10 @@ try:
         
         # Implementation indicator
         if HAVE_NUMBA:
-            impl_text = "NumPy" if force_numpy else "Numba"
+            if USE_NUMBA:
+                impl_text = "NumPy" if force_numpy else "Numba"
+            else:
+                impl_text = "NumPy (Numba disabled in config)"
         else:
             impl_text = "NumPy (Numba not available)"
         
@@ -1084,21 +1095,21 @@ try:
         """Toggle between NumPy and Numba implementations"""
         global force_numpy, current_pixels
         
-        # Only toggle if Numba is available
-        if HAVE_NUMBA:
+        # Only toggle if Numba is available and enabled globally
+        if USE_NUMBA and HAVE_NUMBA:
             force_numpy = not force_numpy
             current_pixels = None  # Force recalculation
             
             # Update status in console
             if force_numpy:
-                print("Using NumPy implementation (Numba disabled)")
+                print("Using NumPy implementation (Numba disabled for this session)")
             else:
                 print("Using Numba implementation for acceleration")
                 
             # Update the display
             update_mandelbrot()
         else:
-            print("Numba not available, using NumPy implementation only")
+            print("Numba not available or disabled in configuration, using NumPy implementation only")
 
     def reset_view():
         """Reset to initial view"""
