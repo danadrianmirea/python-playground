@@ -29,11 +29,17 @@ try:
     HEIGHT = max_size
     print(f"Setting up display with dimensions: {WIDTH}x{HEIGHT}")
     
+    # Calculate a scale factor for UI elements based on resolution
+    # This ensures UI elements scale appropriately with different resolutions
+    SCALE_FACTOR = max(1.0, WIDTH / 600)  # Base scale on a 600x600 reference size
+    
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Mandelbrot Set")
     
-    # Set up font for help text
-    font = pygame.font.SysFont('Arial', 12)
+    # Set up font for help text with size scaled to the resolution
+    base_font_size = 12
+    scaled_font_size = int(base_font_size * SCALE_FACTOR)
+    font = pygame.font.SysFont('Arial', scaled_font_size)
     
     # Initial view parameters
     x_min, x_max = -2, 1
@@ -241,15 +247,16 @@ try:
     def draw_top_message():
         """Draw a help message at the top of the screen"""
         message = "Press H to toggle help and debug info"
-        message_font = pygame.font.SysFont('Arial', 14, bold=True)
+        message_font_size = int(14 * SCALE_FACTOR)
+        message_font = pygame.font.SysFont('Arial', message_font_size, bold=True)
         text_surface = message_font.render(message, True, (255, 255, 255))
         
         # Create a semi-transparent background
         text_rect = text_surface.get_rect()
         text_rect.centerx = WIDTH // 2
-        text_rect.top = 10
+        text_rect.top = int(10 * SCALE_FACTOR)
         
-        bg_rect = text_rect.inflate(20, 10)
+        bg_rect = text_rect.inflate(int(20 * SCALE_FACTOR), int(10 * SCALE_FACTOR))
         bg_surface = pygame.Surface((bg_rect.width, bg_rect.height))
         bg_surface.set_alpha(180)
         bg_surface.fill((20, 20, 40))
@@ -259,7 +266,7 @@ try:
         screen.blit(text_surface, text_rect)
         
         # Add a subtle border
-        pygame.draw.rect(screen, (100, 100, 150), bg_rect, 1)
+        pygame.draw.rect(screen, (100, 100, 150), bg_rect, max(1, int(SCALE_FACTOR)))
 
     def draw_ui_panel():
         """Draw UI panels with matching styling"""
@@ -296,34 +303,41 @@ try:
             f"Width: {width:.6f}",
             f"Zoom: {zoom_level:.2f}x",
             f"Iterations: {max_iter}",
-            f"Color: {['Smooth', 'Rainbow', 'Fire'][color_mode]} (Shift: {color_shift:.1f})"
+            f"Color: {['Smooth', 'Rainbow', 'Fire'][color_mode]} (Shift: {color_shift:.1f})",
+            f"Resolution: {WIDTH}x{HEIGHT}"
         ]
         
         # Determine the maximum number of lines to make panels the same height
         max_lines = max(len(help_texts), len(settings_texts))
-        panel_height = max_lines * 15 + 10
+        panel_height = int(max_lines * 15 * SCALE_FACTOR + 10 * SCALE_FACTOR)
+        panel_width = int(230 * SCALE_FACTOR)
         
         # Create title font
-        title_font = pygame.font.SysFont('Arial', 13, bold=True)
+        title_font_size = int(13 * SCALE_FACTOR)
+        title_font = pygame.font.SysFont('Arial', title_font_size, bold=True)
         
         # Draw left panel (Help)
-        left_bg_rect = pygame.Rect(10, HEIGHT - panel_height, 230, panel_height)
+        margin = int(10 * SCALE_FACTOR)
+        left_bg_rect = pygame.Rect(margin, HEIGHT - panel_height - margin, panel_width, panel_height)
         left_bg_surface = pygame.Surface((left_bg_rect.width, left_bg_rect.height))
         left_bg_surface.set_alpha(200)
         left_bg_surface.fill((20, 20, 40))
         screen.blit(left_bg_surface, left_bg_rect)
-        pygame.draw.rect(screen, (100, 100, 150), left_bg_rect, 1)
+        pygame.draw.rect(screen, (100, 100, 150), left_bg_rect, max(1, int(SCALE_FACTOR / 2)))
         
         # Draw right panel (Settings)
-        right_bg_rect = pygame.Rect(WIDTH - 240, HEIGHT - panel_height, 230, panel_height)
+        right_bg_rect = pygame.Rect(WIDTH - panel_width - margin, HEIGHT - panel_height - margin, panel_width, panel_height)
         right_bg_surface = pygame.Surface((right_bg_rect.width, right_bg_rect.height))
         right_bg_surface.set_alpha(200)
         right_bg_surface.fill((20, 20, 40))
         screen.blit(right_bg_surface, right_bg_rect)
-        pygame.draw.rect(screen, (100, 100, 150), right_bg_rect, 1)
+        pygame.draw.rect(screen, (100, 100, 150), right_bg_rect, max(1, int(SCALE_FACTOR / 2)))
+        
+        # Calculate line height based on scale
+        line_height = int(15 * SCALE_FACTOR)
         
         # Draw help text
-        y_offset = HEIGHT - panel_height + 5
+        y_offset = HEIGHT - panel_height + int(5 * SCALE_FACTOR)
         for i, text in enumerate(help_texts):
             if i == 0:
                 text_surface = title_font.render(text, True, (255, 255, 255))
@@ -331,13 +345,13 @@ try:
                 text_surface = font.render(text, True, (220, 220, 255))
             
             text_rect = text_surface.get_rect()
-            text_rect.x = 15
+            text_rect.x = margin + int(5 * SCALE_FACTOR)
             text_rect.y = y_offset
             screen.blit(text_surface, text_rect)
-            y_offset += 15
+            y_offset += line_height
         
         # Draw settings text
-        y_offset = HEIGHT - panel_height + 5
+        y_offset = HEIGHT - panel_height + int(5 * SCALE_FACTOR)
         for i, text in enumerate(settings_texts):
             if i == 0:
                 text_surface = title_font.render(text, True, (255, 255, 255))
@@ -345,10 +359,10 @@ try:
                 text_surface = font.render(text, True, (220, 220, 255))
             
             text_rect = text_surface.get_rect()
-            text_rect.right = WIDTH - 15
+            text_rect.right = WIDTH - margin - int(5 * SCALE_FACTOR)
             text_rect.y = y_offset
             screen.blit(text_surface, text_rect)
-            y_offset += 15
+            y_offset += line_height
 
     def draw_mandelbrot():
         global current_pixels, colored_pixels, base_surface
@@ -497,7 +511,7 @@ try:
         
         # Draw the original rectangle (dimmed)
         original_rect = pygame.Rect(rect_x1, rect_y1, rect_width, rect_height)
-        pygame.draw.rect(screen, (100, 100, 100), original_rect, 1)
+        pygame.draw.rect(screen, (100, 100, 100), original_rect, max(1, int(SCALE_FACTOR / 2)))
         
         # Draw the square that will be zoomed into (highlighted)
         # Convert floating point coordinates to integers for drawing
@@ -507,10 +521,11 @@ try:
             int(square_x2 - square_x1), 
             int(square_y2 - square_y1)
         )
-        pygame.draw.rect(screen, (255, 255, 255), square_rect, 2)
+        pygame.draw.rect(screen, (255, 255, 255), square_rect, max(1, int(SCALE_FACTOR)))
         
         # Display zoom coordinates in the square
-        zoom_info_font = pygame.font.SysFont('Arial', 10)
+        zoom_info_font_size = int(10 * SCALE_FACTOR)
+        zoom_info_font = pygame.font.SysFont('Arial', zoom_info_font_size)
         
         # Show the center coordinates - use the exact coordinates we'll zoom to
         zoom_text1 = zoom_info_font.render(
@@ -520,7 +535,7 @@ try:
         )
         zoom_text_rect1 = zoom_text1.get_rect()
         zoom_text_rect1.centerx = int(center_x)
-        zoom_text_rect1.y = int(square_y1) + 4
+        zoom_text_rect1.y = int(square_y1) + int(4 * SCALE_FACTOR)
         
         # Show the zoom factor - use the actual calculated factor that will be applied
         zoom_text2 = zoom_info_font.render(
@@ -530,16 +545,16 @@ try:
         )
         zoom_text_rect2 = zoom_text2.get_rect()
         zoom_text_rect2.centerx = int(center_x)
-        zoom_text_rect2.y = int(square_y1) + 19
+        zoom_text_rect2.y = int(square_y1) + int(19 * SCALE_FACTOR)
         
         # Add a small background behind the text for readability
-        text_bg_rect1 = zoom_text_rect1.inflate(6, 4)
+        text_bg_rect1 = zoom_text_rect1.inflate(int(6 * SCALE_FACTOR), int(4 * SCALE_FACTOR))
         text_bg1 = pygame.Surface((text_bg_rect1.width, text_bg_rect1.height))
         text_bg1.set_alpha(180) 
         text_bg1.fill((0, 0, 0))
         screen.blit(text_bg1, text_bg_rect1)
         
-        text_bg_rect2 = zoom_text_rect2.inflate(6, 4)
+        text_bg_rect2 = zoom_text_rect2.inflate(int(6 * SCALE_FACTOR), int(4 * SCALE_FACTOR))
         text_bg2 = pygame.Surface((text_bg_rect2.width, text_bg_rect2.height))
         text_bg2.set_alpha(180) 
         text_bg2.fill((0, 0, 0))
@@ -549,9 +564,17 @@ try:
         screen.blit(zoom_text1, zoom_text_rect1)
         screen.blit(zoom_text2, zoom_text_rect2)
         
-        # Draw a crosshair at the center
-        pygame.draw.line(screen, (255, 255, 0), (int(center_x) - 5, int(center_y)), (int(center_x) + 5, int(center_y)), 1)
-        pygame.draw.line(screen, (255, 255, 0), (int(center_x), int(center_y) - 5), (int(center_x), int(center_y) + 5), 1)
+        # Draw a crosshair at the center with thickness based on scale
+        line_thickness = max(1, int(SCALE_FACTOR / 2))
+        crosshair_size = int(5 * SCALE_FACTOR)
+        pygame.draw.line(screen, (255, 255, 0), 
+                        (int(center_x) - crosshair_size, int(center_y)), 
+                        (int(center_x) + crosshair_size, int(center_y)), 
+                        line_thickness)
+        pygame.draw.line(screen, (255, 255, 0), 
+                        (int(center_x), int(center_y) - crosshair_size), 
+                        (int(center_x), int(center_y) + crosshair_size), 
+                        line_thickness)
         
         # Always draw the top message
         draw_top_message()
