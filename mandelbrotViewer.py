@@ -46,6 +46,35 @@ try:
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Mandelbrot Set")
     
+    # Show loading screen while Numba compiles (if available)
+    if HAVE_NUMBA:
+        # Fill screen with dark background
+        screen.fill((20, 20, 40))
+        
+        # Create loading text
+        loading_font_size = int(24 * SCALE_FACTOR)
+        loading_font = pygame.font.SysFont('Arial', loading_font_size, bold=True)
+        loading_text = loading_font.render("Initializing Numba JIT compiler...", True, (255, 255, 255))
+        
+        # Add explanation text
+        info_font_size = int(14 * SCALE_FACTOR)
+        info_font = pygame.font.SysFont('Arial', info_font_size)
+        info_text1 = info_font.render("This may take a few seconds on first run", True, (200, 200, 200))
+        info_text2 = info_font.render("Subsequent runs will be faster due to caching", True, (200, 200, 200))
+        
+        # Position text in center of screen
+        loading_rect = loading_text.get_rect(center=(WIDTH//2, HEIGHT//2 - int(20 * SCALE_FACTOR)))
+        info_rect1 = info_text1.get_rect(center=(WIDTH//2, HEIGHT//2 + int(20 * SCALE_FACTOR)))
+        info_rect2 = info_text2.get_rect(center=(WIDTH//2, HEIGHT//2 + int(50 * SCALE_FACTOR)))
+        
+        # Draw text
+        screen.blit(loading_text, loading_rect)
+        screen.blit(info_text1, info_rect1)
+        screen.blit(info_text2, info_rect2)
+        
+        # Update display to show loading screen
+        pygame.display.flip()
+    
     # Set up font for help text with size scaled to the resolution
     base_font_size = 12
     scaled_font_size = int(base_font_size * SCALE_FACTOR)
@@ -95,7 +124,7 @@ try:
     
     # Define a Numba-optimized function for calculating mandelbrot escape times
     if HAVE_NUMBA:
-        @jit(nopython=True, parallel=True, fastmath=True)
+        @jit(nopython=True, parallel=True, fastmath=True, cache=True)
         def mandelbrot_kernel(x, y, max_iter):
             """Numba-optimized kernel for Mandelbrot calculation"""
             height, width = len(y), len(x)
@@ -119,56 +148,6 @@ try:
                         output[i, j] = max_iter
                     
             return output
-        
-        # Add a validation function to compare Numba vs NumPy outputs
-        def validate_mandelbrot_implementation(h=100, w=100, max_iter=50):
-            """Test function to ensure Numba and NumPy implementations produce identical results"""
-            print("Validating Mandelbrot implementation consistency...")
-            
-            # Define a test region
-            test_x_min, test_x_max = -2.0, 1.0
-            test_y_min, test_y_max = -1.5, 1.5
-            
-            # Set up the test arrays
-            x = np.linspace(test_x_min, test_x_max, w, dtype=np.float64)
-            y = np.linspace(test_y_max, test_y_min, h, dtype=np.float64)
-            
-            # Calculate using Numba
-            numba_output = mandelbrot_kernel(x, y, max_iter)
-            
-            # Calculate using NumPy
-            c = x[:, np.newaxis] + 1j * y
-            z = np.zeros_like(c, dtype=np.complex128)
-            mask = np.ones_like(c, dtype=bool)
-            numpy_output = np.zeros_like(c, dtype=int)
-            
-            for i in range(max_iter):
-                z[mask] = z[mask]**2 + c[mask]
-                mask_new = abs(z) < 2
-                numpy_output[mask & ~mask_new] = i
-                mask = mask_new
-            
-            # Compare the outputs
-            are_equal = np.array_equal(numba_output, numpy_output)
-            
-            if are_equal:
-                print("✓ Implementations match! Numba acceleration is consistent with NumPy.")
-            else:
-                print("✗ Error: Implementations produce different results!")
-                # Find the locations of differences
-                diff_count = np.sum(numba_output != numpy_output)
-                print(f"Number of differing pixels: {diff_count} out of {h*w}")
-                
-                # Show some examples of differences
-                diff_indices = np.where(numba_output != numpy_output)
-                if len(diff_indices[0]) > 0:
-                    for k in range(min(5, len(diff_indices[0]))):
-                        i, j = diff_indices[0][k], diff_indices[1][k]
-                        complex_val = complex(x[j], y[i])
-                        print(f"  Pixel ({i},{j}) at complex point {complex_val}:")
-                        print(f"    Numba: {numba_output[i,j]}, NumPy: {numpy_output[i,j]}")
-            
-            return are_equal
     
     def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
         """Calculate the Mandelbrot set"""
@@ -180,11 +159,6 @@ try:
         y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Note: y inverted for screen coordinates
         
         if HAVE_NUMBA and not force_numpy:
-            # Validate implementation consistency when debug is enabled
-            if globals().get('debug_coordinates') and not hasattr(globals(), '_validated'):
-                validate_mandelbrot_implementation()
-                globals()['_validated'] = True
-            
             # Use Numba-accelerated kernel
             output = mandelbrot_kernel(x, y, max_iter)
         else:
@@ -223,7 +197,7 @@ try:
 
     # Define a Numba-optimized function for smooth coloring
     if HAVE_NUMBA:
-        @jit(nopython=True, fastmath=True)
+        @jit(nopython=True, fastmath=True, cache=True)
         def apply_smooth_colormap(iterations, max_iter, cmap, mask, shift=0.0):
             """Apply smooth colormap with Numba acceleration"""
             height, width = iterations.shape
