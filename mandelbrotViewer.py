@@ -6,14 +6,17 @@ pygame.init()
 
 # Set up display
 WIDTH = 800
-HEIGHT = 600
+HEIGHT = 800  # Changed to match WIDTH for square window
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Mandelbrot Set")
 
 # Initial view parameters
 x_min, x_max = -2, 1
-y_min, y_max = -1.5, 1.5
+y_min, y_max = -1.5, 1.5  # These values already maintain a square aspect ratio
 max_iter = 100
+
+# Store the current Mandelbrot set
+current_pixels = None
 
 # Rectangle drawing variables
 drawing = False
@@ -37,21 +40,17 @@ def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
     return output.T
 
 def draw_mandelbrot():
-    pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, max_iter)
-    surface = pygame.surfarray.make_surface(pixels * 255 / max_iter)
+    global current_pixels
+    if current_pixels is None:
+        current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, max_iter)
+    surface = pygame.surfarray.make_surface(current_pixels * 255 / max_iter)
     screen.blit(surface, (0, 0))
-    
-    # Draw the rectangle if we're currently drawing
-    if drawing and start_pos and current_pos:
-        rect = pygame.Rect(
-            min(start_pos[0], current_pos[0]),
-            min(start_pos[1], current_pos[1]),
-            abs(current_pos[0] - start_pos[0]),
-            abs(current_pos[1] - start_pos[1])
-        )
-        pygame.draw.rect(screen, (255, 255, 255), rect, 1)
-    
     pygame.display.flip()
+
+def update_mandelbrot():
+    global current_pixels
+    current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, max_iter)
+    draw_mandelbrot()
 
 # Main loop
 running = True
@@ -74,7 +73,7 @@ while running:
                 x_max = center_x + width / 2
                 y_min = center_y - height / 2
                 y_max = center_y + height / 2
-                draw_mandelbrot()
+                update_mandelbrot()
         elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1 and drawing:  # Left click release
                 drawing = False
@@ -117,15 +116,25 @@ while running:
                     start_pos = None
                     current_pos = None
                     
-                    # Redraw with new bounds
-                    draw_mandelbrot()
+                    # Update and redraw with new bounds
+                    update_mandelbrot()
         elif event.type == pygame.MOUSEMOTION:
             if drawing:
                 current_pos = event.pos
+                # Draw the rectangle without recalculating the Mandelbrot set
                 draw_mandelbrot()
+                if start_pos and current_pos:
+                    rect = pygame.Rect(
+                        min(start_pos[0], current_pos[0]),
+                        min(start_pos[1], current_pos[1]),
+                        abs(current_pos[0] - start_pos[0]),
+                        abs(current_pos[1] - start_pos[1])
+                    )
+                    pygame.draw.rect(screen, (255, 255, 255), rect, 1)
+                    pygame.display.flip()
     
     # Initial draw
-    if running:
+    if running and current_pixels is None:
         draw_mandelbrot()
 
 pygame.quit()
