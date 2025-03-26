@@ -74,21 +74,7 @@ float apply_log_smooth(float val) {
     return log(val * 0.5f + 0.5f) / log(1.5f);
 }
 
-// Smooth colormap (mode 0)
-float3 smooth_colormap(float norm_iter, float shift) {
-    // Apply shift and wrap to [0,1]
-    float t = fmod(apply_log_smooth(norm_iter) + shift, 1.0f);
-    
-    // Calculate HSV
-    float h = t;  // hue = normalized value
-    float s = 0.8f;  // saturation
-    float v = (t < 0.95f) ? 1.0f : (1.0f - t) * 20.0f;  // falloff for high values
-    
-    // Convert HSV to RGB
-    return hsv_to_rgb(h, s, v);
-}
-
-// Rainbow palette (mode 1)
+// Rainbow palette (mode 0)
 float3 rainbow_palette(float norm_iter, float shift) {
     // Apply shift and wrap to [0,1]
     float phase = fmod((norm_iter * 3.0f) + shift, 1.0f);
@@ -109,7 +95,7 @@ float3 rainbow_palette(float norm_iter, float shift) {
     return (float3)(r, g, b);
 }
 
-// Fire palette (mode 2)
+// Fire palette (mode 1)
 float3 fire_palette(float norm_iter, float shift) {
     // Apply shift and wrap to [0,1]
     float t = fmod(norm_iter + shift, 1.0f);
@@ -143,7 +129,7 @@ float3 fire_palette(float norm_iter, float shift) {
     return rgb;
 }
 
-// Electric blue (mode 3)
+// Electric blue (mode 2)
 float3 electric_blue(float norm_iter, float shift) {
     // Apply shift and wrap to [0,1]
     float t = fmod(norm_iter + shift, 1.0f);
@@ -169,7 +155,7 @@ float3 electric_blue(float norm_iter, float shift) {
     return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
 }
 
-// Twilight palette (mode 4)
+// Twilight palette (mode 3)
 float3 twilight_palette(float norm_iter, float shift) {
     // Apply shift and wrap to [0,1]
     float t = fmod(norm_iter + shift, 1.0f);
@@ -203,21 +189,7 @@ float3 twilight_palette(float norm_iter, float shift) {
     return rgb;
 }
 
-// Grayscale (mode 5)
-float3 grayscale(float norm_iter, float shift) {
-    // Apply logarithmic smoothing
-    float log_value = apply_log_smooth(norm_iter);
-    
-    // Apply shift and wrap to [0,1]
-    float value = fmod(log_value + shift, 1.0f);
-    
-    // Apply contrast enhancement
-    value = min(value * 1.2f, 1.0f);
-    
-    return (float3)(value, value, value);
-}
-
-// Neon palette (mode 6)
+// Neon palette (mode 4)
 float3 neon_palette(float norm_iter, float shift) {
     // Apply shift and wrap to [0,1]
     float t = fmod(norm_iter + shift, 1.0f);
@@ -266,53 +238,7 @@ float3 neon_palette(float norm_iter, float shift) {
     return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
 }
 
-// Deep Ocean (mode 7)
-float3 deep_ocean(float norm_iter, float shift) {
-    // Apply logarithmic smoothing
-    float log_value = apply_log_smooth(norm_iter);
-    
-    // Apply shift and wrap to [0,1]
-    float t = fmod(log_value + shift, 1.0f);
-    
-    // Blue-green gradient for ocean depths
-    float r = 0.0f;
-    float g = 0.0f;
-    float b = 0.3f + t * 0.3f;  // 0.3-0.6 range for blue
-    
-    // Add green/teal for mid-range values
-    if (t > 0.3f && t < 0.7f) {
-        float mid_intensity = (t - 0.3f) / 0.4f;
-        g = mid_intensity * 0.6f;
-    }
-    
-    // Surface waters with light teal and white foam for high values
-    if (t >= 0.7f && t < 0.9f) {
-        float surface_intensity = (t - 0.7f) / 0.2f;
-        r = surface_intensity * 0.3f;
-        g = 0.6f + surface_intensity * 0.3f;
-        b = 0.6f + surface_intensity * 0.3f;
-    }
-    
-    // White foam/highlight at the very highest values
-    if (t >= 0.9f) {
-        float foam_intensity = (t - 0.9f) / 0.1f;
-        r = 0.3f + foam_intensity * 0.7f;
-        g = 0.9f + foam_intensity * 0.1f;
-        b = 0.9f + foam_intensity * 0.1f;
-    }
-    
-    // Add shimmer effect with sine waves
-    if (t > 0.5f) {
-        float shimmer = 0.05f * sin(t * 50.0f);
-        r += shimmer;
-        g += shimmer;
-        b += shimmer;
-    }
-    
-    return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
-}
-
-// Vintage/Sepia (mode 8)
+// Vintage/Sepia (mode 5)
 float3 vintage_sepia(float norm_iter, float shift) {
     // Apply shift and wrap to [0,1]
     float t = fmod(norm_iter + shift, 1.0f);
@@ -400,31 +326,22 @@ __kernel void mandelbrot(__global int *iterations_out,
             
             // Apply coloring based on selected mode
             switch (color_mode) {
-                case 0: // Smooth colormap
-                    rgb = smooth_colormap(norm_iter, color_shift);
-                    break;
-                case 1: // Rainbow palette
+                case 0: // Rainbow palette
                     rgb = rainbow_palette(norm_iter, color_shift);
                     break;
-                case 2: // Fire palette
+                case 1: // Fire palette
                     rgb = fire_palette(norm_iter, color_shift);
                     break;
-                case 3: // Electric blue
+                case 2: // Electric blue
                     rgb = electric_blue(norm_iter, color_shift);
                     break;
-                case 4: // Twilight palette
+                case 3: // Twilight palette
                     rgb = twilight_palette(norm_iter, color_shift);
                     break;
-                case 5: // Grayscale
-                    rgb = grayscale(norm_iter, color_shift);
-                    break;
-                case 6: // Neon palette
+                case 4: // Neon palette
                     rgb = neon_palette(norm_iter, color_shift);
                     break;
-                case 7: // Deep Ocean
-                    rgb = deep_ocean(norm_iter, color_shift);
-                    break;
-                case 8: // Vintage/Sepia
+                case 5: // Vintage/Sepia
                     rgb = vintage_sepia(norm_iter, color_shift);
                     break;
                 default: // Default - simple grayscale
@@ -621,7 +538,7 @@ try:
     show_ui_panels = False  # Initially hide the UI panels
     
     # Color palette settings
-    color_mode = 2  # 0: Smooth colormap, 1: Classic rainbow, 2: Fire palette, 3: Electric blue, 4: Twilight, 5: Greyscale, 6: Neon, 7: Deep Ocean, 8: Vintage
+    color_mode = 1  # 0: Classic rainbow, 1: Fire palette, 2: Electric blue, 3: Twilight, 4: Neon, 5: Vintage
     color_shift = 0.0  # color rotation value
     
     # Add a global variable to store colored pixels
@@ -949,47 +866,7 @@ try:
         # Normalize iteration counts for escaped points (only where needed)
         mask = ~in_set
         
-        if mode == 0:  # Smooth colormap with log smoothing
-            # Check if we have a cached colormap
-            cache_key = f"smooth_{shift:.2f}"
-            if cache_key not in color_lookup_cache:
-                # Create the colormap and cache it
-                base_cmap = create_smooth_colormap()
-                
-                # Apply shift if needed
-                if shift != 0:
-                    # Shift the colormap by shifting indices
-                    shift_amount = int(shift * 256) % 256
-                    shifted_cmap = np.zeros((256, 3), dtype=np.uint8)
-                    shifted_cmap[:256-shift_amount] = base_cmap[shift_amount:]
-                    shifted_cmap[256-shift_amount:] = base_cmap[:shift_amount]
-                    color_lookup_cache[cache_key] = shifted_cmap
-                else:
-                    color_lookup_cache[cache_key] = base_cmap
-            
-            # Use the cached colormap
-            cmap = color_lookup_cache[cache_key]
-            
-            if USE_NUMBA and HAVE_NUMBA and mode == 0:
-                # Use Numba-accelerated coloring for the smooth colormap
-                rgb_array = apply_smooth_colormap(iterations, max_iter, cmap, in_set, shift)
-            else:
-                # Use the original implementation
-                # Compute normalized values only for points outside the set
-                norm_values = np.zeros_like(iterations, dtype=np.float64)
-                norm_values[mask] = iterations[mask] / max_iter
-                
-                # Apply logarithmic smoothing
-                norm_values[mask] = np.log(norm_values[mask] * 0.5 + 0.5) / np.log(1.5)
-                
-                # Scale to 0-255 for lookup table index
-                indices = (norm_values[mask] * 255).astype(np.uint8)
-                
-                # Use the lookup table to apply colors (vectorized)
-                mask_indices = np.where(mask)
-                rgb_array[mask_indices[0], mask_indices[1]] = cmap[indices]
-        
-        elif mode == 1:  # Classic rainbow palette using sine waves
+        if mode == 0:  # Classic rainbow palette using sine waves
             # Direct RGB calculation for rainbow palette
             norm_values = np.zeros_like(iterations, dtype=np.float64)
             norm_values[mask] = iterations[mask] / max_iter
@@ -1020,7 +897,7 @@ try:
             rgb_array[..., 1] = (g * 255).astype(np.uint8)
             rgb_array[..., 2] = (b * 255).astype(np.uint8)
         
-        elif mode == 2:  # Fire palette
+        elif mode == 1:  # Fire palette
             # Simplified fire palette calculation
             norm_values = np.zeros_like(iterations, dtype=np.float64)
             norm_values[mask] = iterations[mask] / max_iter
@@ -1060,7 +937,7 @@ try:
             rgb_array[..., 1] = (g * 255).astype(np.uint8)
             rgb_array[..., 2] = (b * 255).astype(np.uint8)
         
-        elif mode == 3:  # Electric blue
+        elif mode == 2:  # Electric blue
             # Electric blue with vibrant cyan to deep blue transitions
             norm_values = np.zeros_like(iterations, dtype=np.float64)
             norm_values[mask] = iterations[mask] / max_iter
@@ -1094,7 +971,7 @@ try:
             rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
             rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
         
-        elif mode == 4:  # Twilight palette (purple to orange)
+        elif mode == 3:  # Twilight palette (purple to orange)
             # Twilight-inspired color gradient
             norm_values = np.zeros_like(iterations, dtype=np.float64)
             norm_values[mask] = iterations[mask] / max_iter
@@ -1137,29 +1014,7 @@ try:
             rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
             rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
         
-        elif mode == 5:  # Grayscale with smooth log mapping
-            # Simple grayscale palette
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
-            norm_values[mask] = iterations[mask] / max_iter
-            
-            # Apply logarithmic smoothing
-            log_values = np.zeros_like(norm_values)
-            log_values[mask] = np.log(norm_values[mask] * 0.5 + 0.5) / np.log(1.5)
-            
-            # Apply shift by cycling the values (0-1 range)
-            values = (log_values + shift) % 1.0
-            
-            # Set all RGB channels to the same value for grayscale
-            # Use a bit of contrast enhancement
-            value = np.zeros_like(values)
-            value[mask] = np.clip(values[mask] * 1.2, 0, 1)
-            
-            # Scale to 0-255 and convert to uint8
-            rgb_array[..., 0] = (value * 255).astype(np.uint8)
-            rgb_array[..., 1] = (value * 255).astype(np.uint8)
-            rgb_array[..., 2] = (value * 255).astype(np.uint8)
-        
-        elif mode == 6:  # Neon palette with bright glows and dark backgrounds
+        elif mode == 4:  # Neon palette with bright glows and dark backgrounds
             norm_values = np.zeros_like(iterations, dtype=np.float64)
             norm_values[mask] = iterations[mask] / max_iter
             
@@ -1228,63 +1083,8 @@ try:
             rgb_array[..., 0] = (np.clip(r, 0, 1) * 255).astype(np.uint8)
             rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
             rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
-        
-        elif mode == 7:  # Deep Ocean
-            # Ocean-inspired palette with blues and teals
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
-            norm_values[mask] = iterations[mask] / max_iter
-            
-            # Apply logarithmic smoothing to enhance contrast
-            log_values = np.zeros_like(norm_values)
-            log_values[mask] = np.log(norm_values[mask] * 0.5 + 0.5) / np.log(1.5)
-            
-            # Apply shift
-            values = (log_values + shift) % 1.0
-            
-            # Allocate arrays
-            r = np.zeros_like(values)
-            g = np.zeros_like(values)
-            b = np.zeros_like(values)
-            
-            # Blue-green gradient for ocean depths
-            # Start with darkest deep blues (lowest values)
-            r[mask] = 0.0
-            g[mask] = 0.0
-            b[mask] = 0.3 + values[mask] * 0.3  # 0.3-0.6 range for blue
-            
-            # Add green/teal for mid-range values
-            midrange_mask = mask & (values > 0.3) & (values < 0.7)
-            mid_intensity = (values[midrange_mask] - 0.3) / 0.4
-            g[midrange_mask] = mid_intensity * 0.6
-            
-            # Surface waters with light teal and white foam for high values
-            surface_mask = mask & (values >= 0.7) & (values < 0.9)
-            surface_intensity = (values[surface_mask] - 0.7) / 0.2
-            r[surface_mask] = surface_intensity * 0.3
-            g[surface_mask] = 0.6 + surface_intensity * 0.3
-            b[surface_mask] = 0.6 + surface_intensity * 0.3
-            
-            # White foam/highlight at the very highest values
-            foam_mask = mask & (values >= 0.9)
-            foam_intensity = (values[foam_mask] - 0.9) / 0.1
-            
-            r[foam_mask] = 0.3 + foam_intensity * 0.7
-            g[foam_mask] = 0.9 + foam_intensity * 0.1
-            b[foam_mask] = 0.9 + foam_intensity * 0.1
-            
-            # Add shimmer effect with sine waves
-            shimmer_mask = mask & (values > 0.5)
-            shimmer = 0.05 * np.sin(values[shimmer_mask] * 50)
-            r[shimmer_mask] += shimmer
-            g[shimmer_mask] += shimmer
-            b[shimmer_mask] += shimmer
-            
-            # Scale to 0-255 and convert to uint8
-            rgb_array[..., 0] = (np.clip(r, 0, 1) * 255).astype(np.uint8)
-            rgb_array[..., 1] = (np.clip(g, 0, 1) * 255).astype(np.uint8)
-            rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
-        
-        elif mode == 8:  # Vintage/Sepia
+
+        elif mode == 5:  # Vintage/Sepia
             # Vintage/sepia tones with a worn look
             norm_values = np.zeros_like(iterations, dtype=np.float64)
             norm_values[mask] = iterations[mask] / max_iter
@@ -1436,7 +1236,7 @@ try:
         zoom_level = initial_width / width
         
         # Get the name of the current color palette
-        color_names = ['Smooth', 'Rainbow', 'Fire', 'Electric Blue', 'Twilight', 'Grayscale', 'Neon', 'Deep Ocean', 'Vintage']
+        color_names = ['Rainbow', 'Fire', 'Electric Blue', 'Twilight', 'Neon', 'Vintage']
         
         # Add high quality indicator to iteration count
         quality_text = f"HQ {high_quality_multiplier}x" if high_quality_mode else "Standard"
@@ -2198,7 +1998,7 @@ try:
                         zoom_history.pop(0)
                 elif event.key == pygame.K_c:
                     # Change color mode
-                    color_mode = (color_mode + 1) % 9
+                    color_mode = (color_mode + 1) % 6
                     # Force recalculation when using GPU to ensure the color mode is applied
                     if USE_GPU:
                         current_pixels = None
