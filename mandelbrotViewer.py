@@ -7,6 +7,9 @@ import traceback
 # Set this to False to disable Numba even if available
 USE_NUMBA = True
 
+# Set this to True if the Numba output appears rotated compared to NumPy
+TRANSPOSE_NUMBA_OUTPUT = True
+
 # Add Numba import for JIT compilation
 try:
     import numba
@@ -139,10 +142,12 @@ try:
             output = np.zeros((height, width), dtype=np.int32)
             
             # Use prange for parallel computation across rows
+            # In NumPy implementation: c[i,j] = x[j] + 1j * y[i]
+            # We need to match the same orientation here
             for i in prange(height):
                 for j in range(width):
-                    # Get the complex point corresponding to this pixel
-                    # x is horizontal (left to right), y is vertical (top to bottom in screen coords)
+                    # In NumPy broadcasting, x is spread across columns and y across rows
+                    # So coordinate (i,j) corresponds to complex number (x[j], y[i])
                     c = complex(x[j], y[i])
                     z = 0.0j
                     
@@ -160,18 +165,28 @@ try:
     def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
         """Calculate the Mandelbrot set"""
         # Use float64 for better precision
-        # Set up the x and y ranges with correct orientation
+        # Set up the x and y ranges with correct orientation:
         # x increases from left to right: x_min at left, x_max at right
-        # y increases from top to bottom: y_max at top, y_min at bottom (flipped for complex plane)
+        # y is flipped for screen coordinates: y_max at top, y_min at bottom
+        # This is because in the complex plane y increases upward, but screen coordinates increase downward
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
         y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Note: y inverted for screen coordinates
         
         if USE_NUMBA and HAVE_NUMBA and not force_numpy:
             # Use Numba-accelerated kernel
+            # We pass x and y arrays directly to the kernel
+            # The kernel maps (i,j) to complex number (x[j], y[i]), matching the NumPy orientation
             output = mandelbrot_kernel(x, y, max_iter)
+            
+            # If the output is rotated compared to NumPy, transpose it
+            if TRANSPOSE_NUMBA_OUTPUT:
+                output = output.T
         else:
             # Use the original NumPy implementation
-            # Create complex array with float64 precision
+            # Broadcasting creates a 2D grid of complex numbers where:
+            # c[i,j] = x[j] + 1j * y[i]
+            # This makes c[0,0] = x[0] + 1j * y[0] = top-left corner
+            # And maps screen coordinates directly to the complex plane
             c = x[:, np.newaxis] + 1j * y
             z = np.zeros_like(c, dtype=np.complex128)
             mask = np.ones_like(c, dtype=bool)
@@ -675,6 +690,7 @@ try:
             "Q: Toggle high quality mode",
             "X: Toggle debug mode",
             "N: Toggle Numba/NumPy",
+            "T: Toggle Numba transpose",
             "R: Reset view",
             "P: Print current settings",
             "Backspace: Zoom out",
@@ -1111,6 +1127,27 @@ try:
         else:
             print("Numba not available or disabled in configuration, using NumPy implementation only")
 
+    # Add a function to toggle Numba output transposition
+    def toggle_numba_transpose():
+        """Toggle whether Numba output should be transposed"""
+        global TRANSPOSE_NUMBA_OUTPUT, current_pixels
+        
+        # Only toggle if we're using Numba
+        if USE_NUMBA and HAVE_NUMBA and not force_numpy:
+            TRANSPOSE_NUMBA_OUTPUT = not TRANSPOSE_NUMBA_OUTPUT
+            current_pixels = None  # Force recalculation
+            
+            # Update status in console
+            if TRANSPOSE_NUMBA_OUTPUT:
+                print("Numba output will be transposed")
+            else:
+                print("Numba output will not be transposed")
+                
+            # Update the display
+            update_mandelbrot()
+        else:
+            print("Not using Numba, so transposition toggle has no effect")
+
     def reset_view():
         """Reset to initial view"""
         global x_min, x_max, y_min, y_max, max_iter, current_pixels
@@ -1235,6 +1272,9 @@ try:
                 elif event.key == pygame.K_n:
                     # Toggle NumPy mode
                     toggle_numpy_mode()
+                elif event.key == pygame.K_t:
+                    # Toggle Numba transpose
+                    toggle_numba_transpose()
                 elif event.key == pygame.K_r:
                     # Reset view
                     reset_view()
