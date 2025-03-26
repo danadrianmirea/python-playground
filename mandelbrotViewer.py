@@ -206,7 +206,7 @@ try:
     max_iter = 100
     
     # High-quality rendering flag
-    high_quality_mode = False
+    high_quality_mode = True
     high_quality_multiplier = 4  # 4x more iterations in high quality mode
     
     # Debug modes
@@ -376,10 +376,43 @@ try:
 
     def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
         """Select the appropriate Mandelbrot calculation method based on settings"""
-        if USE_GPU and HAVE_GPU:
-            return mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+        global render_scale
+        
+        # Apply render scaling for faster rendering during panning/zooming
+        if adaptive_render_scale and render_scale < 1.0:
+            # Calculate scaled dimensions
+            scaled_h = max(int(h * render_scale), 1)
+            scaled_w = max(int(w * render_scale), 1)
+            
+            # Calculate at reduced resolution
+            if USE_GPU and HAVE_GPU:
+                result = mandelbrot_gpu(scaled_h, scaled_w, x_min, x_max, y_min, y_max, max_iter)
+            else:
+                result = mandelbrot_cpu(scaled_h, scaled_w, x_min, x_max, y_min, y_max, max_iter)
+            
+            # Resize back to original dimensions if needed
+            if scaled_h < h or scaled_w < w:
+                # We need to upscale the result to the original dimensions
+                # Use simple repeat upscaling to maintain performance
+                h_repeat = max(1, int(np.ceil(h / scaled_h)))
+                w_repeat = max(1, int(np.ceil(w / scaled_w)))
+                
+                # Repeat the elements along both axes
+                result = np.repeat(np.repeat(result, h_repeat, axis=0), w_repeat, axis=1)
+                
+                # Trim to exact dimensions if the repeated array is too large
+                if result.shape[0] > h:
+                    result = result[:h, :]
+                if result.shape[1] > w:
+                    result = result[:, :w]
         else:
-            return mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+            # Full resolution rendering
+            if USE_GPU and HAVE_GPU:
+                result = mandelbrot_gpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+            else:
+                result = mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter)
+        
+        return result
 
     def create_smooth_colormap():
         """Create a lookup table for smooth color mapping"""
@@ -853,6 +886,36 @@ try:
         # Add a subtle border
         pygame.draw.rect(screen, (100, 100, 150), bg_rect, max(1, int(SCALE_FACTOR)))
 
+    def update_render_scale():
+        """Update the render scale based on movement state"""
+        global render_scale, target_render_scale, is_moving, last_movement_time
+        
+        # If adaptive render scaling is disabled, always use full resolution
+        if not adaptive_render_scale:
+            if render_scale < 1.0:
+                render_scale = 1.0
+                return True
+            return False
+        
+        current_time = pygame.time.get_ticks()
+        
+        # If we're moving, set scale to minimum
+        if is_moving:
+            target_render_scale = min_render_scale
+            last_movement_time = current_time
+            
+            # When moving, immediately drop to low quality
+            if render_scale != min_render_scale:
+                render_scale = min_render_scale
+                return True
+        # If movement has stopped, immediately jump to full resolution
+        else:
+            if render_scale < 1.0:
+                render_scale = 1.0
+                return True
+        
+        return False
+
     def draw_ui_panel():
         """Draw UI panels with matching styling"""
         # If panels are hidden, return immediately
@@ -880,6 +943,7 @@ try:
             "C: Change color mode",
             "Z/X: Shift colors left/right",
             "I/O: Increase/Decrease iterations", 
+            "T: Toggle adaptive render scaling",
             "Y: Toggle high quality mode",
             "V: Toggle debug mode",
             "N: Toggle Numba/NumPy",
@@ -921,6 +985,10 @@ try:
         else:
             impl_text = "NumPy (Numba not available)"
         
+        # Render scale info
+        render_scale_percent = int(render_scale * 100)
+        adaptive_scale_text = "Enabled" if adaptive_render_scale else "Disabled"
+        
         settings_texts = [
             "Current Settings:",
             f"Center: ({x_center:.6f}, {y_center:.6f})",
@@ -928,6 +996,7 @@ try:
             f"Zoom: {zoom_level:.2f}x",
             f"Iterations: {hq_iterations} ({quality_text})",
             f"Color: {color_names[color_mode]} (Shift: {color_shift:.1f})",
+            f"Render Scale: {render_scale_percent}% ({adaptive_scale_text})",
             f"Debug: {debug_text}",
             f"Implementation: {impl_text}",
             f"Resolution: {WIDTH}x{HEIGHT}"
@@ -992,7 +1061,11 @@ try:
 
     def draw_mandelbrot():
         global current_pixels, colored_pixels, base_surface
-        if current_pixels is None:
+        
+        # Check if we need to update the render scale
+        scale_changed = update_render_scale()
+        
+        if current_pixels is None or scale_changed:
             # Calculate the effective iterations based on quality mode
             effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
             current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, effective_iter)
@@ -1018,11 +1091,13 @@ try:
         pygame.display.flip()
 
     def update_mandelbrot():
-        global current_pixels, colored_pixels, base_surface
-        # Calculate the effective iterations based on quality mode
-        effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
-        current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, effective_iter)
-        colored_pixels = color_map(current_pixels, effective_iter, color_mode, color_shift)
+        global current_pixels, colored_pixels, base_surface, is_moving
+        
+        # Mark that we're actively moving (panning or zooming)
+        is_moving = True
+        
+        # Force recalculation with new view parameters
+        current_pixels = None
         draw_mandelbrot()
 
     def toggle_quality_mode():
@@ -1449,6 +1524,16 @@ try:
         else:
             print("GPU acceleration not available (install PyOpenCL for GPU support)")
 
+    # Add these global variables with the other global settings around line 130
+    # Incremental rendering settings
+    render_scale = 1.0           # Current rendering scale (1.0 = full resolution)
+    target_render_scale = 1.0    # Target scale to gradually approach
+    adaptive_render_scale = False # Toggle for adaptive render scaling during movement
+    min_render_scale = 0.25      # Minimum rendering scale during movement (0.25 = quarter resolution)
+    is_moving = False            # Flag to track if we're currently panning or zooming
+    last_movement_time = 0       # Time of last movement action
+    scale_recovery_delay = 0     # No delay before increasing resolution
+
     # Print a message indicating successful initialization
     print("Mandelbrot Viewer successfully initialized...")
     
@@ -1666,10 +1751,23 @@ try:
                 elif event.key == pygame.K_g:
                     # Toggle GPU mode
                     toggle_gpu_mode()
+                elif event.key == pygame.K_t:
+                    # Toggle adaptive render scaling
+                    globals()['adaptive_render_scale'] = not adaptive_render_scale
+                    if adaptive_render_scale:
+                        print("Adaptive render scaling enabled - reduces resolution during movement")
+                    else:
+                        print("Adaptive render scaling disabled - always renders at full resolution")
+                        render_scale = 1.0  # Reset to full resolution
+                    draw_mandelbrot()
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_e or event.key == pygame.K_q:
                     # Stop smooth zooming when E or Q key is released
                     smooth_zooming = False
+                    # Immediately render at full resolution
+                    render_scale = 1.0
+                    current_pixels = None
+                    draw_mandelbrot()
                 
                 # Stop panning when W, S, A, or D key is released
                 elif event.key in [pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d]:
@@ -1685,9 +1783,22 @@ try:
                     # Stop panning only if all direction keys are released
                     if not any(key_pressed.values()):
                         panning = False
+                        # Immediately render at full resolution
+                        render_scale = 1.0
+                        current_pixels = None
+                        draw_mandelbrot()
         
         # Limit the frame rate
         clock.tick(30)
+        
+        # Check if we need to update due to resolution scaling
+        if not is_moving and render_scale < 1.0:
+            # Initiate a redraw if we need to increase resolution
+            if update_render_scale():
+                draw_mandelbrot()
+        
+        # Reset the movement flag at the end of each frame
+        is_moving = smooth_zooming or panning
     
     print("Exiting Mandelbrot Viewer...")
     pygame.quit()
