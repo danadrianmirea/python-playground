@@ -1282,8 +1282,8 @@ try:
         old_multiplier = high_quality_multiplier
         
         if increase:
-            # Double the multiplier (maximum reasonable value is 32)
-            high_quality_multiplier = min(high_quality_multiplier * 2, 32)
+            # Double the multiplier (maximum value is 320)
+            high_quality_multiplier = min(high_quality_multiplier * 2, 320)
         else:
             # Halve the multiplier, but don't go below the minimum
             high_quality_multiplier = max(high_quality_multiplier // 2, min_quality_multiplier)
