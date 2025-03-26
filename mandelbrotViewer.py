@@ -4,6 +4,16 @@ from colorsys import hsv_to_rgb
 import sys
 import traceback
 
+# Add Numba import for JIT compilation
+try:
+    import numba
+    from numba import jit, prange
+    HAVE_NUMBA = True
+    print("Numba found - JIT compilation enabled for better performance")
+except ImportError:
+    HAVE_NUMBA = False
+    print("Numba not found - using standard Python (install Numba for better performance)")
+
 try:
     # Initialize Pygame
     pygame.init()
@@ -46,6 +56,14 @@ try:
     y_min, y_max = -1.5, 1.5  # These values already maintain a square aspect ratio
     max_iter = 100
     
+    # High-quality rendering flag
+    high_quality_mode = False
+    high_quality_multiplier = 4  # 4x more iterations in high quality mode
+    
+    # Debug modes
+    debug_coordinates = False    # Debug coordinate mappings
+    force_numpy = False          # Force NumPy implementation (disable Numba)
+    
     # Store the current Mandelbrot set
     current_pixels = None
     
@@ -75,7 +93,85 @@ try:
     # Store initial view as the first item in history
     zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
     
+    # Define a Numba-optimized function for calculating mandelbrot escape times
+    if HAVE_NUMBA:
+        @jit(nopython=True, parallel=True, fastmath=True)
+        def mandelbrot_kernel(x, y, max_iter):
+            """Numba-optimized kernel for Mandelbrot calculation"""
+            height, width = len(y), len(x)
+            output = np.zeros((height, width), dtype=np.int32)
+            
+            # Use prange for parallel computation across rows
+            for i in prange(height):
+                for j in range(width):
+                    # Get the complex point corresponding to this pixel
+                    # x is horizontal (left to right), y is vertical (top to bottom in screen coords)
+                    c = complex(x[j], y[i])
+                    z = 0.0j
+                    
+                    # Compute how quickly this point escapes
+                    for iteration in range(max_iter):
+                        z = z**2 + c
+                        if (z.real*z.real + z.imag*z.imag) >= 4.0:
+                            output[i, j] = iteration
+                            break
+                    else:
+                        output[i, j] = max_iter
+                    
+            return output
+        
+        # Add a validation function to compare Numba vs NumPy outputs
+        def validate_mandelbrot_implementation(h=100, w=100, max_iter=50):
+            """Test function to ensure Numba and NumPy implementations produce identical results"""
+            print("Validating Mandelbrot implementation consistency...")
+            
+            # Define a test region
+            test_x_min, test_x_max = -2.0, 1.0
+            test_y_min, test_y_max = -1.5, 1.5
+            
+            # Set up the test arrays
+            x = np.linspace(test_x_min, test_x_max, w, dtype=np.float64)
+            y = np.linspace(test_y_max, test_y_min, h, dtype=np.float64)
+            
+            # Calculate using Numba
+            numba_output = mandelbrot_kernel(x, y, max_iter)
+            
+            # Calculate using NumPy
+            c = x[:, np.newaxis] + 1j * y
+            z = np.zeros_like(c, dtype=np.complex128)
+            mask = np.ones_like(c, dtype=bool)
+            numpy_output = np.zeros_like(c, dtype=int)
+            
+            for i in range(max_iter):
+                z[mask] = z[mask]**2 + c[mask]
+                mask_new = abs(z) < 2
+                numpy_output[mask & ~mask_new] = i
+                mask = mask_new
+            
+            # Compare the outputs
+            are_equal = np.array_equal(numba_output, numpy_output)
+            
+            if are_equal:
+                print("✓ Implementations match! Numba acceleration is consistent with NumPy.")
+            else:
+                print("✗ Error: Implementations produce different results!")
+                # Find the locations of differences
+                diff_count = np.sum(numba_output != numpy_output)
+                print(f"Number of differing pixels: {diff_count} out of {h*w}")
+                
+                # Show some examples of differences
+                diff_indices = np.where(numba_output != numpy_output)
+                if len(diff_indices[0]) > 0:
+                    for k in range(min(5, len(diff_indices[0]))):
+                        i, j = diff_indices[0][k], diff_indices[1][k]
+                        complex_val = complex(x[j], y[i])
+                        print(f"  Pixel ({i},{j}) at complex point {complex_val}:")
+                        print(f"    Numba: {numba_output[i,j]}, NumPy: {numpy_output[i,j]}")
+            
+            return are_equal
+    
     def mandelbrot(h, w, x_min, x_max, y_min, y_max, max_iter):
+        """Calculate the Mandelbrot set"""
         # Use float64 for better precision
         # Set up the x and y ranges with correct orientation
         # x increases from left to right: x_min at left, x_max at right
@@ -83,18 +179,28 @@ try:
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
         y = np.linspace(y_max, y_min, h, dtype=np.float64)  # Note: y inverted for screen coordinates
         
-        # Create complex array with float64 precision
-        c = x[:, np.newaxis] + 1j * y
-        z = np.zeros_like(c, dtype=np.complex128)
-        mask = np.ones_like(c, dtype=bool)
-        output = np.zeros_like(c, dtype=int)
-        
-        # Optimize the calculation to reduce floating-point errors
-        for i in range(max_iter):
-            z[mask] = z[mask]**2 + c[mask]
-            mask_new = abs(z) < 2
-            output[mask & ~mask_new] = i
-            mask = mask_new
+        if HAVE_NUMBA and not force_numpy:
+            # Validate implementation consistency when debug is enabled
+            if globals().get('debug_coordinates') and not hasattr(globals(), '_validated'):
+                validate_mandelbrot_implementation()
+                globals()['_validated'] = True
+            
+            # Use Numba-accelerated kernel
+            output = mandelbrot_kernel(x, y, max_iter)
+        else:
+            # Use the original NumPy implementation
+            # Create complex array with float64 precision
+            c = x[:, np.newaxis] + 1j * y
+            z = np.zeros_like(c, dtype=np.complex128)
+            mask = np.ones_like(c, dtype=bool)
+            output = np.zeros_like(c, dtype=int)
+            
+            # Optimize the calculation to reduce floating-point errors
+            for i in range(max_iter):
+                z[mask] = z[mask]**2 + c[mask]
+                mask_new = abs(z) < 2
+                output[mask & ~mask_new] = i
+                mask = mask_new
         
         return output
 
@@ -114,6 +220,34 @@ try:
             r, g, b = hsv_to_rgb(h, s, v)
             cmap[i] = [int(r * 255), int(g * 255), int(b * 255)]
         return cmap
+
+    # Define a Numba-optimized function for smooth coloring
+    if HAVE_NUMBA:
+        @jit(nopython=True, fastmath=True)
+        def apply_smooth_colormap(iterations, max_iter, cmap, mask, shift=0.0):
+            """Apply smooth colormap with Numba acceleration"""
+            height, width = iterations.shape
+            rgb_array = np.zeros((height, width, 3), dtype=np.uint8)
+            
+            for i in range(height):
+                for j in range(width):
+                    if not mask[i, j]:  # Only process points outside the set
+                        # Normalize and apply logarithmic smoothing
+                        norm_value = iterations[i, j] / max_iter
+                        log_value = np.log(norm_value * 0.5 + 0.5) / np.log(1.5)
+                        
+                        # Apply shift
+                        shifted_value = (log_value + shift) % 1.0
+                        
+                        # Map to colormap index
+                        index = min(255, max(0, int(shifted_value * 255)))
+                        
+                        # Assign color
+                        rgb_array[i, j, 0] = cmap[index, 0]
+                        rgb_array[i, j, 1] = cmap[index, 1]
+                        rgb_array[i, j, 2] = cmap[index, 2]
+            
+            return rgb_array
 
     def color_map(iterations, max_iter, mode=0, shift=0.0):
         """Map iteration counts to colors using different coloring schemes"""
@@ -156,19 +290,24 @@ try:
             # Use the cached colormap
             cmap = color_lookup_cache[cache_key]
             
-            # Compute normalized values only for points outside the set
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
-            norm_values[mask] = iterations[mask] / max_iter
-            
-            # Apply logarithmic smoothing
-            norm_values[mask] = np.log(norm_values[mask] * 0.5 + 0.5) / np.log(1.5)
-            
-            # Scale to 0-255 for lookup table index
-            indices = (norm_values[mask] * 255).astype(np.uint8)
-            
-            # Use the lookup table to apply colors (vectorized)
-            mask_indices = np.where(mask)
-            rgb_array[mask_indices[0], mask_indices[1]] = cmap[indices]
+            if HAVE_NUMBA and mode == 0:
+                # Use Numba-accelerated coloring for the smooth colormap
+                rgb_array = apply_smooth_colormap(iterations, max_iter, cmap, in_set, shift)
+            else:
+                # Use the original implementation
+                # Compute normalized values only for points outside the set
+                norm_values = np.zeros_like(iterations, dtype=np.float64)
+                norm_values[mask] = iterations[mask] / max_iter
+                
+                # Apply logarithmic smoothing
+                norm_values[mask] = np.log(norm_values[mask] * 0.5 + 0.5) / np.log(1.5)
+                
+                # Scale to 0-255 for lookup table index
+                indices = (norm_values[mask] * 255).astype(np.uint8)
+                
+                # Use the lookup table to apply colors (vectorized)
+                mask_indices = np.where(mask)
+                rgb_array[mask_indices[0], mask_indices[1]] = cmap[indices]
         
         elif mode == 1:  # Classic rainbow palette using sine waves
             # Direct RGB calculation for rainbow palette
@@ -551,6 +690,10 @@ try:
             "C: Change color mode",
             "Left/Right: Shift colors",
             "I/D: Increase/Decrease iterations", 
+            "Q: Toggle high quality mode",
+            "X: Toggle debug mode",
+            "N: Toggle Numba/NumPy",
+            "R: Reset view",
             "P: Print current settings",
             "Backspace: Zoom out",
             "H: Toggle help panels",
@@ -569,13 +712,28 @@ try:
         # Get the name of the current color palette
         color_names = ['Smooth', 'Rainbow', 'Fire', 'Electric Blue', 'Twilight', 'Grayscale', 'Neon', 'Deep Ocean', 'Vintage']
         
+        # Add high quality indicator to iteration count
+        quality_text = "HQ" if high_quality_mode else "Standard"
+        hq_iterations = max_iter * high_quality_multiplier if high_quality_mode else max_iter
+        
+        # Debug mode indicator
+        debug_text = "Debug ON" if debug_coordinates else "Debug OFF"
+        
+        # Implementation indicator
+        if HAVE_NUMBA:
+            impl_text = "NumPy" if force_numpy else "Numba"
+        else:
+            impl_text = "NumPy (Numba not available)"
+        
         settings_texts = [
             "Current Settings:",
             f"Center: ({x_center:.6f}, {y_center:.6f})",
             f"Width: {width:.6f}",
             f"Zoom: {zoom_level:.2f}x",
-            f"Iterations: {max_iter}",
+            f"Iterations: {hq_iterations} ({quality_text})",
             f"Color: {color_names[color_mode]} (Shift: {color_shift:.1f})",
+            f"Debug: {debug_text}",
+            f"Implementation: {impl_text}",
             f"Resolution: {WIDTH}x{HEIGHT}"
         ]
         
@@ -639,10 +797,14 @@ try:
     def draw_mandelbrot():
         global current_pixels, colored_pixels, base_surface
         if current_pixels is None:
-            current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, max_iter)
+            # Calculate the effective iterations based on quality mode
+            effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
+            current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, effective_iter)
         
         # Always recalculate the colored pixels to reflect current color_mode and color_shift
-        colored_pixels = color_map(current_pixels, max_iter, color_mode, color_shift)
+        # Use the effective iterations for coloring
+        effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
+        colored_pixels = color_map(current_pixels, effective_iter, color_mode, color_shift)
         
         # Create and save the base surface for later use
         # Ensure the surface is in the correct format for pygame
@@ -661,9 +823,29 @@ try:
 
     def update_mandelbrot():
         global current_pixels, colored_pixels, base_surface
-        current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, max_iter)
-        colored_pixels = color_map(current_pixels, max_iter, color_mode, color_shift)
+        # Calculate the effective iterations based on quality mode
+        effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
+        current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, effective_iter)
+        colored_pixels = color_map(current_pixels, effective_iter, color_mode, color_shift)
         draw_mandelbrot()
+
+    def toggle_quality_mode():
+        """Toggle between standard and high quality rendering"""
+        global high_quality_mode, current_pixels
+        high_quality_mode = not high_quality_mode
+        
+        # Force recalculation with new quality setting
+        current_pixels = None
+        
+        # Update status in console
+        if high_quality_mode:
+            effective_iter = max_iter * high_quality_multiplier
+            print(f"High quality mode enabled: {effective_iter} iterations")
+        else:
+            print(f"Standard quality mode: {max_iter} iterations")
+        
+        # Update the display
+        update_mandelbrot()
 
     def zoom_out():
         """Revert to the previous view from history"""
@@ -680,7 +862,9 @@ try:
             update_mandelbrot()
             
             # Print current coordinates for debugging
+            effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
             print(f"Zoomed out to: x_min={x_min}, x_max={x_max}, y_min={y_min}, y_max={y_max}")
+            print(f"Using {effective_iter} iterations ({max_iter} base)")
         else:
             print("No more zoom history available")
 
@@ -727,8 +911,18 @@ try:
         # - x from 0 to WIDTH maps to x_min to x_max
         # - y from 0 to HEIGHT maps to y_max to y_min (inverted)
         
+        # Linear mapping from screen to complex plane
         complex_center_x = x_min + (x_max - x_min) * center_x / WIDTH
         complex_center_y = y_max - (y_max - y_min) * center_y / HEIGHT
+        
+        # Print debugging information to verify mappings
+        if hasattr(globals(), 'debug_coordinates') and globals().get('debug_coordinates'):
+            print(f"Screen point: ({center_x}, {center_y}) -> Complex point: ({complex_center_x}, {complex_center_y})")
+            # Screen corners mapping
+            top_left_complex = (x_min, y_max)
+            bottom_right_complex = (x_max, y_min)
+            print(f"Screen bounds: (0,0) -> ({WIDTH},{HEIGHT})")
+            print(f"Complex bounds: {top_left_complex} -> {bottom_right_complex}")
         
         # Calculate the width in the complex plane corresponding to zoom_length
         complex_width = (x_max - x_min) * zoom_length / WIDTH
@@ -876,6 +1070,21 @@ try:
         complex_width = zoom_area["complex_width"]
         new_x_min, new_x_max, new_y_min, new_y_max = zoom_area["new_bounds"]
         
+        # Debug information about the zoom
+        if debug_coordinates:
+            print(f"ZOOM DEBUG INFO:")
+            print(f"  Screen selection: {start_pos} to {current_pos}")
+            print(f"  Current bounds: x=[{x_min:.6f}, {x_max:.6f}], y=[{y_min:.6f}, {y_max:.6f}]")
+            print(f"  New bounds: x=[{new_x_min:.6f}, {new_x_max:.6f}], y=[{new_y_min:.6f}, {new_y_max:.6f}]")
+            print(f"  Complex center: ({complex_center_x:.6f}, {complex_center_y:.6f})")
+            print(f"  Width in complex plane: {complex_width:.6f}")
+            
+            # Verify width calculations
+            rect_width = abs(new_x_max - new_x_min)
+            rect_height = abs(new_y_max - new_y_min)
+            aspect_ratio = rect_width / rect_height
+            print(f"  Rect dimensions: {rect_width:.6f} x {rect_height:.6f}, aspect ratio: {aspect_ratio:.6f}")
+        
         # Save current view to history
         zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
         
@@ -884,9 +1093,10 @@ try:
             zoom_history.pop(0)
         
         # Log what we're about to do
+        effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
         print(f"Zooming to center: ({complex_center_x:.6f}, {complex_center_y:.6f})")
         print(f"New bounds: x=[{new_x_min:.6f}, {new_x_max:.6f}], y=[{new_y_min:.6f}, {new_y_max:.6f}]")
-        print(f"Zoom factor: {zoom_factor:.2f}x")
+        print(f"Zoom factor: {zoom_factor:.2f}x, using {effective_iter} iterations")
         
         # Apply the new bounds directly
         x_min, x_max = new_x_min, new_x_max
@@ -895,6 +1105,43 @@ try:
         # Reset current pixels to force recalculation
         current_pixels = None
         update_mandelbrot()
+
+    def toggle_numpy_mode():
+        """Toggle between NumPy and Numba implementations"""
+        global force_numpy, current_pixels
+        
+        # Only toggle if Numba is available
+        if HAVE_NUMBA:
+            force_numpy = not force_numpy
+            current_pixels = None  # Force recalculation
+            
+            # Update status in console
+            if force_numpy:
+                print("Using NumPy implementation (Numba disabled)")
+            else:
+                print("Using Numba implementation for acceleration")
+                
+            # Update the display
+            update_mandelbrot()
+        else:
+            print("Numba not available, using NumPy implementation only")
+
+    def reset_view():
+        """Reset to initial view"""
+        global x_min, x_max, y_min, y_max, max_iter, current_pixels
+        
+        # Reset to initial parameters
+        x_min, x_max = -2, 1
+        y_min, y_max = -1.5, 1.5
+        max_iter = 100
+        
+        # Force recalculation
+        current_pixels = None
+        
+        # Update the display
+        update_mandelbrot()
+        
+        print("View reset to initial state")
 
     # Print a message indicating successful initialization
     print("Mandelbrot Viewer successfully initialized...")
@@ -993,6 +1240,19 @@ try:
                 # Add escape key to exit
                 elif event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key == pygame.K_q:
+                    # Toggle quality mode
+                    toggle_quality_mode()
+                elif event.key == pygame.K_x:
+                    # Toggle debug mode
+                    globals()['debug_coordinates'] = not debug_coordinates
+                    draw_mandelbrot()
+                elif event.key == pygame.K_n:
+                    # Toggle NumPy mode
+                    toggle_numpy_mode()
+                elif event.key == pygame.K_r:
+                    # Reset view
+                    reset_view()
         
         # Limit the frame rate
         clock.tick(30)
