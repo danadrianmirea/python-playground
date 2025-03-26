@@ -102,6 +102,25 @@ try:
     debug_coordinates = False    # Debug coordinate mappings
     force_numpy = False          # Force NumPy implementation (disable Numba)
     
+    # Zoom modes
+    smooth_zoom_mode = True      # Toggle between smooth zoom and rectangle selection
+    smooth_zooming = False       # Flag to indicate active smooth zooming 
+    smooth_zoom_factor = 1.02    # Per-frame zoom factor (1.02 = 2% closer per frame)
+    smooth_zoom_out = False      # Flag to indicate if we're zooming out instead of in
+    mouse_pos = (WIDTH // 2, HEIGHT // 2)  # Default to center of screen
+    
+    # Panning
+    panning = False              # Flag to indicate active panning
+    pan_direction = None         # Current pan direction (up, down, left, right)
+    pan_speed = 0.02             # Pan speed as a fraction of current view width/height
+    # Track individual key states for diagonal panning
+    key_pressed = {
+        "up": False,
+        "down": False,
+        "left": False,
+        "right": False
+    }
+    
     # Store the current Mandelbrot set
     current_pixels = None
     
@@ -125,12 +144,6 @@ try:
     
     # Cache for color lookup tables
     color_lookup_cache = {}
-    
-    # Smooth zoom settings
-    smooth_zooming = False
-    smooth_zoom_factor = 1.02  # Per-frame zoom factor (1.02 = 2% closer per frame)
-    smooth_zoom_out = False    # Flag to indicate if we're zooming out instead of in
-    mouse_pos = (WIDTH // 2, HEIGHT // 2)  # Default to center of screen
     
     # Zoom history stack to store previous viewports
     zoom_history = []
@@ -686,17 +699,27 @@ try:
         # Help panel (left)
         help_texts = [
             "Controls:",
-            "Left click and drag: Select zoom area",
-            "Right click: Zoom out",
-            "W (hold): Smooth zoom in toward cursor",
-            "S (hold): Smooth zoom out from cursor",
+            "M: Toggle zoom mode (smooth/selection)",
+            f"Zoom Mode: {'Smooth' if smooth_zoom_mode else 'Rectangle Selection'}",
+            "In Smooth Zoom Mode:",
+            "  Left click (hold): Zoom in at cursor", 
+            "  Right click (hold): Zoom out at cursor",
+            "In Rectangle Mode:",
+            "  Left click and drag: Select zoom area",
+            "  Right click: Zoom out to previous view",
+            "Panning:",
+            "  W: Pan up",
+            "  S: Pan down",
+            "  A: Pan left",
+            "  D: Pan right",
+            "E (hold): Smooth zoom in toward cursor",
+            "Q (hold): Smooth zoom out from cursor",
             "C: Change color mode",
             "Z/X: Shift colors left/right",
-            "I/D: Increase/Decrease iterations", 
-            "Q: Toggle high quality mode",
+            "I/O: Increase/Decrease iterations", 
+            "Y: Toggle high quality mode",
             "V: Toggle debug mode",
             "N: Toggle Numba/NumPy",
-            "T: Toggle Numba transpose",
             "R: Reset view",
             "P: Print current settings",
             "Backspace: Zoom out",
@@ -1150,7 +1173,7 @@ try:
         
         print("View reset to initial state")
 
-    def smooth_zoom_to_cursor():
+    def smooth_zoom_to_cursor(zoom_out=False):
         """Perform a smooth zoom step centered on the current mouse position"""
         global x_min, x_max, y_min, y_max, current_pixels
         
@@ -1164,7 +1187,7 @@ try:
         
         # Calculate new bounds with a small zoom step
         # The zoom factor is applied relative to the cursor position
-        if smooth_zoom_out:
+        if zoom_out:
             # When zooming out, multiply by the factor instead of dividing
             new_width = width * smooth_zoom_factor
             new_height = height * smooth_zoom_factor
@@ -1193,9 +1216,52 @@ try:
         
         # In debug mode, log the new coordinates
         if debug_coordinates:
-            zoom_type = "out" if smooth_zoom_out else "in"
+            zoom_type = "out" if zoom_out else "in"
             print(f"Smooth zoom {zoom_type} to: ({cx:.6f}, {cy:.6f})")
             print(f"New bounds: x=[{x_min:.6f}, {x_max:.6f}], y=[{y_min:.6f}, {y_max:.6f}]")
+
+    def pan_view(direction=None):
+        """Pan the view in the specified direction or based on key states"""
+        global x_min, x_max, y_min, y_max, current_pixels
+        
+        # Get current view dimensions
+        width = x_max - x_min
+        height = y_max - y_min
+        
+        # Calculate pan amount based on current view size
+        pan_amount_x = width * pan_speed
+        pan_amount_y = height * pan_speed
+        
+        # Check key states instead of single direction to support diagonal movement
+        # Vertical movement
+        if key_pressed["up"] and not key_pressed["down"]:
+            y_min += pan_amount_y
+            y_max += pan_amount_y
+        elif key_pressed["down"] and not key_pressed["up"]:
+            y_min -= pan_amount_y
+            y_max -= pan_amount_y
+        
+        # Horizontal movement
+        if key_pressed["left"] and not key_pressed["right"]:
+            x_min -= pan_amount_x
+            x_max -= pan_amount_x
+        elif key_pressed["right"] and not key_pressed["left"]:
+            x_min += pan_amount_x
+            x_max += pan_amount_x
+        
+        # Force recalculation of the Mandelbrot set
+        current_pixels = None
+        
+        # Print debug info if enabled
+        if debug_coordinates:
+            current_direction = []
+            if key_pressed["up"]: current_direction.append("up")
+            if key_pressed["down"]: current_direction.append("down")
+            if key_pressed["left"]: current_direction.append("left")
+            if key_pressed["right"]: current_direction.append("right")
+            
+            direction_str = "+".join(current_direction) if current_direction else "none"
+            print(f"Panning {direction_str}: New bounds x=[{x_min:.6f}, {x_max:.6f}], y=[{y_min:.6f}, {y_max:.6f}]")
 
     # Print a message indicating successful initialization
     print("Mandelbrot Viewer successfully initialized...")
@@ -1213,11 +1279,11 @@ try:
     smooth_zoom_history_interval = 30  # Save every 30 frames of smooth zooming
     
     while running:
-        # Check if we're in smooth zoom mode and W or S key is still pressed
+        # Check if we're in smooth zoom mode and E or Q key is still pressed
         # Get the mouse position before handling events
         if smooth_zooming:
             mouse_pos = pygame.mouse.get_pos()
-            smooth_zoom_to_cursor()
+            smooth_zoom_to_cursor(smooth_zoom_out)
             
             # Update the display
             update_mandelbrot()
@@ -1232,49 +1298,84 @@ try:
                 if len(zoom_history) > 50:
                     zoom_history.pop(0)
         
+        # Handle active panning
+        if panning:
+            pan_view()
+            update_mandelbrot()
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Left click
-                    drawing = True
-                    start_pos = event.pos
-                    current_pos = event.pos
-                elif event.button == 3:  # Right click - zoom out to previous view
-                    zoom_out()
+                mouse_pos = event.pos  # Always update the mouse position
+                
+                if smooth_zoom_mode:
+                    # In smooth zoom mode, mouse buttons directly control zooming
+                    if event.button == 1:  # Left click - zoom in
+                        # Save current view to history before starting smooth zoom
+                        zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
+                        # Limit history size
+                        if len(zoom_history) > 50:
+                            zoom_history.pop(0)
+                        smooth_zooming = True
+                        smooth_zoom_out = False
+                        smooth_zoom_history_counter = 0
+                    elif event.button == 3:  # Right click - zoom out
+                        # Save current view to history before starting smooth zoom
+                        zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
+                        # Limit history size
+                        if len(zoom_history) > 50:
+                            zoom_history.pop(0)
+                        smooth_zooming = True
+                        smooth_zoom_out = True
+                        smooth_zoom_history_counter = 0
+                else:
+                    # In rectangle selection mode, use original behavior
+                    if event.button == 1:  # Left click - start drawing selection rectangle
+                        drawing = True
+                        start_pos = event.pos
+                        current_pos = event.pos
+                    elif event.button == 3:  # Right click - zoom out to previous view
+                        zoom_out()
             elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 1 and drawing:  # Left click release
-                    drawing = False
-                    if start_pos and current_pos:
-                        # Calculate zoom area
-                        zoom_area = calculate_zoom_area(start_pos, current_pos)
-                        
-                        # Extract zoom length to check minimum size
-                        zoom_length = zoom_area["zoom_length"]
-                        
-                        # Ensure the rectangle has a minimum size
-                        if zoom_length < 5:
-                            # Rectangle too small, ignore and restore original view
+                if smooth_zoom_mode:
+                    # In smooth zoom mode, releasing either mouse button stops zooming
+                    if event.button == 1 or event.button == 3:
+                        smooth_zooming = False
+                else:
+                    # In rectangle selection mode, use original behavior
+                    if event.button == 1 and drawing:  # Left click release - complete rectangle
+                        drawing = False
+                        if start_pos and current_pos:
+                            # Calculate zoom area
+                            zoom_area = calculate_zoom_area(start_pos, current_pos)
+                            
+                            # Extract zoom length to check minimum size
+                            zoom_length = zoom_area["zoom_length"]
+                            
+                            # Ensure the rectangle has a minimum size
+                            if zoom_length < 5:
+                                # Rectangle too small, ignore and restore original view
+                                start_pos = None
+                                current_pos = None
+                                # Simply redisplay the base surface without the selection rectangle
+                                if base_surface is not None:
+                                    screen.blit(base_surface, (0, 0))
+                                    pygame.display.flip()
+                                continue
+                            
+                            # Use our zoom_to_selection function for consistent zooming
+                            zoom_to_selection(start_pos, current_pos)
+                            
+                            # Reset drawing variables
                             start_pos = None
                             current_pos = None
-                            # Simply redisplay the base surface without the selection rectangle
-                            if base_surface is not None:
-                                screen.blit(base_surface, (0, 0))
-                                pygame.display.flip()
-                            continue
-                        
-                        # Use our zoom_to_selection function for consistent zooming
-                        zoom_to_selection(start_pos, current_pos)
-                        
-                        # Reset drawing variables
-                        start_pos = None
-                        current_pos = None
             elif event.type == pygame.MOUSEMOTION:
                 # Always update mouse position for smooth zoom
                 mouse_pos = event.pos
                 
-                # Handle rectangle drawing
-                if drawing:
+                # Only draw selection rectangle in rectangle selection mode
+                if not smooth_zoom_mode and drawing:
                     current_pos = event.pos
                     # Draw the selection rectangle without recalculating the Mandelbrot set
                     draw_selection_rectangle()
@@ -1285,8 +1386,13 @@ try:
                     start_pos = None
                     current_pos = None
                 
-                if event.key == pygame.K_w:
-                    # Start smooth zooming in when W key is pressed
+                if event.key == pygame.K_m:
+                    # Toggle zoom mode (smooth vs rectangle selection)
+                    smooth_zoom_mode = not smooth_zoom_mode
+                    print(f"Zoom mode: {'Smooth zoom' if smooth_zoom_mode else 'Rectangle selection'}")
+                    draw_mandelbrot()  # Redraw to update UI panel
+                elif event.key == pygame.K_e:
+                    # Start smooth zooming in when E key is pressed
                     smooth_zooming = True
                     smooth_zoom_out = False  # Ensure we're zooming in
                     mouse_pos = pygame.mouse.get_pos()
@@ -1297,8 +1403,8 @@ try:
                     # Limit history size
                     if len(zoom_history) > 50:
                         zoom_history.pop(0)
-                elif event.key == pygame.K_s:
-                    # Start smooth zooming out when S key is pressed
+                elif event.key == pygame.K_q:
+                    # Start smooth zooming out when Q key is pressed
                     smooth_zooming = True
                     smooth_zoom_out = True  # We're zooming out
                     mouse_pos = pygame.mouse.get_pos()
@@ -1325,7 +1431,7 @@ try:
                     # Increase max iterations
                     max_iter = min(max_iter * 2, 2000)
                     update_mandelbrot()
-                elif event.key == pygame.K_d:
+                elif event.key == pygame.K_o:  # Changed from D to O for decrease iterations
                     # Decrease max iterations
                     max_iter = max(max_iter // 2, 50)
                     update_mandelbrot()
@@ -1345,7 +1451,7 @@ try:
                 # Add escape key to exit
                 elif event.key == pygame.K_ESCAPE:
                     running = False
-                elif event.key == pygame.K_q:
+                elif event.key == pygame.K_y:  # Changed from Q to Y for quality mode
                     # Toggle quality mode
                     toggle_quality_mode()
                 elif event.key == pygame.K_v:
@@ -1358,10 +1464,38 @@ try:
                 elif event.key == pygame.K_r:
                     # Reset view
                     reset_view()
+                # Panning controls
+                elif event.key == pygame.K_w:
+                    key_pressed["up"] = True
+                    panning = True
+                elif event.key == pygame.K_s:
+                    key_pressed["down"] = True
+                    panning = True
+                elif event.key == pygame.K_a:
+                    key_pressed["left"] = True
+                    panning = True
+                elif event.key == pygame.K_d:
+                    key_pressed["right"] = True
+                    panning = True
             elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_w or event.key == pygame.K_s:
-                    # Stop smooth zooming when W or S key is released
+                if event.key == pygame.K_e or event.key == pygame.K_q:
+                    # Stop smooth zooming when E or Q key is released
                     smooth_zooming = False
+                
+                # Stop panning when W, S, A, or D key is released
+                elif event.key in [pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d]:
+                    if event.key == pygame.K_w:
+                        key_pressed["up"] = False
+                    elif event.key == pygame.K_s:
+                        key_pressed["down"] = False
+                    elif event.key == pygame.K_a:
+                        key_pressed["left"] = False
+                    elif event.key == pygame.K_d:
+                        key_pressed["right"] = False
+                    
+                    # Stop panning only if all direction keys are released
+                    if not any(key_pressed.values()):
+                        panning = False
         
         # Limit the frame rate
         clock.tick(30)
