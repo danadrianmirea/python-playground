@@ -65,6 +65,11 @@ class TextEditor:
         edit_menu.add_separator()
         edit_menu.add_command(label="Clear", command=self.clear_text)
         
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About", command=self.show_about)
+        
     def on_text_change(self, event):
         # Save current state to history
         current_text = self.text_widget.get("1.0", tk.END)
@@ -120,6 +125,9 @@ class TextEditor:
     def clear_text(self):
         if messagebox.askyesno("Clear Text", "Are you sure you want to clear the text?"):
             self.text_widget.delete("1.0", tk.END)
+
+    def show_about(self):
+        messagebox.showinfo("About", "Simple text editor")
 
 if __name__ == "__main__":
     root = tk.Tk()
