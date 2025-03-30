@@ -1,62 +1,26 @@
-import pyglet
+import pygame
 import math
-import time
+
+# Initialize Pygame
+pygame.init()
 
 # Create a window
-window = pyglet.window.Window(800, 600)
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
+screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+pygame.display.set_caption("Ball Game")
 
-# Create custom crosshair cursor
-def create_crosshair_cursor():
-    size = 25
-    center = size // 2
-    gap = 2  # Size of the gap (in pixels)
-    
-    # Create raw pixel data (RGBA)
-    data = []
-    for y in range(size):
-        for x in range(size):
-            # Default to transparent black
-            pixel = [0, 0, 0, 0]
-            
-            # Draw vertical line with gap
-            if x == center and abs(y - center) > gap:
-                pixel = [255, 255, 255, 255]  # White
-                
-            # Draw horizontal line with gap
-            if y == center and abs(x - center) > gap:
-                pixel = [255, 255, 255, 255]  # White
-                
-            # Add black pixel in the gap
-            if (x == center and abs(y - center) <= gap) or (y == center and abs(x - center) <= gap):
-                pixel = [0, 0, 0, 255]  # Black
-                
-            data.extend(pixel)
-    
-    image = pyglet.image.create(size, size)
-    image.set_data('RGBA', size * 4, bytes(data))
-    return pyglet.window.ImageMouseCursor(image, hot_x=center, hot_y=center)
-
-cursor = create_crosshair_cursor()
-window.set_mouse_cursor(cursor)
+# Colors
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
 
 # Ball properties
-ball_x = 400  # Start in center
-ball_y = 300
+ball_x = WINDOW_WIDTH // 2  # Start in center
+ball_y = WINDOW_HEIGHT // 2
 ball_radius = 20
 ball_speed = 300  # Speed in pixels per second
-
-# Mouse position and state
-mouse_x = 0
-mouse_y = 0
-mouse_lb_pressed = False
-
-# Key states
-key_states = {
-    pyglet.window.key.W: False,
-    pyglet.window.key.A: False,
-    pyglet.window.key.S: False,
-    pyglet.window.key.D: False
-}
 
 # Gun properties
 current_angle = 0
@@ -70,97 +34,94 @@ bullets = []  # List to store active bullets
 bullet_speed = 500  # Speed in pixels per second
 bullet_radius = 4
 fire_rate = 0.1  # Time between shots in seconds
-last_shot_time = 0
+
+# Shooting state
+auto_fire = False
+shoot_timer = 0
+
+# Movement tracking
+key_states = {
+    pygame.K_w: False,
+    pygame.K_s: False,
+    pygame.K_a: False,
+    pygame.K_d: False
+}
 
 class Bullet:
     def __init__(self, x, y, angle):
         self.x = x
         self.y = y
         self.angle = angle
-        self.shape = pyglet.shapes.Circle(
-            x=x,
-            y=y,
-            radius=bullet_radius,
-            color=(255, 255, 255)  # White color
-        )
     
     def update(self, dt):
         self.x += math.cos(self.angle) * bullet_speed * dt
         self.y += math.sin(self.angle) * bullet_speed * dt
-        self.shape.x = self.x
-        self.shape.y = self.y
     
-    def draw(self):
-        self.shape.draw()
+    def draw(self, screen):
+        pygame.draw.circle(screen, WHITE, (int(self.x), int(self.y)), bullet_radius)
     
     def is_off_screen(self):
-        return (self.x < 0 or self.x > window.width or 
-                self.y < 0 or self.y > window.height)
+        return (self.x < 0 or self.x > WINDOW_WIDTH or 
+                self.y < 0 or self.y > WINDOW_HEIGHT)
 
-# Create a circle shape
-ball = pyglet.shapes.Circle(
-    x=ball_x,
-    y=ball_y,
-    radius=ball_radius,
-    color=(255, 0, 0)  # Red color
-)
+# Game loop
+running = True
+clock = pygame.time.Clock()
 
-# Create gun line
-gun_line = pyglet.shapes.Line(0, 0, 0, 0, color=(0, 255, 0))  # Green line for gun
-
-@window.event
-def on_mouse_motion(x, y, dx, dy):
-    global mouse_x, mouse_y
-    mouse_x = x
-    mouse_y = y
-
-@window.event
-def on_mouse_press(x, y, button, modifiers):
-    global last_shot_time, mouse_lb_pressed
-    if button == pyglet.window.mouse.LEFT:
-        mouse_lb_pressed = True
-        last_shot_time = 0  # Reset the last shot time to fire immediately
-
-@window.event
-def on_mouse_release(x, y, button, modifiers):
-    global mouse_lb_pressed
-    if button == pyglet.window.mouse.LEFT:
-        mouse_lb_pressed = False
-
-@window.event
-def on_key_press(symbol, modifiers):
-    if symbol in key_states:
-        key_states[symbol] = True
-
-@window.event
-def on_key_release(symbol, modifiers):
-    if symbol in key_states:
-        key_states[symbol] = False
-
-def update(dt):
-    global ball_x, ball_y, last_shot_time, current_angle, edge_x, edge_y, gun_end_x, gun_end_y
+while running:
+    # Get delta time
+    dt = clock.get_time() / 1000.0  # Convert milliseconds to seconds
+    current_time = pygame.time.get_ticks()
     
-    # Handle movement (independent of mouse input)
+    # Handle events
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:  # Left click
+                auto_fire = True
+                # Force immediate first shot
+                shoot_timer = current_time - (fire_rate * 1000 + 1)
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:  # Left release
+                auto_fire = False
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                auto_fire = True
+                # Force immediate first shot
+                shoot_timer = current_time - (fire_rate * 1000 + 1)
+            elif event.key in key_states:
+                key_states[event.key] = True
+        elif event.type == pygame.KEYUP:
+            if event.key == pygame.K_SPACE:
+                auto_fire = False
+            elif event.key in key_states:
+                key_states[event.key] = False
+    
+    # Get mouse position
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    
+    # Handle movement
     move_dx = 0
     move_dy = 0
     
-    if key_states[pyglet.window.key.W]:
-        move_dy += ball_speed * dt
-    if key_states[pyglet.window.key.S]:
+    if key_states[pygame.K_w]:
         move_dy -= ball_speed * dt
-    if key_states[pyglet.window.key.A]:
+    if key_states[pygame.K_s]:
+        move_dy += ball_speed * dt
+    if key_states[pygame.K_a]:
         move_dx -= ball_speed * dt
-    if key_states[pyglet.window.key.D]:
+    if key_states[pygame.K_d]:
         move_dx += ball_speed * dt
-        
+    
     # Calculate new position
     new_x = ball_x + move_dx
     new_y = ball_y + move_dy
     
     # Check boundaries and update position
-    if new_x - ball_radius >= 0 and new_x + ball_radius <= window.width:
+    if new_x - ball_radius >= 0 and new_x + ball_radius <= WINDOW_WIDTH:
         ball_x = new_x
-    if new_y - ball_radius >= 0 and new_y + ball_radius <= window.height:
+    if new_y - ball_radius >= 0 and new_y + ball_radius <= WINDOW_HEIGHT:
         ball_y = new_y
     
     # Update gun angle and position
@@ -176,42 +137,37 @@ def update(dt):
     gun_end_x = edge_x + ball_radius * 0.6 * math.cos(current_angle)
     gun_end_y = edge_y + ball_radius * 0.6 * math.sin(current_angle)
     
-    # Handle shooting (independent of movement)
-    if mouse_lb_pressed:
-        current_time = time.time()
-        if current_time - last_shot_time >= fire_rate:
-            # Create new bullet with current angle
-            bullets.append(Bullet(edge_x, edge_y, current_angle))
-            last_shot_time = current_time
+    # Handle shooting
+    if auto_fire and current_time - shoot_timer >= fire_rate * 1000:
+        # Create new bullet
+        bullets.append(Bullet(edge_x, edge_y, current_angle))
+        shoot_timer = current_time  # Reset timer
     
     # Update bullets
     for bullet in bullets[:]:
         bullet.update(dt)
         if bullet.is_off_screen():
             bullets.remove(bullet)
-
-@window.event
-def on_draw():
-    window.clear()
     
-    # Update ball position
-    ball.x = ball_x
-    ball.y = ball_y
-    ball.draw()
+    # Draw everything
+    screen.fill(BLACK)
+    
+    # Draw ball
+    pygame.draw.circle(screen, RED, (int(ball_x), int(ball_y)), ball_radius)
     
     # Draw gun line
-    gun_line.x = edge_x
-    gun_line.y = edge_y
-    gun_line.x2 = gun_end_x
-    gun_line.y2 = gun_end_y
-    gun_line.draw()
+    pygame.draw.line(screen, GREEN, 
+                    (int(edge_x), int(edge_y)), 
+                    (int(gun_end_x), int(gun_end_y)), 2)
     
     # Draw bullets
     for bullet in bullets:
-        bullet.draw()
+        bullet.draw(screen)
+    
+    # Update display
+    pygame.display.flip()
+    
+    # Cap the frame rate
+    clock.tick(60)
 
-# Schedule the update function to be called every frame
-pyglet.clock.schedule_interval(update, 1/60.0)  # 60 FPS
-
-# Run the application
-pyglet.app.run() 
+pygame.quit() 
