@@ -29,6 +29,13 @@ player_speed = 5
 # Create a simple maze (1 represents walls, 0 represents paths)
 maze = [[1 for x in range(MAZE_WIDTH)] for y in range(MAZE_HEIGHT)]
 
+def check_collision(x, y):
+    cell_x = int(x // CELL_SIZE)
+    cell_y = int(y // CELL_SIZE)
+    return (0 <= cell_x < MAZE_WIDTH and 
+            0 <= cell_y < MAZE_HEIGHT and 
+            maze[cell_y][cell_x] == 0)
+
 # Create a simple path (this is a very basic maze for prototype)
 def create_simple_maze():
     # Start with all walls
@@ -68,22 +75,30 @@ while running:
     new_x = player_x
     new_y = player_y
     
-    if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-        new_x -= player_speed
-    if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-        new_x += player_speed
-    if keys[pygame.K_UP] or keys[pygame.K_w]:
-        new_y -= player_speed
-    if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-        new_y += player_speed
+    # Calculate movement direction
+    dx = 0
+    dy = 0
     
-    # Check collision with walls
-    def check_collision(x, y):
-        cell_x = x // CELL_SIZE
-        cell_y = y // CELL_SIZE
-        return (0 <= cell_x < MAZE_WIDTH and 
-                0 <= cell_y < MAZE_HEIGHT and 
-                maze[cell_y][cell_x] == 0)
+    if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+        dx -= 1
+    if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+        dx += 1
+    if keys[pygame.K_UP] or keys[pygame.K_w]:
+        dy -= 1
+    if keys[pygame.K_DOWN] or keys[pygame.K_s]:
+        dy += 1
+    
+    # Normalize diagonal movement
+    if dx != 0 and dy != 0:
+        # Normalize the diagonal movement to maintain consistent speed
+        dx = dx * player_speed / (2 ** 0.5)
+        dy = dy * player_speed / (2 ** 0.5)
+    else:
+        dx = dx * player_speed
+        dy = dy * player_speed
+    
+    new_x += dx
+    new_y += dy
     
     # Check multiple points around the player's bounds
     half_size = player_size // 2
