@@ -36,30 +36,114 @@ def check_collision(x, y):
             0 <= cell_y < MAZE_HEIGHT and 
             maze[cell_y][cell_x] == 0)
 
-# Create a simple path (this is a very basic maze for prototype)
-def create_simple_maze():
-    # Start with all walls
-    # Create a basic path from top left to right side
-    current_x = 0
-    current_y = 0
-    maze[current_y][current_x] = 0  # Start position
+def is_solvable():
+    # Use BFS to check if there's a path from start to end
+    from collections import deque
     
-    # Create random path to right side
-    while current_x < MAZE_WIDTH - 1:
-        if current_y > 0 and random.random() < 0.5:
-            maze[current_y-1][current_x] = 0  # Create up path
-            current_y -= 1
-        elif current_y < MAZE_HEIGHT - 1 and random.random() < 0.5:
-            maze[current_y+1][current_x] = 0  # Create down path
-            current_y += 1
-        else:
-            maze[current_y][current_x+1] = 0  # Create right path
-            current_x += 1
+    # Start from top-left, end at bottom-right
+    start = (0, 0)
+    end = (MAZE_WIDTH - 1, MAZE_HEIGHT - 1)
     
-    # Ensure exit on right side
-    maze[current_y][MAZE_WIDTH-1] = 0
+    if maze[start[1]][start[0]] == 1 or maze[end[1]][end[0]] == 1:
+        return False
+    
+    queue = deque([start])
+    visited = {start}
+    
+    while queue:
+        current = queue.popleft()
+        if current == end:
+            return True
+            
+        x, y = current
+        # Check all four directions
+        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+            next_x, next_y = x + dx, y + dy
+            next_pos = (next_x, next_y)
+            
+            if (0 <= next_x < MAZE_WIDTH and 
+                0 <= next_y < MAZE_HEIGHT and 
+                maze[next_y][next_x] == 0 and 
+                next_pos not in visited):
+                queue.append(next_pos)
+                visited.add(next_pos)
+    
+    return False
 
-create_simple_maze()
+def generate_maze():
+    max_attempts = 10  # Maximum number of attempts to generate a solvable maze
+    attempt = 0
+    
+    while attempt < max_attempts:
+        attempt += 1
+        # Initialize maze with walls
+        for y in range(MAZE_HEIGHT):
+            for x in range(MAZE_WIDTH):
+                maze[y][x] = 1
+        
+        # Use a stack for iterative approach
+        stack = [(1, 1)]  # Start from top-left corner
+        maze[1][1] = 0  # Carve starting point
+        
+        while stack:
+            current = stack[-1]
+            x, y = current
+            
+            # Define possible directions (up, right, down, left)
+            directions = [(0, -2), (2, 0), (0, 2), (-2, 0)]
+            random.shuffle(directions)
+            
+            # Try each direction
+            found_path = False
+            for dx, dy in directions:
+                next_x, next_y = x + dx, y + dy
+                # Check if the next cell is within bounds and is a wall
+                if (0 <= next_x < MAZE_WIDTH and 
+                    0 <= next_y < MAZE_HEIGHT and 
+                    maze[next_y][next_x] == 1):
+                    # Carve the cell between current and next
+                    maze[y + dy//2][x + dx//2] = 0
+                    maze[next_y][next_x] = 0
+                    stack.append((next_x, next_y))
+                    found_path = True
+                    break
+            
+            # If no path found, backtrack
+            if not found_path:
+                stack.pop()
+        
+        # Ensure start and end points are accessible
+        maze[0][0] = 0  # Start point
+        maze[MAZE_HEIGHT-1][MAZE_WIDTH-1] = 0  # End point
+        
+        # Create a path from start to end if needed
+        current_x, current_y = 0, 0
+        while current_x < MAZE_WIDTH - 1 or current_y < MAZE_HEIGHT - 1:
+            if current_x < MAZE_WIDTH - 1 and random.random() < 0.5:
+                maze[current_y][current_x + 1] = 0
+                current_x += 1
+            elif current_y < MAZE_HEIGHT - 1:
+                maze[current_y + 1][current_x] = 0
+                current_y += 1
+        
+        # If maze is solvable, we're done
+        if is_solvable():
+            break
+    
+    # If we couldn't generate a solvable maze after max attempts,
+    # create a simple path from start to end
+    if attempt >= max_attempts:
+        for y in range(MAZE_HEIGHT):
+            for x in range(MAZE_WIDTH):
+                maze[y][x] = 1
+        # Create a simple path from start to end
+        for x in range(MAZE_WIDTH):
+            maze[0][x] = 0
+        for y in range(MAZE_HEIGHT):
+            maze[y][MAZE_WIDTH-1] = 0
+
+# Generate the maze
+generate_maze()
 
 # Game loop
 running = True
