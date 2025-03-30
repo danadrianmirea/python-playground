@@ -60,13 +60,13 @@ class DrawingApp(QMainWindow):
     
     def save_image(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save Image", "", 
-                                                  "BMP Files (*.bmp);;All Files (*)")
+                                                  "JPG Files (*.jpg);;BMP Files (*.bmp);;All Files (*)")
         if file_path:
             self.image.save(file_path)
     
     def load_image(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Image", "", 
-                                                  "BMP Files (*.bmp);;All Files (*)")
+                                                  "JPG Files (*.jpg);;BMP Files (*.bmp);;All Files (*)")
         if file_path:
             self.image.load(file_path)
             self.update()
