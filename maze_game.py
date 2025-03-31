@@ -79,25 +79,30 @@ class MazeGame:
         self.last_update_time = 0
 
     def generate_maze(self) -> List[List[int]]:
-        # Initialize maze with Perlin noise
-        maze = [[0 for _ in range(self.maze_width)] for _ in range(self.maze_height)]
+        # Initialize maze with walls
+        maze = [[1 for _ in range(self.maze_width)] for _ in range(self.maze_height)]
         
-        # Generate Perlin noise with random base value
-        scale = 10.0
-        octaves = 6
-        persistence = 0.5
-        lacunarity = 2.0
-        base = random.randint(0, 1000)  # Random base value for different mazes each run
+        def carve_path(x: int, y: int):
+            maze[y][x] = 0  # Carve current cell
+            
+            # Define possible directions (up, right, down, left)
+            directions = [(0, -2), (2, 0), (0, 2), (-2, 0)]
+            random.shuffle(directions)  # Randomize direction order
+            
+            for dx, dy in directions:
+                new_x, new_y = x + dx, y + dy
+                
+                # Check if the new position is within bounds and is a wall
+                if (0 < new_x < self.maze_width - 1 and 
+                    0 < new_y < self.maze_height - 1 and 
+                    maze[new_y][new_x] == 1):
+                    # Carve the path between current and new position
+                    maze[y + dy//2][x + dx//2] = 0
+                    carve_path(new_x, new_y)
         
-        for y in range(self.maze_height):
-            for x in range(self.maze_width):
-                # Generate noise value between 0 and 1
-                noise_val = noise.pnoise2(x/scale, y/scale, octaves=octaves, 
-                                        persistence=persistence, lacunarity=lacunarity, 
-                                        base=base)
-                # Convert to binary (wall or path)
-                maze[y][x] = 1 if noise_val > 0 else 0
-
+        # Start from (1,1) and carve paths
+        carve_path(1, 1)
+        
         # Ensure borders
         for y in range(self.maze_height):
             maze[y][0] = 1  # Left border
@@ -105,28 +110,28 @@ class MazeGame:
         for x in range(self.maze_width):
             maze[0][x] = 1  # Top border
             maze[self.maze_height-1][x] = 1  # Bottom border
-
+        
         # Create exit
         maze[self.maze_height-2][self.maze_width-1] = 0
-
-        # Ensure starting position is clear
-        maze[1][1] = 0
-
-        # Make maze solvable using a simple path-finding algorithm
-        self.make_solvable(maze)
+        
+        # Add some random paths to make it more interesting
+        for _ in range(self.maze_width * self.maze_height // 30):  # Add random paths
+            x = random.randint(1, self.maze_width - 2)
+            y = random.randint(1, self.maze_height - 2)
+            if maze[y][x] == 1:  # If it's a wall
+                # Check if we can create a path here
+                can_create = False
+                for dy, dx in [(-1, 0), (0, 1), (1, 0), (0, -1)]:
+                    next_y, next_x = y + dy, x + dx
+                    if (0 <= next_y < self.maze_height and 
+                        0 <= next_x < self.maze_width and 
+                        maze[next_y][next_x] == 0):
+                        can_create = True
+                        break
+                if can_create:
+                    maze[y][x] = 0
         
         return maze
-
-    def make_solvable(self, maze: List[List[int]]):
-        # Create a path from start to exit
-        current = [1, 1]
-        while current[0] < self.maze_height - 2 or current[1] < self.maze_width - 1:
-            if current[0] < self.maze_height - 2:
-                maze[current[0] + 1][current[1]] = 0
-                current[0] += 1
-            elif current[1] < self.maze_width - 1:
-                maze[current[0]][current[1] + 1] = 0
-                current[1] += 1
 
     def draw(self):
         self.screen.fill(BLACK)
@@ -230,9 +235,9 @@ class MazeGame:
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     if self.game_over:
-                        # Reset game with larger maze, increasing both dimensions
-                        self.maze_width += 1
-                        self.maze_height += 1
+                        # Reset game with larger maze, increasing both dimensions by 2 to maintain odd numbers
+                        self.maze_width += 2
+                        self.maze_height += 2
                         self.reset_game()
                     else:
                         self.pressed_keys.add(event.key)
