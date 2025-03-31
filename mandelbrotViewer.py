@@ -686,7 +686,7 @@ try:
         # x increases from left to right: x_min at left, x_max at right
         # y now matches GPU implementation and increases from bottom to top
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
-        y = np.linspace(y_min, y_max, h, dtype=np.float64)  # Changed from y_max, y_min to match GPU orientation
+        y = np.linspace(y_min, ymax, h, dtype=np.float64)  # Changed from y_max, y_min to match GPU orientation
         
         if USE_NUMBA and HAVE_NUMBA and not force_numpy:
             # Use Numba-accelerated kernel
@@ -1160,6 +1160,13 @@ try:
         """Update the render scale based on movement state"""
         global render_scale, target_render_scale, is_moving, last_movement_time
         
+        # If using GPU, always use full resolution
+        if USE_GPU:
+            if render_scale < 1.0:
+                render_scale = 1.0
+                return True
+            return False
+        
         # If adaptive render scaling is disabled, always use full resolution
         if not adaptive_render_scale:
             if render_scale < 1.0:
@@ -1267,11 +1274,14 @@ try:
             f"Zoom: {zoom_level:.2f}x",
             f"Iterations: {hq_iterations} ({quality_text})",
             f"Color: {color_names[color_mode]} (Shift: {color_shift:.1f})",
-            f"Render Scale: {render_scale_percent}% ({adaptive_scale_text})",
             f"Debug: {debug_text}",
             f"Implementation: {impl_text}",
             f"Resolution: {WIDTH}x{HEIGHT}"
         ]
+        
+        # Add render scale info only in CPU mode
+        if not USE_GPU:
+            settings_texts.insert(6, f"Render Scale: {render_scale_percent}% ({adaptive_scale_text})")
         
         # Determine the maximum number of lines to make panels the same height
         max_lines = max(len(help_texts), len(settings_texts))
@@ -2071,19 +2081,22 @@ try:
                     # Toggle GPU mode
                     toggle_gpu_mode()
                 elif event.key == pygame.K_t:
-                    # Toggle adaptive render scaling
-                    globals()['adaptive_render_scale'] = not adaptive_render_scale
-                    if adaptive_render_scale:
-                        print("Adaptive render scaling enabled - reduces resolution during movement")
+                    # Toggle adaptive render scaling (only in CPU mode)
+                    if not USE_GPU:
+                        globals()['adaptive_render_scale'] = not adaptive_render_scale
+                        if adaptive_render_scale:
+                            print("Adaptive render scaling enabled - reduces resolution during movement")
+                        else:
+                            print("Adaptive render scaling disabled - always renders at full resolution")
+                            render_scale = 1.0  # Reset to full resolution
+                        draw_mandelbrot()
                     else:
-                        print("Adaptive render scaling disabled - always renders at full resolution")
-                        render_scale = 1.0  # Reset to full resolution
-                    draw_mandelbrot()
+                        print("Adaptive render scaling is only available in CPU mode")
                 elif event.key == pygame.K_j:
-                    # Decrease high quality multiplier
+                    # Decrease quality multiplier
                     adjust_quality_multiplier(increase=False)
                 elif event.key == pygame.K_k:
-                    # Increase high quality multiplier
+                    # Increase quality multiplier
                     adjust_quality_multiplier(increase=True)
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_e or event.key == pygame.K_q:
