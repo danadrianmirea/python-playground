@@ -275,10 +275,7 @@ class MazeGame:
             
             # Handle movement based on time
             if self.pressed_keys and not self.game_over:
-                print("\nMovement frame:")
-                print(f"Before movement: ({self.player_pos[0]:.4f}, {self.player_pos[1]:.4f})")
                 self.handle_movement()
-                print(f"After movement: ({self.player_pos[0]:.4f}, {self.player_pos[1]:.4f})")
             
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:

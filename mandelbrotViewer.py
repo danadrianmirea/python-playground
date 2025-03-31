@@ -47,82 +47,82 @@ cl_buffer_y = None
 # OpenCL kernel code for Mandelbrot computation
 OPENCL_KERNEL = """
 // Color mapping utilities for the kernel
-float3 hsv_to_rgb(float h, float s, float v) {
-    float c = v * s;
-    float x = c * (1.0f - fabs(fmod(h * 6.0f, 2.0f) - 1.0f));
-    float m = v - c;
+double3 hsv_to_rgb(double h, double s, double v) {
+    double c = v * s;
+    double x = c * (1.0 - fabs(fmod(h * 6.0, 2.0) - 1.0));
+    double m = v - c;  // Add this line to define m
     
-    float3 rgb;
-    if (h < 1.0f/6.0f)
-        rgb = (float3)(c, x, 0.0f);
-    else if (h < 2.0f/6.0f)
-        rgb = (float3)(x, c, 0.0f);
-    else if (h < 3.0f/6.0f)
-        rgb = (float3)(0.0f, c, x);
-    else if (h < 4.0f/6.0f)
-        rgb = (float3)(0.0f, x, c);
-    else if (h < 5.0f/6.0f)
-        rgb = (float3)(x, 0.0f, c);
+    double3 rgb;
+    if (h < 1.0/6.0)
+        rgb = (double3)(c, x, 0.0);
+    else if (h < 2.0/6.0)
+        rgb = (double3)(x, c, 0.0);
+    else if (h < 3.0/6.0)
+        rgb = (double3)(0.0, c, x);
+    else if (h < 4.0/6.0)
+        rgb = (double3)(0.0, x, c);
+    else if (h < 5.0/6.0)
+        rgb = (double3)(x, 0.0, c);
     else
-        rgb = (float3)(c, 0.0f, x);
+        rgb = (double3)(c, 0.0, x);
     
-    return rgb + (float3)(m, m, m);
+    return rgb + (double3)(m, m, m);
 }
 
 // Apply log smoothing to normalized value
-float apply_log_smooth(float val) {
-    return log(val * 0.5f + 0.5f) / log(1.5f);
+double apply_log_smooth(double val) {
+    return log(val * 0.5 + 0.5) / log(1.5);
 }
 
 // Rainbow palette (mode 0)
-float3 rainbow_palette(float norm_iter, float shift) {
+double3 rainbow_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float phase = fmod((norm_iter * 3.0f) + shift, 1.0f);
+    double phase = fmod((norm_iter * 3.0) + shift, 1.0);
     
     // Convert phase to angle in radians (0 to 2π)
-    float angle = phase * 2.0f * M_PI;
+    double angle = phase * 2.0 * M_PI;
     
     // Calculate RGB components using sine waves (120° phase shifts)
-    float r = sin(angle) * 0.5f + 0.5f;
-    float g = sin(angle + 2.0f * M_PI / 3.0f) * 0.5f + 0.5f;
-    float b = sin(angle + 4.0f * M_PI / 3.0f) * 0.5f + 0.5f;
+    double r = sin(angle) * 0.5 + 0.5;
+    double g = sin(angle + 2.0 * M_PI / 3.0) * 0.5 + 0.5;
+    double b = sin(angle + 4.0 * M_PI / 3.0) * 0.5 + 0.5;
     
     // Scale to enhance colors
-    r = min(r * 1.5f, 1.0f);
-    g = min(g * 1.5f, 1.0f);
-    b = min(b * 1.5f, 1.0f);
+    r = min(r * 1.5, 1.0);
+    g = min(g * 1.5, 1.0);
+    b = min(b * 1.5, 1.0);
     
-    return (float3)(r, g, b);
+    return (double3)(r, g, b);
 }
 
 // Fire palette (mode 1)
-float3 fire_palette(float norm_iter, float shift) {
+double3 fire_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
-    float3 rgb = (float3)(0.0f, 0.0f, 0.0f);
+    double3 rgb = (double3)(0.0, 0.0, 0.0);
     
     // Red component: 0→1 in first quarter, then stay at 1
-    if (t < 0.25f)
-        rgb.x = t * 4.0f;
+    if (t < 0.25)
+        rgb.x = t * 4.0;
     else
-        rgb.x = 1.0f;
+        rgb.x = 1.0;
         
     // Green component: 0 in first quarter, 0→1 in second quarter, then 1
-    if (t >= 0.25f && t < 0.5f)
-        rgb.y = (t - 0.25f) * 4.0f;
-    else if (t >= 0.5f)
-        rgb.y = 1.0f;
+    if (t >= 0.25 && t < 0.5)
+        rgb.y = (t - 0.25) * 4.0;
+    else if (t >= 0.5)
+        rgb.y = 1.0;
         
     // Blue component: 0 in first half, 0→1 in third quarter, then 1
-    if (t >= 0.5f && t < 0.75f)
-        rgb.z = (t - 0.5f) * 4.0f;
-    else if (t >= 0.75f)
-        rgb.z = 1.0f;
+    if (t >= 0.5 && t < 0.75)
+        rgb.z = (t - 0.5) * 4.0;
+    else if (t >= 0.75)
+        rgb.z = 1.0;
         
     // Apply intensity reduction in the last quarter
-    if (t >= 0.75f) {
-        float intensity = 1.0f - (t - 0.75f) * 0.8f;
+    if (t >= 0.75) {
+        double intensity = 1.0 - (t - 0.75) * 0.8;
         rgb *= intensity;
     }
     
@@ -130,142 +130,141 @@ float3 fire_palette(float norm_iter, float shift) {
 }
 
 // Electric blue (mode 2)
-float3 electric_blue(float norm_iter, float shift) {
+double3 electric_blue(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
     // Always high blue with some variation
-    float b = 0.7f + 0.3f * sin(t * M_PI * 4.0f);
+    double b = 0.7 + 0.3 * sin(t * M_PI * 4.0);
     
     // Green component: Higher in the middle
-    float g = 0.4f * (sin(t * M_PI * 2.0f) * sin(t * M_PI * 2.0f)); // Squared using multiplication instead of pow
-    if (t < 0.5f)
-        g += 0.2f + 0.6f * t;
+    double g = 0.4 * (sin(t * M_PI * 2.0) * sin(t * M_PI * 2.0)); // Squared using multiplication instead of pow
+    if (t < 0.5)
+        g += 0.2 + 0.6 * t;
     
     // Red component: Low but with some highlights
-    float r = 0.1f * (sin(t * M_PI * 8.0f) * sin(t * M_PI * 8.0f)); // Squared using multiplication instead of pow
+    double r = 0.1 * (sin(t * M_PI * 8.0) * sin(t * M_PI * 8.0)); // Squared using multiplication instead of pow
     
     // Add white spark effect for lower values
-    if (t < 0.15f) {
-        float spark = 1.0f - t / 0.15f;
+    if (t < 0.15) {
+        double spark = 1.0 - t / 0.15;
         r += spark;
         g += spark;
     }
     
-    return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
+    return (double3)(min(r, 1.0), min(g, 1.0), min(b, 1.0));
 }
 
 // Twilight palette (mode 3)
-float3 twilight_palette(float norm_iter, float shift) {
+double3 twilight_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
-    float3 rgb = (float3)(0.0f, 0.0f, 0.0f);
+    double t = fmod(norm_iter + shift, 1.0);
+    double3 rgb = (double3)(0.0, 0.0, 0.0);
     
     // Purple to blue (0.0-0.3)
-    if (t < 0.3f) {
-        rgb.x = 0.5f + 0.2f * t / 0.3f;
-        rgb.y = 0.2f * t / 0.3f;
-        rgb.z = 0.8f - 0.2f * t / 0.3f;
+    if (t < 0.3) {
+        rgb.x = 0.5 + 0.2 * t / 0.3;
+        rgb.y = 0.2 * t / 0.3;
+        rgb.z = 0.8 - 0.2 * t / 0.3;
     }
     // Blue to teal (0.3-0.5)
-    else if (t < 0.5f) {
-        rgb.x = 0.7f * (t - 0.3f) / 0.2f;
-        rgb.y = 0.2f + 0.4f * (t - 0.3f) / 0.2f;
-        rgb.z = 0.6f + 0.2f * (t - 0.3f) / 0.2f;
+    else if (t < 0.5) {
+        rgb.x = 0.7 * (t - 0.3) / 0.2;
+        rgb.y = 0.2 + 0.4 * (t - 0.3) / 0.2;
+        rgb.z = 0.6 + 0.2 * (t - 0.3) / 0.2;
     }
     // Teal to golden (0.5-0.7)
-    else if (t < 0.7f) {
-        rgb.x = 0.7f + 0.3f * (t - 0.5f) / 0.2f;
-        rgb.y = 0.6f + 0.2f * (t - 0.5f) / 0.2f;
-        rgb.z = 0.8f - 0.8f * (t - 0.5f) / 0.2f;
+    else if (t < 0.7) {
+        rgb.x = 0.7 + 0.3 * (t - 0.5) / 0.2;
+        rgb.y = 0.6 + 0.2 * (t - 0.5) / 0.2;
+        rgb.z = 0.8 - 0.8 * (t - 0.5) / 0.2;
     }
     // Golden to deep red (0.7-1.0)
     else {
-        rgb.x = 1.0f;
-        rgb.y = 0.8f - 0.8f * (t - 0.7f) / 0.3f;
-        rgb.z = 0.0f;
+        rgb.x = 1.0;
+        rgb.y = 0.8 - 0.8 * (t - 0.7) / 0.3;
+        rgb.z = 0.0;
     }
     
     return rgb;
 }
 
 // Neon palette (mode 4)
-float3 neon_palette(float norm_iter, float shift) {
+double3 neon_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
     // Create a striated neon effect based on value
-    float phase = t * 15.0f;  // Multiple cycles for striations
+    double phase = t * 15.0;  // Multiple cycles for striations
     
     // Use sine waves with different frequencies for color pulsing
-    float r = 0.5f * sin(phase * 1.0f + 0.0f) + 0.5f;
-    float g = 0.5f * sin(phase * 1.0f + 2.0f) + 0.5f;
-    float b = 0.5f * sin(phase * 1.0f + 4.0f) + 0.5f;
+    double r = 0.5 * sin(phase * 1.0 + 0.0) + 0.5;
+    double g = 0.5 * sin(phase * 1.0 + 2.0) + 0.5;
+    double b = 0.5 * sin(phase * 1.0 + 4.0) + 0.5;
     
     // Apply a glow effect - brighten colors based on original value
-    if (t < 0.2f) {
-        float glow_strength = 1.0f - t / 0.2f;
+    if (t < 0.2) {
+        double glow_strength = 1.0 - t / 0.2;
         
         // Calculate glow phase for each pixel in the glow mask
-        float glow_phase = fmod(t * 3.0f, 3.0f);
+        double glow_phase = fmod(t * 3.0, 3.0);
         
         // Apply glows to respective channels based on phase
-        if (glow_phase < 1.0f) {
-            r = r * 0.5f + 0.5f * (1.0f - t / 0.2f);
-        } else if (glow_phase < 2.0f) {
-            g = g * 0.5f + 0.5f * (1.0f - t / 0.2f);
+        if (glow_phase < 1.0) {
+            r = r * 0.5 + 0.5 * (1.0 - t / 0.2);
+        } else if (glow_phase < 2.0) {
+            g = g * 0.5 + 0.5 * (1.0 - t / 0.2);
         } else {
-            b = b * 0.5f + 0.5f * (1.0f - t / 0.2f);
+            b = b * 0.5 + 0.5 * (1.0 - t / 0.2);
         }
     }
     
     // Add secondary glow around edges with sharp contrast
-    if (t > 0.2f && t < 0.25f) {
-        float edge_intensity = (t - 0.2f) / 0.05f;
-        r = r * 0.7f + (1.0f - edge_intensity) * 0.3f;
-        g = g * 0.7f + (1.0f - edge_intensity) * 0.3f;
-        b = b * 0.7f + (1.0f - edge_intensity) * 0.3f;
+    if (t > 0.2 && t < 0.25) {
+        double edge_intensity = (t - 0.2) / 0.05;
+        r = r * 0.7 + (1.0 - edge_intensity) * 0.3;
+        g = g * 0.7 + (1.0 - edge_intensity) * 0.3;
+        b = b * 0.7 + (1.0 - edge_intensity) * 0.3;
     }
     
     // Darken the background (high iteration values)
-    if (t >= 0.25f) {
-        float darkness = min(1.0f, (t - 0.25f) * 2.0f);
-        r *= (1.0f - darkness * 0.8f);
-        g *= (1.0f - darkness * 0.8f);
-        b *= (1.0f - darkness * 0.8f);
+    if (t >= 0.25) {
+        double darkness = min(1.0, (t - 0.25) * 2.0);
+        r *= (1.0 - darkness * 0.8);
+        g *= (1.0 - darkness * 0.8);
+        b *= (1.0 - darkness * 0.8);
     }
     
-    return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
+    return (double3)(min(r, 1.0), min(g, 1.0), min(b, 1.0));
 }
 
 // Vintage/Sepia (mode 5)
-float3 vintage_sepia(float norm_iter, float shift) {
+double3 vintage_sepia(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
     // Create base grayscale value with contrast
-    float gray = pow((float)t, 0.8f);  // Explicitly cast t to float for pow function
+    double gray = pow(t, 0.8);  // Explicitly cast t to double for pow function
     
     // Apply sepia toning - different multipliers for RGB
-    float r = min(gray * 1.2f, 1.0f);  // More red
-    float g = min(gray * 0.9f, 1.0f);  // Medium green
-    float b = min(gray * 0.6f, 1.0f);  // Less blue
+    double r = min(gray * 1.2, 1.0);  // More red
+    double g = min(gray * 0.9, 1.0);  // Medium green
+    double b = min(gray * 0.6, 1.0);  // Less blue
     
     // Add a vignette effect (darker at edges)
-    // Fix: Explicitly cast arguments to float to resolve ambiguity
-    float sinValue = sin(t * M_PI);
-    float vignette = 1.0f - 0.2f * (sinValue * sinValue);
+    double sinValue = sin(t * M_PI);
+    double vignette = 1.0 - 0.2 * (sinValue * sinValue);
     r *= vignette;
     g *= vignette;
     b *= vignette;
     
     // Add some "aging" noise to simulate vintage look
-    float aging_effect = 0.05f * sin(t * 37.0f) * sin(t * 23.0f);
+    double aging_effect = 0.05 * sin(t * 37.0) * sin(t * 23.0);
     r += aging_effect;
     g += aging_effect;
     b += aging_effect;
     
-    return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
+    return (double3)(min(r, 1.0), min(g, 1.0), min(b, 1.0));
 }
 
 __kernel void mandelbrot(__global int *iterations_out,
@@ -276,7 +275,7 @@ __kernel void mandelbrot(__global int *iterations_out,
                          const int height,
                          const int max_iter,
                          const int color_mode,
-                         const float color_shift)
+                         const double color_shift)
 {
     // Get the index of the current element
     int gid_x = get_global_id(0); // column index
@@ -321,8 +320,8 @@ __kernel void mandelbrot(__global int *iterations_out,
             rgb_out[rgb_idx + 2] = 0;  // B
         } else {
             // Normalize the iteration count
-            float norm_iter = (float)iteration / (float)max_iter;
-            float3 rgb;
+            double norm_iter = (double)iteration / (double)max_iter;
+            double3 rgb;
             
             // Apply coloring based on selected mode
             switch (color_mode) {
@@ -345,14 +344,14 @@ __kernel void mandelbrot(__global int *iterations_out,
                     rgb = vintage_sepia(norm_iter, color_shift);
                     break;
                 default: // Default - simple grayscale
-                    rgb = (float3)(norm_iter, norm_iter, norm_iter);
+                    rgb = (double3)(norm_iter, norm_iter, norm_iter);
                     break;
             }
             
             // Store RGB values in output buffer
-            rgb_out[rgb_idx] = (uchar)(rgb.x * 255.0f);      // R
-            rgb_out[rgb_idx + 1] = (uchar)(rgb.y * 255.0f);  // G
-            rgb_out[rgb_idx + 2] = (uchar)(rgb.z * 255.0f);  // B
+            rgb_out[rgb_idx] = (uchar)(rgb.x * 255.0);      // R
+            rgb_out[rgb_idx + 1] = (uchar)(rgb.y * 255.0);  // G
+            rgb_out[rgb_idx + 2] = (uchar)(rgb.z * 255.0);  // B
         }
     }
 }
@@ -494,8 +493,8 @@ try:
     font = pygame.font.SysFont('Arial', scaled_font_size)
     
     # Initial view parameters
-    x_min, x_max = -2, 1
-    y_min, y_max = -1.5, 1.5  # These values already maintain a square aspect ratio
+    x_min, x_max = np.float64(-2), np.float64(1)
+    y_min, y_max = np.float64(-1.5), np.float64(1.5)  # These values already maintain a square aspect ratio
     max_iter = 100
     
     # High-quality rendering flag
@@ -510,14 +509,14 @@ try:
     # Zoom modes
     smooth_zoom_mode = True      # Toggle between smooth zoom and rectangle selection
     smooth_zooming = False       # Flag to indicate active smooth zooming 
-    smooth_zoom_factor = 1.02    # Per-frame zoom factor (1.02 = 2% closer per frame)
+    smooth_zoom_factor = np.float64(1.02)    # Per-frame zoom factor (1.02 = 2% closer per frame)
     smooth_zoom_out = False      # Flag to indicate if we're zooming out instead of in
     mouse_pos = (WIDTH // 2, HEIGHT // 2)  # Default to center of screen
     
     # Panning
     panning = False              # Flag to indicate active panning
     pan_direction = None         # Current pan direction (up, down, left, right)
-    pan_speed = 0.02             # Pan speed as a fraction of current view width/height
+    pan_speed = np.float64(0.02)             # Pan speed as a fraction of current view width/height
     # Track individual key states for diagonal panning
     key_pressed = {
         "up": False,
@@ -628,7 +627,7 @@ try:
                                       np.int32(width), np.int32(height),
                                       np.int32(max_iter),
                                       np.int32(color_mode),
-                                      np.float32(color_shift))
+                                      np.float64(color_shift))  # Changed from float32 to float64
                 
                 # Execute the kernel as a 2D grid
                 global_size = (width, height)
@@ -686,7 +685,7 @@ try:
         # x increases from left to right: x_min at left, x_max at right
         # y now matches GPU implementation and increases from bottom to top
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
-        y = np.linspace(y_min, ymax, h, dtype=np.float64)  # Changed from y_max, y_min to match GPU orientation
+        y = np.linspace(y_min, y_max, h, dtype=np.float64)  # Fixed typo: ymax -> y_max
         
         if USE_NUMBA and HAVE_NUMBA and not force_numpy:
             # Use Numba-accelerated kernel
@@ -806,12 +805,12 @@ try:
         cmap = np.zeros((256, 3), dtype=np.uint8)
         for i in range(256):
             # Normalized value in [0, 1]
-            t = i / 255.0
+            t = np.float64(i) / np.float64(255.0)
             
             # Calculate HSV
             h = t  # hue = normalized value
-            s = 0.8  # saturation
-            v = 1.0 if t < 0.95 else (1.0 - t) * 20  # falloff for high values
+            s = np.float64(0.8)  # saturation
+            v = np.float64(1.0) if t < np.float64(0.95) else (np.float64(1.0) - t) * np.float64(20)  # falloff for high values
             
             # Convert HSV to RGB
             r, g, b = hsv_to_rgb(h, s, v)
@@ -1457,14 +1456,14 @@ try:
     def calculate_zoom_area(start_pos, current_pos):
         """Calculate the square zoom area from a selection rectangle"""
         # Calculate the original rectangle bounds drawn by the user
-        rect_x1 = min(start_pos[0], current_pos[0])
-        rect_x2 = max(start_pos[0], current_pos[0])
-        rect_y1 = min(start_pos[1], current_pos[1])
-        rect_y2 = max(start_pos[1], current_pos[1])
+        rect_x1 = np.float64(min(start_pos[0], current_pos[0]))
+        rect_x2 = np.float64(max(start_pos[0], current_pos[0]))
+        rect_y1 = np.float64(min(start_pos[1], current_pos[1]))
+        rect_y2 = np.float64(max(start_pos[1], current_pos[1]))
         
         # Find the center of the rectangle (as floating point for precision)
-        center_x = (rect_x1 + rect_x2) / 2
-        center_y = (rect_y1 + rect_y2) / 2
+        center_x = (rect_x1 + rect_x2) / np.float64(2.0)
+        center_y = (rect_y1 + rect_y2) / np.float64(2.0)
         
         # Get the longest dimension (width or height)
         rect_width = rect_x2 - rect_x1
@@ -1473,33 +1472,33 @@ try:
         
         # Ensure zoom_length is not zero to prevent division by zero later
         # Set a minimum size of 5 pixels
-        zoom_length = max(5.0, zoom_length)
+        zoom_length = max(np.float64(5.0), zoom_length)
         
         # Calculate the square bounds centered at the original center point
         # Store as floats to maintain precision
-        square_x1 = center_x - zoom_length / 2
-        square_y1 = center_y - zoom_length / 2
-        square_x2 = center_x + zoom_length / 2
-        square_y2 = center_y + zoom_length / 2
+        square_x1 = center_x - zoom_length / np.float64(2.0)
+        square_y1 = center_y - zoom_length / np.float64(2.0)
+        square_x2 = center_x + zoom_length / np.float64(2.0)
+        square_y2 = center_y + zoom_length / np.float64(2.0)
         
         # Ensure square is within screen bounds
-        square_x1 = max(0, square_x1)
-        square_y1 = max(0, square_y1)
-        square_x2 = min(WIDTH, square_x2)
-        square_y2 = min(HEIGHT, square_y2)
+        square_x1 = max(np.float64(0.0), square_x1)
+        square_y1 = max(np.float64(0.0), square_y1)
+        square_x2 = min(np.float64(WIDTH), square_x2)
+        square_y2 = min(np.float64(HEIGHT), square_y2)
         
         # Recalculate center if square was adjusted
-        center_x = (square_x1 + square_x2) / 2
-        center_y = (square_y1 + square_y2) / 2
+        center_x = (square_x1 + square_x2) / np.float64(2.0)
+        center_y = (square_y1 + square_y2) / np.float64(2.0)
         
         # Map the center point from screen coordinates to complex plane
         # With our updated mandelbrot function, we directly map:
         # - x from 0 to WIDTH maps to x_min to x_max
         # - y from 0 to HEIGHT maps to y_max to y_min (inverted)
         
-        # Linear mapping from screen to complex plane
-        complex_center_x = x_min + (x_max - x_min) * center_x / WIDTH
-        complex_center_y = y_max - (y_max - y_min) * center_y / HEIGHT
+        # Linear mapping from screen to complex plane with higher precision
+        complex_center_x = np.float64(x_min) + (np.float64(x_max) - np.float64(x_min)) * center_x / np.float64(WIDTH)
+        complex_center_y = np.float64(y_min) + (np.float64(y_max) - np.float64(y_min)) * center_y / np.float64(HEIGHT)
         
         # Print debugging information to verify mappings
         if hasattr(globals(), 'debug_coordinates') and globals().get('debug_coordinates'):
@@ -1511,23 +1510,28 @@ try:
             print(f"Complex bounds: {top_left_complex} -> {bottom_right_complex}")
         
         # Calculate the width in the complex plane corresponding to zoom_length
-        complex_width = (x_max - x_min) * zoom_length / WIDTH
+        complex_width = (np.float64(x_max) - np.float64(x_min)) * zoom_length / np.float64(WIDTH)
         
         # Ensure complex_width is not zero to prevent division by zero
-        complex_width = max(complex_width, 1e-10)
+        complex_width = max(complex_width, np.float64(1e-15))
         
         # Calculate zoom factor based on the ratio of current width to new width
-        current_width = x_max - x_min
+        current_width = np.float64(x_max) - np.float64(x_min)
         zoom_factor = current_width / complex_width
         
         # Calculate the new boundaries in the complex plane
-        new_x_min = complex_center_x - complex_width / 2
-        new_x_max = complex_center_x + complex_width / 2
+        new_x_min = complex_center_x - complex_width / np.float64(2.0)
+        new_x_max = complex_center_x + complex_width / np.float64(2.0)
         
         # Maintain aspect ratio for y coordinates
         complex_height = complex_width
-        new_y_min = complex_center_y - complex_height / 2
-        new_y_max = complex_center_y + complex_height / 2
+        new_y_min = complex_center_y - complex_height / np.float64(2.0)
+        new_y_max = complex_center_y + complex_height / np.float64(2.0)
+        
+        # Check for floating-point precision issues
+        if abs(new_x_max - new_x_min) < np.float64(1e-15) or abs(new_y_max - new_y_min) < np.float64(1e-15):
+            print("Warning: Reached floating-point precision limit")
+            return None
         
         return {
             "rect": (rect_x1, rect_y1, rect_width, rect_height),
@@ -1710,8 +1714,8 @@ try:
         global x_min, x_max, y_min, y_max, max_iter, current_pixels
         
         # Reset to initial parameters
-        x_min, x_max = -2, 1
-        y_min, y_max = -1.5, 1.5
+        x_min, x_max = np.float64(-2), np.float64(1)
+        y_min, y_max = np.float64(-1.5), np.float64(1.5)
         max_iter = 100
         
         # Force recalculation
@@ -1730,40 +1734,41 @@ try:
         width = x_max - x_min
         height = y_max - y_min
         
-        # Map mouse position to complex coordinates
-        # Original mapping that caused the up/down inversion:
-        # cx = x_min + width * mouse_pos[0] / WIDTH
-        # cy = y_max - height * mouse_pos[1] / HEIGHT
-        
-        # New mapping that preserves intuitive up/down direction when zooming
-        cx = x_min + width * mouse_pos[0] / WIDTH
-        cy = y_min + height * mouse_pos[1] / HEIGHT
+        # Map mouse position to complex coordinates with higher precision
+        # Use numpy's float64 for better precision
+        cx = np.float64(x_min) + np.float64(width) * np.float64(mouse_pos[0]) / np.float64(WIDTH)
+        cy = np.float64(y_min) + np.float64(height) * np.float64(mouse_pos[1]) / np.float64(HEIGHT)
         
         # Calculate new bounds with a small zoom step
         # The zoom factor is applied relative to the cursor position
         if zoom_out:
             # When zooming out, multiply by the factor instead of dividing
-            new_width = width * smooth_zoom_factor
-            new_height = height * smooth_zoom_factor
+            new_width = np.float64(width) * np.float64(smooth_zoom_factor)
+            new_height = np.float64(height) * np.float64(smooth_zoom_factor)
         else:
             # Normal zoom in
-            new_width = width / smooth_zoom_factor
-            new_height = height / smooth_zoom_factor
+            new_width = np.float64(width) / np.float64(smooth_zoom_factor)
+            new_height = np.float64(height) / np.float64(smooth_zoom_factor)
         
         # Calculate new bounds while keeping the cursor point at the same relative position
         # We need to maintain the ratio between cursor position and the edge distances
-        cursor_ratio_x = (cx - x_min) / width
-        cursor_ratio_y = (cy - y_min) / height  # Updated to match new mapping
+        cursor_ratio_x = (cx - np.float64(x_min)) / np.float64(width)
+        cursor_ratio_y = (cy - np.float64(y_min)) / np.float64(height)
         
-        # Apply ratios to calculate new bounds
+        # Apply ratios to calculate new bounds with higher precision
         new_x_min = cx - new_width * cursor_ratio_x
         new_x_max = new_x_min + new_width
-        new_y_min = cy - new_height * cursor_ratio_y  # Updated to match new mapping
+        new_y_min = cy - new_height * cursor_ratio_y
         new_y_max = new_y_min + new_height
         
+        # Check for floating-point precision issues
+        if abs(new_x_max - new_x_min) < np.float64(1e-15) or abs(new_y_max - new_y_min) < np.float64(1e-15):
+            print("Warning: Reached floating-point precision limit")
+            return
+        
         # Apply the new bounds
-        x_min, x_max = new_x_min, new_x_max
-        y_min, y_max = new_y_min, new_y_max
+        x_min, x_max = float(new_x_min), float(new_x_max)
+        y_min, y_max = float(new_y_min), float(new_y_max)
         
         # Reset current pixels to force recalculation
         current_pixels = None
@@ -1839,10 +1844,10 @@ try:
 
     # Add these global variables with the other global settings around line 130
     # Incremental rendering settings
-    render_scale = 1.0           # Current rendering scale (1.0 = full resolution)
-    target_render_scale = 1.0    # Target scale to gradually approach
+    render_scale = np.float64(1.0)           # Current rendering scale (1.0 = full resolution)
+    target_render_scale = np.float64(1.0)    # Target scale to gradually approach
     adaptive_render_scale = False # Toggle for adaptive render scaling during movement
-    min_render_scale = 0.25      # Minimum rendering scale during movement (0.25 = quarter resolution)
+    min_render_scale = np.float64(0.25)      # Minimum rendering scale during movement (0.25 = quarter resolution)
     is_moving = False            # Flag to track if we're currently panning or zooming
     last_movement_time = 0       # Time of last movement action
     scale_recovery_delay = 0     # No delay before increasing resolution
