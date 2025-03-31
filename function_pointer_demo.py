@@ -13,6 +13,11 @@ functions = [func1, func2, func3]
 # Method 3: Using getattr
 import testfunc
 
+def call_function(func):
+    """Call the provided function"""
+    print(f"Calling function: {func.__name__}")
+    func()
+
 def demo_all_methods():
     print("Method 1 - Using dictionary:")
     function_map['func1']()
@@ -28,6 +33,11 @@ def demo_all_methods():
     getattr(testfunc, 'func1')()
     getattr(testfunc, 'func2')()
     getattr(testfunc, 'func3')()
+    
+    print("\nMethod 4 - Using function parameter:")
+    call_function(func1)
+    call_function(func2)
+    call_function(func3)
 
 if __name__ == "__main__":
     demo_all_methods() 
