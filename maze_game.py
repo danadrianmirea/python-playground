@@ -170,39 +170,64 @@ class MazeGame:
         if not (0 <= x < self.maze_width and 0 <= y < self.maze_height):
             return False
             
-        # Get the grid cells the player is overlapping with, considering the smaller player size
+        # Calculate the player's bounding box with the actual size
         player_size = PLAYER_SIZE_RATIO
-        left_cell = int(x)
-        right_cell = min(int(x + player_size), self.maze_width - 1)
-        top_cell = int(y)
-        bottom_cell = min(int(y + player_size), self.maze_height - 1)
         
-        # Check if any of the overlapping cells are walls
-        return (self.maze[top_cell][left_cell] == 0 and 
-                self.maze[top_cell][right_cell] == 0 and
-                self.maze[bottom_cell][left_cell] == 0 and 
-                self.maze[bottom_cell][right_cell] == 0)
+        # Calculate the cells that the player's bounding box overlaps
+        left_cell = math.floor(x)
+        right_cell = math.ceil(x + player_size)
+        top_cell = math.floor(y)
+        bottom_cell = math.ceil(y + player_size)
+        
+        # Clamp the cell coordinates to maze bounds
+        right_cell = min(right_cell, self.maze_width - 1)
+        bottom_cell = min(bottom_cell, self.maze_height - 1)
+        
+        # Check all cells in the overlapping region
+        for check_y in range(top_cell, bottom_cell + 1):
+            for check_x in range(left_cell, right_cell + 1):
+                if self.maze[check_y][check_x] == 1:  # If we find a wall
+                    # Calculate how much the player overlaps with this wall cell
+                    cell_left = check_x
+                    cell_right = check_x + 1
+                    cell_top = check_y
+                    cell_bottom = check_y + 1
+                    
+                    player_left = x
+                    player_right = x + player_size
+                    player_top = y
+                    player_bottom = y + player_size
+                    
+                    # If there's any overlap with a wall, position is invalid
+                    if (player_right > cell_left and 
+                        player_left < cell_right and 
+                        player_bottom > cell_top and 
+                        player_top < cell_bottom):
+                        return False
+        
+        return True
 
     def move_player(self, dx: float, dy: float):
         # Calculate new position
         new_x = self.player_pos[1] + dx
         new_y = self.player_pos[0] + dy
         
-        # Try to move horizontally first
-        if self.is_valid_position(new_x, self.player_pos[0]):
+        # Try moving to the new position
+        if self.is_valid_position(new_x, new_y):
+            # If the new position is valid, move there
             self.player_pos[1] = new_x
-        else:
-            # Snap to grid horizontally if collision
-            self.player_pos[1] = round(self.player_pos[1])
-            
-        # Then try to move vertically
-        if self.is_valid_position(self.player_pos[1], new_y):
             self.player_pos[0] = new_y
         else:
-            # Snap to grid vertically if collision
-            self.player_pos[0] = round(self.player_pos[0])
+            # Try moving horizontally only
+            if self.is_valid_position(new_x, self.player_pos[0]):
+                self.player_pos[1] = new_x
             
-        # Check if player reached exit (using rounded position for exit check)
+            # Try moving vertically only
+            if self.is_valid_position(self.player_pos[1], new_y):
+                self.player_pos[0] = new_y
+
+    def check_collision_and_exit(self):
+        # Only check for exit condition, no more snapping
         if (round(self.player_pos[0]) == self.exit_pos[0] and 
             round(self.player_pos[1]) == self.exit_pos[1]):
             self.game_over = True
@@ -239,8 +264,11 @@ class MazeGame:
             
             # Handle movement based on time
             if self.pressed_keys and not self.game_over:
+                print("\nMovement frame:")
+                print(f"Before movement: ({self.player_pos[0]:.4f}, {self.player_pos[1]:.4f})")
                 self.handle_movement()
-
+                print(f"After movement: ({self.player_pos[0]:.4f}, {self.player_pos[1]:.4f})")
+            
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
@@ -255,6 +283,10 @@ class MazeGame:
                         self.handle_movement()
                 elif event.type == pygame.KEYUP:
                     self.pressed_keys.discard(event.key)
+
+            # Continuous collision checking
+            if not self.game_over:
+                self.check_collision_and_exit()
 
             self.draw()
             
