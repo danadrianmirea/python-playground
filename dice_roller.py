@@ -39,17 +39,21 @@ dice_art = {
 └─────────┘'''
 }
 
+num_of_dice = 6
+
 while True:
     dice = []
     total = 0
-    num_of_dice = int(input("How many dice do you want to roll? "))
-
+    
     for i in range(num_of_dice):
         dice.append(random.randint(1,6))
 
-    for die in dice:
-        print(dice_art[die])
-        
+    # Split each die's art into lines and print them side by side
+    for line in range(6):  # Each die art has 5 lines
+        for die in dice:
+            print(dice_art[die].split('\n')[line], end='  ')  # Add space between dice
+        print()  # New line after each row of dice
+
     for die in dice:
         total += die
 
