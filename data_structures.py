@@ -90,6 +90,10 @@ classroom = {
 }
 print("\nNested dictionary example:", classroom)
 
+# Accessing nested dictionary values
+johns_grade = classroom['students']['john']['grade']
+print("\nJohn's grade:", johns_grade)
+
 # Practical Examples of Dictionary Usefulness
 
 # 1. Counting frequencies (very common use case)
