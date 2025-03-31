@@ -1520,13 +1520,6 @@ try:
         current_width = x_max - x_min
         zoom_factor = current_width / complex_width
         
-        # Cap the zoom factor to avoid extreme zooms
-        zoom_factor = min(zoom_factor, 10.0)
-        
-        # If zoom was capped, recalculate the complex_width
-        if zoom_factor < current_width / complex_width:
-            complex_width = current_width / zoom_factor
-        
         # Calculate the new boundaries in the complex plane
         new_x_min = complex_center_x - complex_width / 2
         new_x_max = complex_center_x + complex_width / 2
