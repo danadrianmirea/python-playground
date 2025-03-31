@@ -4,13 +4,15 @@ import noise
 import numpy as np
 from typing import List, Tuple, Set
 import math
+import os
 
 # Constants
-INITIAL_MAZE_WIDTH = 15
-INITIAL_MAZE_HEIGHT = 15
+INITIAL_MAZE_WIDTH = 23
+INITIAL_MAZE_HEIGHT = 23
 MIN_CELL_SIZE = 20  # Minimum cell size to maintain playability
 MAX_CELL_SIZE = 40  # Maximum cell size to prevent too large cells
-PLAYER_SIZE_RATIO = 0.8  # Player size as a ratio of cell size
+PLAYER_SIZE_RATIO = 0.7  # Player size as a ratio of cell size
+NEXT_LEVEL_SIZE_INCREMENT = 6
 
 # Colors
 BLACK = (0, 0, 0)
@@ -49,9 +51,13 @@ class MazeGame:
         self.window_width = self.maze_width * self.cell_size
         self.window_height = self.maze_height * self.cell_size
         
-        # Create the game window
-        self.screen = pygame.display.set_mode((self.window_width, self.window_height))
+        # Create the game window with maximized state
+        self.screen = pygame.display.set_mode((self.window_width, self.window_height), pygame.RESIZABLE)
         pygame.display.set_caption("Maze Game")
+        
+        # Center the window on the screen
+        os.environ['SDL_VIDEO_CENTERED'] = '1'
+        
         self.clock = pygame.time.Clock()
         self.reset_game()
 
@@ -241,8 +247,8 @@ class MazeGame:
                 elif event.type == pygame.KEYDOWN:
                     if self.game_over:
                         # Reset game with larger maze, increasing both dimensions by 2 to maintain odd numbers
-                        self.maze_width += 2
-                        self.maze_height += 2
+                        self.maze_width += NEXT_LEVEL_SIZE_INCREMENT
+                        self.maze_height += NEXT_LEVEL_SIZE_INCREMENT
                         self.reset_game()
                     else:
                         self.pressed_keys.add(event.key)
