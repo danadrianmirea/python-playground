@@ -207,7 +207,7 @@ class MazeGame:
         
         return True
 
-    def move_player(self, dx: float, dy: float):
+    def move_player(self, dx: float, dy: float, is_diagonal: bool):
         # Calculate new position
         new_x = self.player_pos[1] + dx
         new_y = self.player_pos[0] + dy
@@ -217,6 +217,14 @@ class MazeGame:
             # If the new position is valid, move there
             self.player_pos[1] = new_x
             self.player_pos[0] = new_y
+            
+            # If moving in a single direction (not diagonal) and no collision
+            if not is_diagonal:
+                # Snap to grid center in the non-moving axis
+                if dx == 0:  # Moving vertically
+                    self.player_pos[1] = round(self.player_pos[1])
+                if dy == 0:  # Moving horizontally
+                    self.player_pos[0] = round(self.player_pos[0])
         else:
             # Try moving horizontally only
             if self.is_valid_position(new_x, self.player_pos[0]):
@@ -246,16 +254,19 @@ class MazeGame:
         if pygame.K_DOWN in self.pressed_keys or pygame.K_s in self.pressed_keys:
             dy += 1
             
-        # Normalize diagonal movement
-        if dx != 0 and dy != 0:
-            magnitude = math.sqrt(dx * dx + dy * dy)
-            dx = dx / magnitude
-            dy = dy / magnitude
-            
         if dx != 0 or dy != 0:
+            # Check if movement is diagonal
+            is_diagonal = dx != 0 and dy != 0
+            
+            # Normalize diagonal movement
+            if is_diagonal:
+                magnitude = math.sqrt(dx * dx + dy * dy)
+                dx = dx / magnitude
+                dy = dy / magnitude
+            
             # Use fixed movement speed instead of delta time for more consistent movement
             movement = PLAYER_SPEED / 60.0  # Divide by FPS for consistent speed
-            self.move_player(dx * movement, dy * movement)
+            self.move_player(dx * movement, dy * movement, is_diagonal)
 
     def run(self):
         running = True
