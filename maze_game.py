@@ -40,12 +40,12 @@ class MazeGame:
         # Initialize maze with Perlin noise
         maze = [[0 for _ in range(MAZE_WIDTH)] for _ in range(MAZE_HEIGHT)]
         
-        # Generate Perlin noise
+        # Generate Perlin noise with random base value
         scale = 10.0
         octaves = 6
         persistence = 0.5
         lacunarity = 2.0
-        base = 0
+        base = random.randint(0, 1000)  # Random base value for different mazes each run
         
         for y in range(MAZE_HEIGHT):
             for x in range(MAZE_WIDTH):
@@ -87,13 +87,13 @@ class MazeGame:
                 current[1] += 1
 
     def draw(self):
-        self.screen.fill(WHITE)
+        self.screen.fill(BLACK)  # Changed background to black
         
         # Draw maze
         for y in range(MAZE_HEIGHT):
             for x in range(MAZE_WIDTH):
                 if self.maze[y][x] == 1:
-                    pygame.draw.rect(self.screen, BLACK,
+                    pygame.draw.rect(self.screen, WHITE,  # Changed wall color to white
                                    (x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE))
 
         # Draw player
@@ -108,18 +108,32 @@ class MazeGame:
 
         pygame.display.flip()
 
-    def move_player(self, dx: int, dy: int):
-        new_x = self.player_pos[1] + dx
-        new_y = self.player_pos[0] + dy
+    def move_player(self, dx: float, dy: float):
+        # Try to move diagonally first
+        new_x = round(self.player_pos[1] + dx)
+        new_y = round(self.player_pos[0] + dy)
         
         if (0 <= new_x < MAZE_WIDTH and 0 <= new_y < MAZE_HEIGHT and 
             self.maze[new_y][new_x] == 0):
             self.player_pos[1] = new_x
             self.player_pos[0] = new_y
+        else:
+            # If diagonal movement fails, try to slide along walls
+            # Try horizontal movement first
+            new_x = round(self.player_pos[1] + dx)
+            if (0 <= new_x < MAZE_WIDTH and 
+                self.maze[self.player_pos[0]][new_x] == 0):
+                self.player_pos[1] = new_x
             
-            # Check if player reached exit
-            if self.player_pos == self.exit_pos:
-                self.game_over = True
+            # Then try vertical movement
+            new_y = round(self.player_pos[0] + dy)
+            if (0 <= new_y < MAZE_HEIGHT and 
+                self.maze[new_y][self.player_pos[1]] == 0):
+                self.player_pos[0] = new_y
+            
+        # Check if player reached exit
+        if self.player_pos == self.exit_pos:
+            self.game_over = True
 
     def handle_movement(self):
         dx = 0
@@ -141,7 +155,7 @@ class MazeGame:
             dy = dy / 1.414
             
         if dx != 0 or dy != 0:
-            self.move_player(int(dx), int(dy))
+            self.move_player(dx, dy)  # Removed int() conversion to allow diagonal movement
 
     def run(self):
         running = True
