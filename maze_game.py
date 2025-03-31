@@ -10,6 +10,7 @@ INITIAL_MAZE_WIDTH = 15
 INITIAL_MAZE_HEIGHT = 15
 MIN_CELL_SIZE = 20  # Minimum cell size to maintain playability
 MAX_CELL_SIZE = 40  # Maximum cell size to prevent too large cells
+PLAYER_SIZE_RATIO = 0.8  # Player size as a ratio of cell size
 
 # Colors
 BLACK = (0, 0, 0)
@@ -19,7 +20,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 # Game settings
-PLAYER_SPEED = 20  # Increased speed since we're using smaller movement units
+PLAYER_SPEED = 20
 
 class MazeGame:
     def __init__(self):
@@ -144,9 +145,12 @@ class MazeGame:
                                    (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
 
         # Draw player (using float positions)
+        player_size = int(self.cell_size * PLAYER_SIZE_RATIO)
+        player_offset = (self.cell_size - player_size) / 2
         pygame.draw.rect(self.screen, RED,
-                        (self.player_pos[1] * self.cell_size, self.player_pos[0] * self.cell_size,
-                         self.cell_size, self.cell_size))
+                        (self.player_pos[1] * self.cell_size + player_offset,
+                         self.player_pos[0] * self.cell_size + player_offset,
+                         player_size, player_size))
 
         # Draw exit
         pygame.draw.rect(self.screen, GREEN,
@@ -160,11 +164,12 @@ class MazeGame:
         if not (0 <= x < self.maze_width and 0 <= y < self.maze_height):
             return False
             
-        # Get the grid cells the player is overlapping with
+        # Get the grid cells the player is overlapping with, considering the smaller player size
+        player_size = PLAYER_SIZE_RATIO
         left_cell = int(x)
-        right_cell = min(int(x + 0.9), self.maze_width - 1)
+        right_cell = min(int(x + player_size), self.maze_width - 1)
         top_cell = int(y)
-        bottom_cell = min(int(y + 0.9), self.maze_height - 1)
+        bottom_cell = min(int(y + player_size), self.maze_height - 1)
         
         # Check if any of the overlapping cells are walls
         return (self.maze[top_cell][left_cell] == 0 and 
