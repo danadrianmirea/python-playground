@@ -5,7 +5,7 @@ def sub(num1, num2):
     return num1 - num2
 
 def mul(num1, num2):
-    return num1 * num2
+    return num1 * num
 
 def calculateSalary(baseSalary, taxPercent=0.45):
     return baseSalary-baseSalary*taxPercent
