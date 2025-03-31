@@ -3,6 +3,7 @@ import random
 import noise
 import numpy as np
 from typing import List, Tuple, Set
+import math
 
 # Constants
 INITIAL_MAZE_WIDTH = 15
@@ -18,7 +19,7 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 # Game settings
-PLAYER_SPEED = 50
+PLAYER_SPEED = 20  # Increased speed since we're using smaller movement units
 
 class MazeGame:
     def __init__(self):
@@ -69,7 +70,7 @@ class MazeGame:
         self.screen = pygame.display.set_mode((self.window_width, self.window_height))
         
         self.maze = self.generate_maze()
-        self.player_pos = [1, 1]  # Starting position
+        self.player_pos = [1.0, 1.0]  # Starting position as floats
         self.exit_pos = [self.maze_height - 2, self.maze_width - 1]  # Exit position
         self.game_over = False
         
@@ -137,7 +138,7 @@ class MazeGame:
                     pygame.draw.rect(self.screen, WHITE,
                                    (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size))
 
-        # Draw player
+        # Draw player (using float positions)
         pygame.draw.rect(self.screen, RED,
                         (self.player_pos[1] * self.cell_size, self.player_pos[0] * self.cell_size,
                          self.cell_size, self.cell_size))
@@ -149,31 +150,45 @@ class MazeGame:
 
         pygame.display.flip()
 
-    def move_player(self, dx: float, dy: float):
-        # Try to move diagonally first
-        new_x = round(self.player_pos[1] + dx)
-        new_y = round(self.player_pos[0] + dy)
+    def is_valid_position(self, x: float, y: float) -> bool:
+        # Check if the position is within maze bounds
+        if not (0 <= x < self.maze_width and 0 <= y < self.maze_height):
+            return False
+            
+        # Get the grid cells the player is overlapping with
+        left_cell = int(x)
+        right_cell = min(int(x + 0.9), self.maze_width - 1)
+        top_cell = int(y)
+        bottom_cell = min(int(y + 0.9), self.maze_height - 1)
         
-        if (0 <= new_x < self.maze_width and 0 <= new_y < self.maze_height and 
-            self.maze[new_y][new_x] == 0):
+        # Check if any of the overlapping cells are walls
+        return (self.maze[top_cell][left_cell] == 0 and 
+                self.maze[top_cell][right_cell] == 0 and
+                self.maze[bottom_cell][left_cell] == 0 and 
+                self.maze[bottom_cell][right_cell] == 0)
+
+    def move_player(self, dx: float, dy: float):
+        # Calculate new position
+        new_x = self.player_pos[1] + dx
+        new_y = self.player_pos[0] + dy
+        
+        # Try to move horizontally first
+        if self.is_valid_position(new_x, self.player_pos[0]):
             self.player_pos[1] = new_x
+        else:
+            # Snap to grid horizontally if collision
+            self.player_pos[1] = round(self.player_pos[1])
+            
+        # Then try to move vertically
+        if self.is_valid_position(self.player_pos[1], new_y):
             self.player_pos[0] = new_y
         else:
-            # If diagonal movement fails, try to slide along walls
-            # Try horizontal movement first
-            new_x = round(self.player_pos[1] + dx)
-            if (0 <= new_x < self.maze_width and 
-                self.maze[self.player_pos[0]][new_x] == 0):
-                self.player_pos[1] = new_x
+            # Snap to grid vertically if collision
+            self.player_pos[0] = round(self.player_pos[0])
             
-            # Then try vertical movement
-            new_y = round(self.player_pos[0] + dy)
-            if (0 <= new_y < self.maze_height and 
-                self.maze[new_y][self.player_pos[1]] == 0):
-                self.player_pos[0] = new_y
-            
-        # Check if player reached exit
-        if self.player_pos == self.exit_pos:
+        # Check if player reached exit (using rounded position for exit check)
+        if (round(self.player_pos[0]) == self.exit_pos[0] and 
+            round(self.player_pos[1]) == self.exit_pos[1]):
             self.game_over = True
 
     def handle_movement(self):
@@ -192,11 +207,14 @@ class MazeGame:
             
         # Normalize diagonal movement
         if dx != 0 and dy != 0:
-            dx = dx / 1.414  # 1/√2 for diagonal movement
-            dy = dy / 1.414
+            magnitude = math.sqrt(dx * dx + dy * dy)
+            dx = dx / magnitude
+            dy = dy / magnitude
             
         if dx != 0 or dy != 0:
-            self.move_player(dx, dy)
+            # Use fixed movement speed instead of delta time for more consistent movement
+            movement = PLAYER_SPEED / 60.0  # Divide by FPS for consistent speed
+            self.move_player(dx * movement, dy * movement)
 
     def run(self):
         running = True
@@ -205,10 +223,7 @@ class MazeGame:
             
             # Handle movement based on time
             if self.pressed_keys and not self.game_over:
-                time_delta = (current_time - self.last_update_time) / 1000.0  # Convert to seconds
-                if time_delta >= 1.0 / PLAYER_SPEED:  # Check if enough time has passed based on speed
-                    self.handle_movement()
-                    self.last_update_time = current_time
+                self.handle_movement()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
