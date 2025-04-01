@@ -16,8 +16,9 @@ BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
-
 ITERATION_DELAY_TIME=1
+START_ITERATION=2
+MAX_ITERATIONS=8
 
 # Set up the display
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -34,12 +35,10 @@ __device__ void koch_points_gpu(float* points, int* point_count,
                               float x1, float y1, float x2, float y2, 
                               int iteration, int max_points) {
     if (iteration == 0) {
-        if (*point_count < max_points - 2) {
+        if (*point_count < max_points - 1) {
             points[*point_count * 2] = x1;
             points[*point_count * 2 + 1] = y1;
-            points[(*point_count + 1) * 2] = x2;
-            points[(*point_count + 1) * 2 + 1] = y2;
-            *point_count += 2;
+            *point_count += 1;
         }
         return;
     }
@@ -77,9 +76,18 @@ __global__ void compute_koch_curve(float* points, int* point_count,
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
         *point_count = 0;
+        // First side
         koch_points_gpu(points, point_count, p1_x, p1_y, p2_x, p2_y, iteration, max_points);
+        // Second side
         koch_points_gpu(points, point_count, p2_x, p2_y, p3_x, p3_y, iteration, max_points);
+        // Third side
         koch_points_gpu(points, point_count, p3_x, p3_y, p1_x, p1_y, iteration, max_points);
+        // Add the closing point
+        if (*point_count < max_points) {
+            points[*point_count * 2] = p1_x;
+            points[*point_count * 2 + 1] = p1_y;
+            *point_count += 1;
+        }
     }
 }
 
@@ -186,8 +194,8 @@ def compute_koch_curve_gpu(p1, p2, p3, iteration):
 
 def main(wait_for_input=True):
     clock = pygame.time.Clock()
-    current_iteration = 1
-    max_iterations = 5
+    current_iteration = START_ITERATION
+    max_iterations = MAX_ITERATIONS
     target_time_per_iteration = 1.0
     start_time = time.time()
     delay_start_time = None
@@ -269,6 +277,9 @@ def main(wait_for_input=True):
                         current_point_index = 0
                         delay_start_time = None
         
+            if current_iteration > max_iterations:
+                current_iteration = 1    
+
         # Draw debug information
         elapsed_time = time.time() - start_time
         debug_info = [
