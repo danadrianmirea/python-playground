@@ -146,7 +146,10 @@ def main(wait_for_input=True):
                         current_points = []
                         current_point_index = 0
                         delay_start_time = None  # Reset delay timer
-        
+
+            if current_iteration > max_iterations:
+                current_iteration = 1        
+
         # Draw debug information
         elapsed_time = time.time() - start_time
         debug_info = [
