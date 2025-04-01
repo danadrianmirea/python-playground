@@ -1,20 +1,43 @@
 import pygame
 import os
 import random
+import json
 from typing import List, Tuple, Optional
 
 # Initialize Pygame
 pygame.init()
 
 # Constants
-CARD_WIDTH = 71
-CARD_HEIGHT = 96
-CARD_SPACING = 20
-TABLEAU_SPACING = 100
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 600
-MENU_HEIGHT = 30
-DEBUG = False  # Set to True to enable debug messages
+DEBUG = True  # Set to True to enable debug messages
+SAVE_FILE = "solitaire_save.json"
+
+# Get native resolution
+NATIVE_WIDTH, NATIVE_HEIGHT = pygame.display.get_desktop_sizes()[0]
+
+# Base constants (original game size)
+BASE_CARD_WIDTH = 71
+BASE_CARD_HEIGHT = 96
+BASE_CARD_SPACING = 20
+BASE_TABLEAU_SPACING = 100
+BASE_WINDOW_WIDTH = 800
+BASE_WINDOW_HEIGHT = 600
+BASE_MENU_HEIGHT = 30
+
+# Calculate scaling factor based on height (to maintain aspect ratio)
+# Add a small margin (0.85) to account for Windows decorations and taskbar
+SCALE_FACTOR = min(NATIVE_HEIGHT / BASE_WINDOW_HEIGHT, NATIVE_WIDTH / BASE_WINDOW_WIDTH) * 0.85
+
+# Scaled constants
+CARD_WIDTH = int(BASE_CARD_WIDTH * SCALE_FACTOR)
+CARD_HEIGHT = int(BASE_CARD_HEIGHT * SCALE_FACTOR)
+CARD_SPACING = int(BASE_CARD_SPACING * SCALE_FACTOR)
+TABLEAU_SPACING = int(BASE_TABLEAU_SPACING * SCALE_FACTOR)
+WINDOW_WIDTH = int(BASE_WINDOW_WIDTH * SCALE_FACTOR)
+WINDOW_HEIGHT = int(BASE_WINDOW_HEIGHT * SCALE_FACTOR)
+MENU_HEIGHT = int(BASE_MENU_HEIGHT * SCALE_FACTOR)
+
+# Center the window on the screen
+os.environ['SDL_VIDEO_WINDOW_POS'] = f"{(NATIVE_WIDTH - WINDOW_WIDTH) // 2},{(NATIVE_HEIGHT - WINDOW_HEIGHT) // 2}"
 
 # Colors
 BLACK = (0, 0, 0)
@@ -22,6 +45,10 @@ WHITE = (255, 255, 255)
 GREEN = (0, 128, 0)
 GRAY = (200, 200, 200)
 BLUE = (0, 0, 255)
+
+# Load card back image
+CARD_BACK = pygame.image.load("assets/cards/card_back_red.png")
+CARD_BACK = pygame.transform.scale(CARD_BACK, (CARD_WIDTH, CARD_HEIGHT))
 
 class Card:
     def __init__(self, suit: str, value: str, image_path: str):
@@ -51,9 +78,9 @@ class Card:
 
 class Menu:
     def __init__(self):
-        self.font = pygame.font.Font(None, 24)
+        self.font = pygame.font.Font(None, int(24 * SCALE_FACTOR))
         self.menu_items = {
-            'File': ['New Game', 'Quit']
+            'File': ['New Game', 'Save Game', 'Load Game', 'Quit']
         }
         self.active_menu = None
         self.menu_rects = {}
@@ -64,29 +91,29 @@ class Menu:
         pygame.draw.rect(screen, GRAY, (0, 0, WINDOW_WIDTH, MENU_HEIGHT))
         
         # Draw menu items
-        x = 10
+        x = int(10 * SCALE_FACTOR)
         for menu_name in self.menu_items:
             text = self.font.render(menu_name, True, BLACK)
-            rect = text.get_rect(topleft=(x, 5))
+            rect = text.get_rect(topleft=(x, int(5 * SCALE_FACTOR)))
             screen.blit(text, rect)
             self.menu_rects[menu_name] = rect
-            x += 100
+            x += int(100 * SCALE_FACTOR)
             
         # Draw active menu if any
         if self.active_menu:
             menu_y = MENU_HEIGHT
             # Draw background for menu items
-            menu_width = 150  # Width of the menu
-            menu_height = len(self.menu_items[self.active_menu]) * 25
+            menu_width = int(150 * SCALE_FACTOR)  # Width of the menu
+            menu_height = len(self.menu_items[self.active_menu]) * int(25 * SCALE_FACTOR)
             pygame.draw.rect(screen, GRAY, (0, menu_y, menu_width, menu_height))
             
             # Draw menu items
             for item in self.menu_items[self.active_menu]:
                 text = self.font.render(item, True, BLACK)
-                rect = text.get_rect(topleft=(10, menu_y))
+                rect = text.get_rect(topleft=(int(10 * SCALE_FACTOR), menu_y))
                 screen.blit(text, rect)
                 self.item_rects[item] = rect
-                menu_y += 25
+                menu_y += int(25 * SCALE_FACTOR)
                 
     def handle_click(self, pos):
         x, y = pos
@@ -101,8 +128,8 @@ class Menu:
         # Check if clicking on menu items
         if self.active_menu and y >= MENU_HEIGHT:
             # Check if click is within menu bounds
-            menu_width = 150
-            menu_height = len(self.menu_items[self.active_menu]) * 25
+            menu_width = int(150 * SCALE_FACTOR)
+            menu_height = len(self.menu_items[self.active_menu]) * int(25 * SCALE_FACTOR)
             if x < menu_width and y < MENU_HEIGHT + menu_height:
                 for item, rect in self.item_rects.items():
                     if rect.collidepoint(pos):
@@ -120,6 +147,7 @@ class Solitaire:
         self.clock = pygame.time.Clock()
         self.menu = Menu()
         self.last_drawn_card = None  # Track the last drawn card
+        self.last_click_time = 0  # Track last click time for double-click detection
         self.reset_game()
         
     def reset_game(self):
@@ -173,11 +201,11 @@ class Solitaire:
         
         # Check tableau piles
         for i, pile in enumerate(self.tableau_piles):
-            pile_x = 50 + i * TABLEAU_SPACING
+            pile_x = int(50 * SCALE_FACTOR) + i * TABLEAU_SPACING
             if pile_x <= x <= pile_x + CARD_WIDTH:
                 # Check if there are any cards in the pile
                 if pile:
-                    pile_y = 150
+                    pile_y = int(110 * SCALE_FACTOR)  # Adjusted from 100 to 110
                     for j, card in enumerate(pile):
                         if card.face_up:
                             card.rect.topleft = (pile_x, pile_y)
@@ -186,40 +214,40 @@ class Solitaire:
                         pile_y += CARD_SPACING
                 else:
                     # Empty tableau pile - check if click is in the empty space
-                    empty_rect = pygame.Rect(pile_x, 150, CARD_WIDTH, CARD_HEIGHT)
+                    empty_rect = pygame.Rect(pile_x, int(110 * SCALE_FACTOR), CARD_WIDTH, CARD_HEIGHT)  # Adjusted from 100 to 110
                     if empty_rect.collidepoint(pos):
                         return pile, -1
                     
         # Check foundation piles
         for i, pile in enumerate(self.foundation_piles):
-            pile_x = 50 + i * TABLEAU_SPACING
-            if pile_x <= x <= pile_x + CARD_WIDTH and 50 <= y <= 50 + CARD_HEIGHT:
+            pile_x = int(50 * SCALE_FACTOR) + i * TABLEAU_SPACING
+            if pile_x <= x <= pile_x + CARD_WIDTH and int(10 * SCALE_FACTOR) <= y <= int(10 * SCALE_FACTOR) + CARD_HEIGHT:  # Adjusted from 50 to 10
                 if pile:
-                    pile[-1].rect.topleft = (pile_x, 50)
+                    pile[-1].rect.topleft = (pile_x, int(10 * SCALE_FACTOR))  # Adjusted from 50 to 10
                     if pile[-1].rect.collidepoint(pos):
                         return pile, -1
                 else:
                     # Empty foundation pile
-                    empty_rect = pygame.Rect(pile_x, 50, CARD_WIDTH, CARD_HEIGHT)
+                    empty_rect = pygame.Rect(pile_x, int(10 * SCALE_FACTOR), CARD_WIDTH, CARD_HEIGHT)  # Adjusted from 50 to 10
                     if empty_rect.collidepoint(pos):
                         return pile, -1
                 
         # Check stock pile
-        if 50 <= x <= 50 + CARD_WIDTH and 400 <= y <= 400 + CARD_HEIGHT:
+        if int(50 * SCALE_FACTOR) <= x <= int(50 * SCALE_FACTOR) + CARD_WIDTH and int(450 * SCALE_FACTOR) <= y <= int(450 * SCALE_FACTOR) + CARD_HEIGHT:  # Adjusted from 400 to 450
             # Create a rectangle for the stock pile
-            stock_rect = pygame.Rect(50, 400, CARD_WIDTH, CARD_HEIGHT)
+            stock_rect = pygame.Rect(int(50 * SCALE_FACTOR), int(450 * SCALE_FACTOR), CARD_WIDTH, CARD_HEIGHT)  # Adjusted from 400 to 450
             if stock_rect.collidepoint(pos):
                 return self.stock_pile, -1
             
         # Check waste pile
-        if 150 <= x <= 150 + CARD_WIDTH and 400 <= y <= 400 + CARD_HEIGHT:
+        if int(150 * SCALE_FACTOR) <= x <= int(150 * SCALE_FACTOR) + CARD_WIDTH and int(450 * SCALE_FACTOR) <= y <= int(450 * SCALE_FACTOR) + CARD_HEIGHT:  # Adjusted from 400 to 450
             if self.waste_pile:
-                self.waste_pile[-1].rect.topleft = (150, 400)
+                self.waste_pile[-1].rect.topleft = (int(150 * SCALE_FACTOR), int(450 * SCALE_FACTOR))  # Adjusted from 400 to 450
                 if self.waste_pile[-1].rect.collidepoint(pos):
                     return self.waste_pile, -1
             else:
                 # Empty waste pile
-                empty_rect = pygame.Rect(150, 400, CARD_WIDTH, CARD_HEIGHT)
+                empty_rect = pygame.Rect(int(150 * SCALE_FACTOR), int(450 * SCALE_FACTOR), CARD_WIDTH, CARD_HEIGHT)  # Adjusted from 400 to 450
                 if empty_rect.collidepoint(pos):
                     return self.waste_pile, -1
             
@@ -235,8 +263,10 @@ class Solitaire:
                 card.is_red() != target_card.is_red())
                 
     def can_move_to_foundation(self, card: Card, target_pile: List[Card]) -> bool:
+        if DEBUG:
+            print(f"Foundation move check - card: {card.value} ({card.get_value()}), target pile: {'empty' if not target_pile else target_pile[-1].value}")
         if not target_pile:
-            return card.value == 'ace'
+            return card.value == 'ace'  # Any Ace can be placed on an empty foundation pile
         target_card = target_pile[-1]
         return (card.suit == target_card.suit and 
                 card.get_value() == target_card.get_value() + 1)
@@ -261,21 +291,78 @@ class Solitaire:
         if DEBUG:
             print(f"Moving card: {cards_to_move[0].value}")
             
-        # Check if the move is valid
-        if target_pile in self.tableau_piles:
-            if DEBUG:
-                print("Checking tableau move")
-            if not self.can_move_to_tableau(cards_to_move[0], target_pile):
+        # Check if the move is valid based on card type
+        card = cards_to_move[0]
+        if card.value == 'ace':
+            # For Aces, check foundation piles first
+            if target_pile in self.foundation_piles:
                 if DEBUG:
-                    print("Invalid tableau move")
-                return False
-        elif target_pile in self.foundation_piles:
-            if DEBUG:
-                print("Checking foundation move")
-            if not self.can_move_to_foundation(cards_to_move[0], target_pile):
+                    print("Checking foundation move for Ace")
+                if self.can_move_to_foundation(card, target_pile):
+                    if DEBUG:
+                        print("Valid foundation move for Ace")
+                    # Move the cards
+                    target_pile.extend(cards_to_move)
+                    source_pile[start_index:end_index] = []
+                    
+                    # Flip the top card of the source pile if it's face down
+                    if source_pile and not source_pile[-1].face_up:
+                        source_pile[-1].flip()
+                        
+                    if DEBUG:
+                        print("Move successful")
+                    return True
+            # If not a valid foundation move, check tableau
+            elif target_pile in self.tableau_piles:
                 if DEBUG:
-                    print("Invalid foundation move")
-                return False
+                    print("Checking tableau move for Ace")
+                if not self.can_move_to_tableau(card, target_pile):
+                    if DEBUG:
+                        print("Invalid tableau move")
+                    return False
+        elif card.value == 'king':
+            # For Kings, check tableau piles first
+            if target_pile in self.tableau_piles:
+                if DEBUG:
+                    print("Checking tableau move for King")
+                if self.can_move_to_tableau(card, target_pile):
+                    if DEBUG:
+                        print("Valid tableau move for King")
+                    # Move the cards
+                    target_pile.extend(cards_to_move)
+                    source_pile[start_index:end_index] = []
+                    
+                    # Flip the top card of the source pile if it's face down
+                    if source_pile and not source_pile[-1].face_up:
+                        source_pile[-1].flip()
+                        
+                    if DEBUG:
+                        print("Move successful")
+                    return True
+            # If not a valid tableau move, check foundation
+            elif target_pile in self.foundation_piles:
+                if DEBUG:
+                    print("Checking foundation move for King")
+                if not self.can_move_to_foundation(card, target_pile):
+                    if DEBUG:
+                        print("Invalid foundation move")
+                    return False
+        else:
+            # For all other cards, check both in order
+            if target_pile in self.foundation_piles:
+                if DEBUG:
+                    print("Checking foundation move")
+                if not self.can_move_to_foundation(card, target_pile):
+                    if DEBUG:
+                        print("Invalid foundation move")
+                    return False
+            elif target_pile in self.tableau_piles:
+                if DEBUG:
+                    print("Checking tableau move")
+                if not self.can_move_to_tableau(card, target_pile):
+                    if DEBUG:
+                        print("Invalid tableau move")
+                    return False
                 
         # Move the cards
         target_pile.extend(cards_to_move)
@@ -294,8 +381,8 @@ class Solitaire:
         
         # Draw tableau piles
         for i, pile in enumerate(self.tableau_piles):
-            x = 50 + i * TABLEAU_SPACING
-            y = 150 + MENU_HEIGHT
+            x = int(50 * SCALE_FACTOR) + i * TABLEAU_SPACING
+            y = int(110 * SCALE_FACTOR) + MENU_HEIGHT  # Adjusted from 100 to 110
             for j, card in enumerate(pile):
                 # Skip drawing cards that are being dragged
                 if self.dragging and self.selected_pile == pile and j >= self.selected_pile.index(self.selected_card):
@@ -306,13 +393,13 @@ class Solitaire:
                     self.screen.blit(card.image, card.rect)
                 else:
                     # Draw card back
-                    pygame.draw.rect(self.screen, WHITE, (x, y, CARD_WIDTH, CARD_HEIGHT))
+                    self.screen.blit(CARD_BACK, (x, y))
                 y += CARD_SPACING
                 
         # Draw foundation piles
         for i in range(4):
-            x = 50 + i * TABLEAU_SPACING
-            y = 50 + MENU_HEIGHT
+            x = int(50 * SCALE_FACTOR) + i * TABLEAU_SPACING
+            y = int(10 * SCALE_FACTOR) + MENU_HEIGHT  # Adjusted from 50 to 10
             if self.foundation_piles[i]:
                 # Skip drawing the top card if it's being dragged
                 if self.dragging and self.selected_pile == self.foundation_piles[i]:
@@ -328,14 +415,14 @@ class Solitaire:
                 pygame.draw.rect(self.screen, WHITE, (x, y, CARD_WIDTH, CARD_HEIGHT))
                 
         # Draw stock pile
-        x = 50
-        y = 400 + MENU_HEIGHT
+        x = int(50 * SCALE_FACTOR)
+        y = int(450 * SCALE_FACTOR) + MENU_HEIGHT  # Adjusted from 400 to 450
         if self.stock_pile:
-            pygame.draw.rect(self.screen, WHITE, (x, y, CARD_WIDTH, CARD_HEIGHT))
+            self.screen.blit(CARD_BACK, (x, y))
             
         # Draw waste pile
-        x = 150
-        y = 400 + MENU_HEIGHT
+        x = int(150 * SCALE_FACTOR)
+        y = int(450 * SCALE_FACTOR) + MENU_HEIGHT  # Adjusted from 400 to 450
         if self.waste_pile:
             # Skip drawing the top card if it's being dragged
             if self.dragging and self.selected_pile == self.waste_pile:
@@ -364,18 +451,111 @@ class Solitaire:
             
         pygame.display.flip()
         
+    def save_game(self):
+        """Save the current game state to a file."""
+        game_state = {
+            'tableau_piles': [[{'suit': card.suit, 'value': card.value, 'face_up': card.face_up} 
+                              for card in pile] for pile in self.tableau_piles],
+            'foundation_piles': [[{'suit': card.suit, 'value': card.value, 'face_up': card.face_up} 
+                                for card in pile] for pile in self.foundation_piles],
+            'stock_pile': [{'suit': card.suit, 'value': card.value, 'face_up': card.face_up} 
+                          for card in self.stock_pile],
+            'waste_pile': [{'suit': card.suit, 'value': card.value, 'face_up': card.face_up} 
+                          for card in self.waste_pile],
+            'last_drawn_card': {'suit': self.last_drawn_card.suit, 'value': self.last_drawn_card.value} 
+                              if self.last_drawn_card else None
+        }
+        
+        try:
+            with open(SAVE_FILE, 'w') as f:
+                json.dump(game_state, f)
+            if DEBUG:
+                print("Game saved successfully")
+        except Exception as e:
+            if DEBUG:
+                print(f"Error saving game: {e}")
+
+    def load_game(self):
+        """Load a saved game state from a file."""
+        try:
+            if not os.path.exists(SAVE_FILE):
+                if DEBUG:
+                    print("No save file found")
+                return False
+                
+            with open(SAVE_FILE, 'r') as f:
+                game_state = json.load(f)
+                
+            # Clear all piles without resetting the game
+            self.tableau_piles = [[] for _ in range(7)]
+            self.foundation_piles = [[] for _ in range(4)]
+            self.stock_pile = []
+            self.waste_pile = []
+            self.selected_card = None
+            self.selected_pile = None
+            self.selected_cards = []
+            self.dragging = False
+            self.drag_offset = (0, 0)
+            self.original_positions = []
+            
+            # Load tableau piles
+            for i, pile_data in enumerate(game_state['tableau_piles']):
+                for card_data in pile_data:
+                    image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}.png"
+                    if not os.path.exists(image_path):
+                        image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}2.png"
+                    card = Card(card_data['suit'], card_data['value'], image_path)
+                    card.face_up = card_data['face_up']
+                    self.tableau_piles[i].append(card)
+                    
+            # Load foundation piles
+            for i, pile_data in enumerate(game_state['foundation_piles']):
+                for card_data in pile_data:
+                    image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}.png"
+                    if not os.path.exists(image_path):
+                        image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}2.png"
+                    card = Card(card_data['suit'], card_data['value'], image_path)
+                    card.face_up = card_data['face_up']
+                    self.foundation_piles[i].append(card)
+                    
+            # Load stock pile
+            for card_data in game_state['stock_pile']:
+                image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}.png"
+                if not os.path.exists(image_path):
+                    image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}2.png"
+                card = Card(card_data['suit'], card_data['value'], image_path)
+                card.face_up = card_data['face_up']
+                self.stock_pile.append(card)
+                
+            # Load waste pile
+            for card_data in game_state['waste_pile']:
+                image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}.png"
+                if not os.path.exists(image_path):
+                    image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}2.png"
+                card = Card(card_data['suit'], card_data['value'], image_path)
+                card.face_up = card_data['face_up']
+                self.waste_pile.append(card)
+                
+            # Load last drawn card
+            if game_state['last_drawn_card']:
+                card_data = game_state['last_drawn_card']
+                image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}.png"
+                if not os.path.exists(image_path):
+                    image_path = f"assets/cards/{card_data['value']}_of_{card_data['suit']}2.png"
+                self.last_drawn_card = Card(card_data['suit'], card_data['value'], image_path)
+                
+            if DEBUG:
+                print("Game loaded successfully")
+            return True
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"Error loading game: {e}")
+            return False
+
     def handle_mouse_down(self, pos: Tuple[int, int]):
-        # Check menu first
-        menu_result = self.menu.handle_click(pos)
-        if menu_result:
-            menu_name, item = menu_result
-            if menu_name == 'File':
-                if item == 'New Game':
-                    self.reset_game()
-                elif item == 'Quit':
-                    return False
-            # Close the menu after selecting an option
-            self.menu.active_menu = None
+        # Only proceed with card handling if not clicking on menu
+        if pos[1] < MENU_HEIGHT:
             return True
             
         # Adjust pos for menu bar
@@ -420,15 +600,15 @@ class Solitaire:
             # Calculate offset from mouse position to card position
             if pile in self.tableau_piles:
                 pile_index = self.tableau_piles.index(pile)
-                card_x = 50 + pile_index * TABLEAU_SPACING
-                card_y = 150 + index * CARD_SPACING
+                card_x = int(50 * SCALE_FACTOR) + pile_index * TABLEAU_SPACING
+                card_y = int(110 * SCALE_FACTOR) + index * CARD_SPACING  # Adjusted from 100 to 110
             elif pile in self.foundation_piles:
                 pile_index = self.foundation_piles.index(pile)
-                card_x = 50 + pile_index * TABLEAU_SPACING
-                card_y = 50
+                card_x = int(50 * SCALE_FACTOR) + pile_index * TABLEAU_SPACING
+                card_y = int(10 * SCALE_FACTOR)
             else:  # waste pile
-                card_x = 150
-                card_y = 400
+                card_x = int(150 * SCALE_FACTOR)
+                card_y = int(450 * SCALE_FACTOR)
                 
             self.drag_offset = (adjusted_pos[0] - card_x, adjusted_pos[1] - card_y)
             
@@ -469,15 +649,15 @@ class Solitaire:
                     if self.selected_pile in self.tableau_piles:
                         pile_index = self.tableau_piles.index(self.selected_pile)
                         card_index = self.selected_pile.index(self.selected_card)
-                        x = 50 + pile_index * TABLEAU_SPACING
-                        y = 150 + card_index * CARD_SPACING
+                        x = int(50 * SCALE_FACTOR) + pile_index * TABLEAU_SPACING
+                        y = int(110 * SCALE_FACTOR) + card_index * CARD_SPACING  # Adjusted from 100 to 110
                     elif self.selected_pile in self.foundation_piles:
                         pile_index = self.foundation_piles.index(self.selected_pile)
-                        x = 50 + pile_index * TABLEAU_SPACING
-                        y = 50
+                        x = int(50 * SCALE_FACTOR) + pile_index * TABLEAU_SPACING
+                        y = int(10 * SCALE_FACTOR)
                     else:  # waste pile
-                        x = 150
-                        y = 400
+                        x = int(150 * SCALE_FACTOR)
+                        y = int(450 * SCALE_FACTOR)
                     self.selected_card.rect.topleft = (x, y)
         else:
             if DEBUG:
@@ -488,7 +668,59 @@ class Solitaire:
         self.selected_pile = None
         self.selected_cards = []
         return True
-                
+
+    def find_valid_foundation_pile(self, card: Card) -> Optional[List[Card]]:
+        """Find a valid foundation pile for the given card."""
+        if DEBUG:
+            print(f"\nLooking for valid foundation pile for {card.value} of {card.suit}")
+            
+        for pile in self.foundation_piles:
+            if self.can_move_to_foundation(card, pile):
+                if DEBUG:
+                    print(f"Found valid foundation pile with {'empty' if not pile else pile[-1].value}")
+                return pile
+        return None
+
+    def handle_double_click(self, pos: Tuple[int, int]) -> bool:
+        """Handle double-click events to move cards to foundation piles."""
+        current_time = pygame.time.get_ticks()
+        
+        # Check if this is a double-click (within 500ms of last click)
+        if current_time - self.last_click_time < 500:
+            # Adjust pos for menu bar
+            adjusted_pos = (pos[0], pos[1] - MENU_HEIGHT)
+            
+            result = self.get_pile_at_pos(adjusted_pos)
+            if result:
+                pile, index = result
+                # Only allow double-clicking on the topmost card in a stack
+                if index >= 0 and pile[index].face_up and index == len(pile) - 1:
+                    card = pile[index]
+                    if DEBUG:
+                        print(f"\nDouble-click detected on {card.value} of {card.suit}")
+                    
+                    # Try to find a valid foundation pile
+                    target_pile = self.find_valid_foundation_pile(card)
+                    if target_pile:
+                        if DEBUG:
+                            print("Moving card to foundation pile")
+                        # Move the card to the foundation pile
+                        if self.move_cards(pile, target_pile, index):
+                            # Reset the last click time after successful move
+                            self.last_click_time = 0
+                            return True
+                    else:
+                        if DEBUG:
+                            print("No valid foundation pile found")
+            
+            # Reset the last click time
+            self.last_click_time = 0
+            return False
+        else:
+            # Update the last click time
+            self.last_click_time = current_time
+            return False
+
     def run(self):
         running = True
         while running:
@@ -497,8 +729,31 @@ class Solitaire:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left click
+                        # First check for menu clicks
+                        menu_result = self.menu.handle_click(event.pos)
+                        if menu_result:
+                            menu_name, item = menu_result
+                            if menu_name == 'File':
+                                if item == 'New Game':
+                                    self.reset_game()
+                                elif item == 'Save Game':
+                                    self.save_game()
+                                elif item == 'Load Game':
+                                    self.load_game()
+                                elif item == 'Quit':
+                                    running = False
+                            # Close the menu after selecting an option
+                            self.menu.active_menu = None
+                            continue
+                            
+                        # Then check for double-click
+                        if self.handle_double_click(event.pos):
+                            continue
+                            
+                        # Handle single click
                         if not self.handle_mouse_down(event.pos):
                             running = False
+                            
                     elif event.button == 3:  # Right click
                         # Handle right click on stock pile
                         adjusted_pos = (event.pos[0], event.pos[1] - MENU_HEIGHT)
