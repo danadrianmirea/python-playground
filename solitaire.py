@@ -14,6 +14,7 @@ TABLEAU_SPACING = 100
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 MENU_HEIGHT = 30
+DEBUG = False  # Set to True to enable debug messages
 
 # Colors
 BLACK = (0, 0, 0)
@@ -225,7 +226,8 @@ class Solitaire:
         return None
         
     def can_move_to_tableau(self, card: Card, target_pile: List[Card]) -> bool:
-        print(f"Tableau move check - card: {card.value} ({card.get_value()}), target pile: {'empty' if not target_pile else target_pile[-1].value}")
+        if DEBUG:
+            print(f"Tableau move check - card: {card.value} ({card.get_value()}), target pile: {'empty' if not target_pile else target_pile[-1].value}")
         if not target_pile:
             return card.value == 'king'
         target_card = target_pile[-1]
@@ -241,31 +243,38 @@ class Solitaire:
                 
     def move_cards(self, source_pile: List[Card], target_pile: List[Card], 
                   start_index: int, end_index: Optional[int] = None) -> bool:
-        print(f"\nMove cards attempt:")
-        print(f"Source pile: {source_pile[-1].value if source_pile else 'empty'}")
-        print(f"Target pile: {target_pile[-1].value if target_pile else 'empty'}")
-        print(f"Start index: {start_index}")
+        if DEBUG:
+            print(f"\nMove cards attempt:")
+            print(f"Source pile: {source_pile[-1].value if source_pile else 'empty'}")
+            print(f"Target pile: {target_pile[-1].value if target_pile else 'empty'}")
+            print(f"Start index: {start_index}")
         
         if end_index is None:
             end_index = len(source_pile)
             
         cards_to_move = source_pile[start_index:end_index]
         if not cards_to_move:
-            print("No cards to move")
+            if DEBUG:
+                print("No cards to move")
             return False
             
-        print(f"Moving card: {cards_to_move[0].value}")
+        if DEBUG:
+            print(f"Moving card: {cards_to_move[0].value}")
             
         # Check if the move is valid
         if target_pile in self.tableau_piles:
-            print("Checking tableau move")
+            if DEBUG:
+                print("Checking tableau move")
             if not self.can_move_to_tableau(cards_to_move[0], target_pile):
-                print("Invalid tableau move")
+                if DEBUG:
+                    print("Invalid tableau move")
                 return False
         elif target_pile in self.foundation_piles:
-            print("Checking foundation move")
+            if DEBUG:
+                print("Checking foundation move")
             if not self.can_move_to_foundation(cards_to_move[0], target_pile):
-                print("Invalid foundation move")
+                if DEBUG:
+                    print("Invalid foundation move")
                 return False
                 
         # Move the cards
@@ -276,7 +285,8 @@ class Solitaire:
         if source_pile and not source_pile[-1].face_up:
             source_pile[-1].flip()
             
-        print("Move successful")
+        if DEBUG:
+            print("Move successful")
         return True
         
     def draw(self):
@@ -425,29 +435,36 @@ class Solitaire:
         return True
             
     def handle_mouse_up(self, pos: Tuple[int, int]):
-        print("\nMouse up event:")
+        if DEBUG:
+            print("\nMouse up event:")
         if not self.dragging:
-            print("Not dragging, ignoring")
+            if DEBUG:
+                print("Not dragging, ignoring")
             return True
             
         # Adjust pos for menu bar
         adjusted_pos = (pos[0], pos[1] - MENU_HEIGHT)
-        print(f"Adjusted position: {adjusted_pos}")
+        if DEBUG:
+            print(f"Adjusted position: {adjusted_pos}")
         
         result = self.get_pile_at_pos(adjusted_pos)
         if result:
             pile, _ = result
-            print(f"Found pile at position: {pile}")
+            if DEBUG:
+                print(f"Found pile at position: {pile}")
             if pile != self.selected_pile:
-                print(f"Attempting to move from {self.selected_pile} to {pile}")
+                if DEBUG:
+                    print(f"Attempting to move from {self.selected_pile} to {pile}")
                 if self.move_cards(self.selected_pile, pile, 
                                  self.selected_pile.index(self.selected_card)):
-                    print("Move successful")
+                    if DEBUG:
+                        print("Move successful")
                     self.selected_card = None
                     self.selected_pile = None
                     self.selected_cards = []
                 else:
-                    print("Move failed, returning card to original position")
+                    if DEBUG:
+                        print("Move failed, returning card to original position")
                     # Return cards to original position
                     if self.selected_pile in self.tableau_piles:
                         pile_index = self.tableau_piles.index(self.selected_pile)
@@ -463,7 +480,8 @@ class Solitaire:
                         y = 400
                     self.selected_card.rect.topleft = (x, y)
         else:
-            print("No pile found at position")
+            if DEBUG:
+                print("No pile found at position")
         
         self.dragging = False
         self.selected_card = None
