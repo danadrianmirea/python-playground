@@ -729,8 +729,32 @@ class Solitaire:
                         if DEBUG:
                             print("No valid foundation pile found")
                 # Handle other piles (tableau and foundation)
-                elif index >= 0 and pile[index].face_up and index == len(pile) - 1:
-                    card = pile[index]
+                elif index >= 0 and pile[index].face_up:
+                    # For tableau piles, calculate the exact card clicked based on y-position
+                    if pile in self.tableau_piles:
+                        pile_x = int(50 * SCALE_FACTOR) + self.tableau_piles.index(pile) * TABLEAU_SPACING
+                        clicked_y = adjusted_pos[1]
+                        base_y = int(110 * SCALE_FACTOR)
+                        
+                        # Calculate which card was actually clicked based on y-position
+                        clicked_index = (clicked_y - base_y) // CARD_SPACING
+                        if clicked_index < 0:
+                            clicked_index = 0
+                        if clicked_index >= len(pile):
+                            clicked_index = len(pile) - 1
+                            
+                        # Only proceed if we clicked on the last face-up card
+                        last_face_up_index = -1
+                        for i, card in enumerate(pile):
+                            if card.face_up:
+                                last_face_up_index = i
+                        if clicked_index != last_face_up_index:
+                            return False
+                            
+                        card = pile[clicked_index]
+                    else:
+                        card = pile[index]
+                        
                     if DEBUG:
                         print(f"\nDouble-click detected on {card.value} of {card.suit}")
                     
@@ -740,7 +764,7 @@ class Solitaire:
                         if DEBUG:
                             print("Moving card to foundation pile")
                         # Move the card to the foundation pile
-                        if self.move_cards(pile, target_pile, index):
+                        if self.move_cards(pile, target_pile, pile.index(card)):
                             # Reset the last click time after successful move
                             self.last_click_time = 0
                             return True
