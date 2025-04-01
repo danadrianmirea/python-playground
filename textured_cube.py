@@ -23,14 +23,8 @@ surfaces = (
     (4,0,3,6)
 )
 
-texture_filenames = (
-    'texture.jpg',
-    'texture.jpg',
-    'texture.jpg',
-    'texture.jpg',
-    'texture.jpg',
-    'texture.jpg'
-)
+TEXTURE="assets/texture.jpg"
+texture_filenames = (TEXTURE, TEXTURE, TEXTURE, TEXTURE, TEXTURE, TEXTURE)
 
 def LoadTexture():
     """Loads textures and returns a list of texture IDs."""
@@ -51,20 +45,33 @@ def LoadTexture():
 
 def Cube(texture_ids):
     """Draws the textured cube."""
-    glBegin(GL_QUADS)
+    # Define texture coordinates for a proper square mapping
+    texcoords = [
+        (0.0, 0.0),  # Bottom-left
+        (1.0, 0.0),  # Bottom-right
+        (1.0, 1.0),  # Top-right
+        (0.0, 1.0)   # Top-left
+    ]
+    
     for surface_index, surface in enumerate(surfaces):
         glBindTexture(GL_TEXTURE_2D, texture_ids[surface_index])
-        x = 0
-        for vertex in surface:
-            glTexCoord2f(x / 2, x / 2)
+        glBegin(GL_QUADS)
+        for vertex_index, vertex in enumerate(surface):
+            glTexCoord2f(*texcoords[vertex_index])
             glVertex3fv(vertices[vertex])
-            x += 1
-    glEnd()
+        glEnd()
 
 def main():
     pygame.init()
     display = (800,600)
     pygame.display.set_mode(display, DOUBLEBUF|OPENGL)
+    
+    # Initialize OpenGL state
+    glEnable(GL_DEPTH_TEST)
+    glEnable(GL_TEXTURE_2D)
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    
     gluPerspective(45, (display[0]/display[1]), 0.1, 50.0)
     glTranslatef(0.0,0.0, -5)
 
