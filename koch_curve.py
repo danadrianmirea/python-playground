@@ -58,12 +58,13 @@ def koch_points(p1, p2, iteration):
     
     return points1[:-1] + points2[:-1] + points3[:-1] + points4
 
-def main():
+def main(wait_for_input=True):
     clock = pygame.time.Clock()
-    current_iteration = 1
-    max_iterations = 40
-    points_per_frame = 2
+    current_iteration = 1  # Start from iteration 1
+    max_iterations = 10
+    target_time_per_iteration = 3.0  # Target time in seconds for each iteration
     start_time = time.time()
+    delay_start_time = None  # Track when delay started
     
     # Calculate the initial triangle points
     center_x = WIDTH // 2
@@ -78,6 +79,7 @@ def main():
     # Initialize the points list for the current iteration
     current_points = []
     current_point_index = 0
+    points_per_frame = 1  # Initialize with a default value
     
     running = True
     waiting_for_input = False
@@ -105,17 +107,22 @@ def main():
                 points2 = koch_points(p2, p3, current_iteration - 1)
                 points3 = koch_points(p3, p1, current_iteration - 1)
                 current_points = points1[:-1] + points2[:-1] + points3[:-1] + [p1]
+            
+            # Calculate points_per_frame based on total points and target time
+            total_points = len(current_points)
+            frames_per_iteration = int(target_time_per_iteration * 60)  # 60 FPS
+            points_per_frame = max(1, int(total_points / frames_per_iteration))
         
         # Draw the current points
         if current_points:
             # Draw the lines up to the current point
-            for i in range(min(current_point_index, len(current_points) - 1)):
+            for i in range(min(int(current_point_index), len(current_points) - 1)):
                 pygame.draw.line(screen, WHITE, current_points[i], current_points[i+1], 1)
             
             # Draw the current point
             if current_point_index < len(current_points) - 1:
-                pygame.draw.line(screen, WHITE, current_points[current_point_index], 
-                               current_points[current_point_index + 1], 1)
+                pygame.draw.line(screen, WHITE, current_points[int(current_point_index)], 
+                               current_points[int(current_point_index) + 1], 1)
             
             # Update the current point index
             current_point_index += points_per_frame
@@ -127,7 +134,18 @@ def main():
                 pygame.draw.line(screen, WHITE, current_points[-2], current_points[-1], 1)
                 # Fill the interior with green
                 pygame.draw.polygon(screen, GREEN, current_points)
-                waiting_for_input = True
+                if wait_for_input:
+                    waiting_for_input = True
+                else:
+                    # Start the delay if not already started
+                    if delay_start_time is None:
+                        delay_start_time = time.time()
+                    # Check if 3 seconds have passed
+                    if time.time() - delay_start_time >= 3.0:
+                        current_iteration += 1
+                        current_points = []
+                        current_point_index = 0
+                        delay_start_time = None  # Reset delay timer
         
         # Draw debug information
         elapsed_time = time.time() - start_time
@@ -141,6 +159,8 @@ def main():
         
         if waiting_for_input:
             debug_info.append("Press SPACE to continue to next iteration")
+        elif current_iteration <= max_iterations:
+            debug_info.append("Auto-advancing to next iteration")
         
         for i, text in enumerate(debug_info):
             text_surface = font.render(text, True, RED)
@@ -151,5 +171,7 @@ def main():
     
     pygame.quit()
 
+WAIT_FOR_INPUT=False
+
 if __name__ == "__main__":
-    main() 
+    main(WAIT_FOR_INPUT)  # You can change this to False to disable waiting 
