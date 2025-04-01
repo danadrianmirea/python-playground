@@ -23,6 +23,8 @@ MAX_HORIZONTAL_DISTANCE = 200  # Maximum horizontal distance between platforms
 MAX_JUMP_HEIGHT = abs(JUMP_FORCE * JUMP_FORCE / (2 * GRAVITY))  # Maximum height player can jump
 PLATFORM_BUFFER = 10  # Number of platforms to generate in advance
 COIN_SIZE = 15  # Size of the coin circle
+SPEED_INCREASE_THRESHOLD = 100  # Score threshold for speed increase
+SPEED_INCREASE_AMOUNT = 1  # Amount to increase base speed by
 
 # Colors
 WHITE = (255, 255, 255)
@@ -232,6 +234,11 @@ class Game:
                 # Jump with space, W, or up arrow
                 if event.key in (pygame.K_SPACE, pygame.K_w, pygame.K_UP):
                     self.player.jump()
+
+        # Increase base scroll speed when score reaches threshold
+        if self.score >= SPEED_INCREASE_THRESHOLD:
+            global BASE_SCROLL_SPEED
+            BASE_SCROLL_SPEED = 3  # Increased from 2 to 3
 
         # Update scroll speed based on player position
         self.update_scroll_speed()
