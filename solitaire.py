@@ -45,6 +45,8 @@ WHITE = (255, 255, 255)
 GREEN = (0, 128, 0)
 GRAY = (200, 200, 200)
 BLUE = (0, 0, 255)
+LIGHT_GRAY = (220, 220, 220)
+DARK_GRAY = (180, 180, 180)
 
 # Load card back image
 CARD_BACK = pygame.image.load("assets/cards/card_back_red.png")
@@ -85,35 +87,68 @@ class Menu:
         self.active_menu = None
         self.menu_rects = {}
         self.item_rects = {}
+        self.padding = int(10 * SCALE_FACTOR)  # Padding around menu items
         
     def draw(self, screen):
         # Draw menu bar background
         pygame.draw.rect(screen, GRAY, (0, 0, WINDOW_WIDTH, MENU_HEIGHT))
         
         # Draw menu items
-        x = int(10 * SCALE_FACTOR)
+        x = self.padding
         for menu_name in self.menu_items:
             text = self.font.render(menu_name, True, BLACK)
-            rect = text.get_rect(topleft=(x, int(5 * SCALE_FACTOR)))
-            screen.blit(text, rect)
-            self.menu_rects[menu_name] = rect
-            x += int(100 * SCALE_FACTOR)
+            text_rect = text.get_rect(topleft=(x, int(5 * SCALE_FACTOR)))
+            
+            # Draw menu item background with padding
+            menu_rect = pygame.Rect(
+                x - self.padding,
+                0,
+                text_rect.width + 2 * self.padding,
+                MENU_HEIGHT
+            )
+            pygame.draw.rect(screen, GRAY, menu_rect)
+            pygame.draw.rect(screen, BLACK, menu_rect, 1)  # Add border
+            
+            screen.blit(text, text_rect)
+            self.menu_rects[menu_name] = menu_rect
+            x += text_rect.width + 2 * self.padding + int(20 * SCALE_FACTOR)  # Add spacing between menu items
             
         # Draw active menu if any
         if self.active_menu:
             menu_y = MENU_HEIGHT
-            # Draw background for menu items
-            menu_width = int(150 * SCALE_FACTOR)  # Width of the menu
-            menu_height = len(self.menu_items[self.active_menu]) * int(25 * SCALE_FACTOR)
-            pygame.draw.rect(screen, GRAY, (0, menu_y, menu_width, menu_height))
-            
-            # Draw menu items
+            # Calculate menu width based on longest item
+            max_width = 0
             for item in self.menu_items[self.active_menu]:
                 text = self.font.render(item, True, BLACK)
-                rect = text.get_rect(topleft=(int(10 * SCALE_FACTOR), menu_y))
-                screen.blit(text, rect)
-                self.item_rects[item] = rect
-                menu_y += int(25 * SCALE_FACTOR)
+                max_width = max(max_width, text.get_width())
+            
+            # Add padding to width
+            menu_width = max_width + 2 * self.padding
+            menu_height = len(self.menu_items[self.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.padding)
+            
+            # Draw menu background
+            menu_rect = pygame.Rect(0, menu_y, menu_width, menu_height)
+            pygame.draw.rect(screen, GRAY, menu_rect)
+            pygame.draw.rect(screen, BLACK, menu_rect, 1)  # Add border
+            
+            # Draw menu items with padding
+            item_y = menu_y + self.padding
+            for item in self.menu_items[self.active_menu]:
+                text = self.font.render(item, True, BLACK)
+                text_rect = text.get_rect(topleft=(self.padding, item_y))
+                
+                # Draw item background with padding
+                item_rect = pygame.Rect(
+                    self.padding,
+                    item_y - self.padding,
+                    menu_width - 2 * self.padding,
+                    int(25 * SCALE_FACTOR) + 2 * self.padding
+                )
+                pygame.draw.rect(screen, GRAY, item_rect)
+                
+                screen.blit(text, text_rect)
+                self.item_rects[item] = item_rect
+                item_y += int(25 * SCALE_FACTOR) + 2 * self.padding
                 
     def handle_click(self, pos):
         x, y = pos
@@ -128,8 +163,14 @@ class Menu:
         # Check if clicking on menu items
         if self.active_menu and y >= MENU_HEIGHT:
             # Check if click is within menu bounds
-            menu_width = int(150 * SCALE_FACTOR)
-            menu_height = len(self.menu_items[self.active_menu]) * int(25 * SCALE_FACTOR)
+            max_width = 0
+            for item in self.menu_items[self.active_menu]:
+                text = self.font.render(item, True, BLACK)
+                max_width = max(max_width, text.get_width())
+            
+            menu_width = max_width + 2 * self.padding
+            menu_height = len(self.menu_items[self.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.padding)
+            
             if x < menu_width and y < MENU_HEIGHT + menu_height:
                 for item, rect in self.item_rects.items():
                     if rect.collidepoint(pos):
@@ -140,6 +181,74 @@ class Menu:
                     
         return None
 
+class PopupDialog:
+    def __init__(self, message: str, yes_text: str = "Yes", no_text: str = "No"):
+        self.font = pygame.font.Font(None, int(32 * SCALE_FACTOR))
+        self.button_font = pygame.font.Font(None, int(24 * SCALE_FACTOR))
+        self.message = message
+        self.yes_text = yes_text
+        self.no_text = no_text
+        
+        # Calculate popup dimensions
+        self.width = int(400 * SCALE_FACTOR)
+        self.height = int(200 * SCALE_FACTOR)
+        self.x = (WINDOW_WIDTH - self.width) // 2
+        self.y = (WINDOW_HEIGHT - self.height) // 2
+        
+        # Create button rectangles
+        button_width = int(100 * SCALE_FACTOR)
+        button_height = int(40 * SCALE_FACTOR)
+        button_y = self.y + self.height - button_height - int(20 * SCALE_FACTOR)
+        
+        self.yes_button = pygame.Rect(
+            self.x + self.width//2 - button_width - int(20 * SCALE_FACTOR),
+            button_y,
+            button_width,
+            button_height
+        )
+        
+        self.no_button = pygame.Rect(
+            self.x + self.width//2 + int(20 * SCALE_FACTOR),
+            button_y,
+            button_width,
+            button_height
+        )
+        
+    def draw(self, screen):
+        # Draw semi-transparent overlay
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        overlay.fill(BLACK)
+        overlay.set_alpha(128)
+        screen.blit(overlay, (0, 0))
+        
+        # Draw popup background
+        pygame.draw.rect(screen, WHITE, (self.x, self.y, self.width, self.height))
+        pygame.draw.rect(screen, BLACK, (self.x, self.y, self.width, self.height), 2)
+        
+        # Draw message
+        text = self.font.render(self.message, True, BLACK)
+        text_rect = text.get_rect(center=(self.x + self.width//2, self.y + self.height//3))
+        screen.blit(text, text_rect)
+        
+        # Draw buttons
+        pygame.draw.rect(screen, LIGHT_GRAY, self.yes_button)
+        pygame.draw.rect(screen, LIGHT_GRAY, self.no_button)
+        pygame.draw.rect(screen, BLACK, self.yes_button, 1)
+        pygame.draw.rect(screen, BLACK, self.no_button, 1)
+        
+        yes_text = self.button_font.render(self.yes_text, True, BLACK)
+        no_text = self.button_font.render(self.no_text, True, BLACK)
+        
+        screen.blit(yes_text, yes_text.get_rect(center=self.yes_button.center))
+        screen.blit(no_text, no_text.get_rect(center=self.no_button.center))
+        
+    def handle_click(self, pos):
+        if self.yes_button.collidepoint(pos):
+            return "yes"
+        elif self.no_button.collidepoint(pos):
+            return "no"
+        return None
+
 class Solitaire:
     def __init__(self):
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -148,6 +257,7 @@ class Solitaire:
         self.menu = Menu()
         self.last_drawn_card = None  # Track the last drawn card
         self.last_click_time = 0  # Track last click time for double-click detection
+        self.popup = None  # Track current popup dialog
         self.reset_game()
         
     def reset_game(self):
@@ -374,6 +484,11 @@ class Solitaire:
             
         if DEBUG:
             print("Move successful")
+            
+        # Check for win condition after moving a card to foundation
+        if target_pile in self.foundation_piles and self.check_win():
+            self.show_win_popup()
+            
         return True
         
     def draw(self):
@@ -448,6 +563,10 @@ class Solitaire:
         
         # Draw menu
         self.menu.draw(self.screen)
+        
+        # Draw popup if active
+        if self.popup:
+            self.popup.draw(self.screen)
             
         pygame.display.flip()
         
@@ -780,6 +899,17 @@ class Solitaire:
             self.last_click_time = current_time
             return False
 
+    def check_win(self) -> bool:
+        """Check if the game has been won (all foundation piles have a king)."""
+        for pile in self.foundation_piles:
+            if not pile or pile[-1].value != 'king':
+                return False
+        return True
+
+    def show_win_popup(self):
+        """Show the win popup dialog."""
+        self.popup = PopupDialog("Congratulations! You won!", "Play Again", "Quit")
+
     def run(self):
         running = True
         while running:
@@ -788,6 +918,16 @@ class Solitaire:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:  # Left click
+                        # Handle popup if active
+                        if self.popup:
+                            result = self.popup.handle_click(event.pos)
+                            if result == "yes":
+                                self.reset_game()
+                                self.popup = None
+                            elif result == "no":
+                                running = False
+                            continue
+                            
                         # First check for menu clicks
                         menu_result = self.menu.handle_click(event.pos)
                         if menu_result:
