@@ -5,6 +5,7 @@ import numpy as np
 import pycuda.autoinit
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
+import random
 
 # Initialize Pygame
 pygame.init()
@@ -17,8 +18,13 @@ GREEN = (0, 255, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 ITERATION_DELAY_TIME=1
-START_ITERATION=2
-MAX_ITERATIONS=8
+START_ITERATION=4
+MAX_ITERATIONS=5
+USE_VARIATION = False  # Global flag to control whether to use random variations
+
+# Random variation parameters
+SPLIT_RATIO = random.uniform(0.2, 0.8) if USE_VARIATION else 0.5  # Controls where the middle segment splits
+ANGLE_VARIATION = random.uniform(-0.5, 0.5) if USE_VARIATION else 0.0  # Controls the angle of the middle segment (in radians)
 
 # Set up the display
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -33,7 +39,8 @@ extern "C" {
 
 __device__ void koch_points_gpu(float* points, int* point_count, 
                               float x1, float y1, float x2, float y2, 
-                              int iteration, int max_points) {
+                              int iteration, int max_points,
+                              float split_ratio, float angle_variation) {
     if (iteration == 0) {
         if (*point_count < max_points - 1) {
             points[*point_count * 2] = x1;
@@ -57,31 +64,36 @@ __device__ void koch_points_gpu(float* points, int* point_count,
     float length = sqrtf(dx*dx + dy*dy);
     float height = sqrtf(3.0f) * length / 2.0f;
     
-    float mid_x = (x1 + x2) / 2.0f;
-    float mid_y = (y1 + y2) / 2.0f;
-    float peak_x = mid_x + perp_x * height / length;
-    float peak_y = mid_y + perp_y * height / length;
+    // Apply split ratio and angle variation
+    float mid_x = x1 + (x2 - x1) * split_ratio;
+    float mid_y = y1 + (y2 - y1) * split_ratio;
     
-    koch_points_gpu(points, point_count, x1, y1, p1_third_x, p1_third_y, iteration - 1, max_points);
-    koch_points_gpu(points, point_count, p1_third_x, p1_third_y, peak_x, peak_y, iteration - 1, max_points);
-    koch_points_gpu(points, point_count, peak_x, peak_y, p2_third_x, p2_third_y, iteration - 1, max_points);
-    koch_points_gpu(points, point_count, p2_third_x, p2_third_y, x2, y2, iteration - 1, max_points);
+    // Calculate the peak point with angle variation
+    float angle = atan2f(perp_y, perp_x) + angle_variation;
+    float peak_x = mid_x + cosf(angle) * height;
+    float peak_y = mid_y + sinf(angle) * height;
+    
+    koch_points_gpu(points, point_count, x1, y1, p1_third_x, p1_third_y, iteration - 1, max_points, split_ratio, angle_variation);
+    koch_points_gpu(points, point_count, p1_third_x, p1_third_y, peak_x, peak_y, iteration - 1, max_points, split_ratio, angle_variation);
+    koch_points_gpu(points, point_count, peak_x, peak_y, p2_third_x, p2_third_y, iteration - 1, max_points, split_ratio, angle_variation);
+    koch_points_gpu(points, point_count, p2_third_x, p2_third_y, x2, y2, iteration - 1, max_points, split_ratio, angle_variation);
 }
 
 __global__ void compute_koch_curve(float* points, int* point_count,
                                  float p1_x, float p1_y,
                                  float p2_x, float p2_y,
                                  float p3_x, float p3_y,
-                                 int iteration, int max_points) {
+                                 int iteration, int max_points,
+                                 float split_ratio, float angle_variation) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx == 0) {
         *point_count = 0;
         // First side
-        koch_points_gpu(points, point_count, p1_x, p1_y, p2_x, p2_y, iteration, max_points);
+        koch_points_gpu(points, point_count, p1_x, p1_y, p2_x, p2_y, iteration, max_points, split_ratio, angle_variation);
         // Second side
-        koch_points_gpu(points, point_count, p2_x, p2_y, p3_x, p3_y, iteration, max_points);
+        koch_points_gpu(points, point_count, p2_x, p2_y, p3_x, p3_y, iteration, max_points, split_ratio, angle_variation);
         // Third side
-        koch_points_gpu(points, point_count, p3_x, p3_y, p1_x, p1_y, iteration, max_points);
+        koch_points_gpu(points, point_count, p3_x, p3_y, p1_x, p1_y, iteration, max_points, split_ratio, angle_variation);
         // Add the closing point
         if (*point_count < max_points) {
             points[*point_count * 2] = p1_x;
@@ -133,10 +145,14 @@ def compute_koch_curve_cpu(p1, p2, p3, iteration):
         length = math.sqrt(dx*dx + dy*dy)
         height = math.sqrt(3) * length / 2
         
-        mid_x = (x1 + x2) / 2
-        mid_y = (y1 + y2) / 2
-        peak_x = mid_x + perp_x * height / length
-        peak_y = mid_y + perp_y * height / length
+        # Apply split ratio and angle variation
+        mid_x = x1 + (x2 - x1) * SPLIT_RATIO
+        mid_y = y1 + (y2 - y1) * SPLIT_RATIO
+        
+        # Calculate the peak point with angle variation
+        angle = math.atan2(perp_y, perp_x) + ANGLE_VARIATION
+        peak_x = mid_x + math.cos(angle) * height
+        peak_y = mid_y + math.sin(angle) * height
         
         points1 = koch_points(p1, p1_third, iteration - 1)
         points2 = koch_points(p1_third, (peak_x, peak_y), iteration - 1)
@@ -163,13 +179,14 @@ def compute_koch_curve_gpu(p1, p2, p3, iteration):
     p2_x, p2_y = p2
     p3_x, p3_y = p3
     
-    # Launch kernel
+    # Launch kernel with split ratio and angle variation
     compute_koch_curve_kernel(
         points_gpu, point_count_gpu,
         np.float32(p1_x), np.float32(p1_y),
         np.float32(p2_x), np.float32(p2_y),
         np.float32(p3_x), np.float32(p3_y),
         np.int32(iteration), np.int32(max_points),
+        np.float32(SPLIT_RATIO), np.float32(ANGLE_VARIATION),
         block=(1, 1, 1), grid=(1, 1)
     )
     
@@ -193,6 +210,16 @@ def compute_koch_curve_gpu(p1, p2, p3, iteration):
     return points
 
 def main(wait_for_input=True):
+    # Declare global variables
+    global SPLIT_RATIO, ANGLE_VARIATION
+    
+    # Print the random variation parameters
+    if USE_VARIATION:
+        print(f"Using split ratio: {SPLIT_RATIO:.3f}")
+        print(f"Using angle variation: {ANGLE_VARIATION:.3f} radians")
+    else:
+        print("Using standard Koch curve parameters (no variations)")
+    
     clock = pygame.time.Clock()
     current_iteration = START_ITERATION
     max_iterations = MAX_ITERATIONS
@@ -215,17 +242,31 @@ def main(wait_for_input=True):
     
     running = True
     waiting_for_input = False
+    waiting_for_new_curve = False
     
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            elif event.type == pygame.KEYDOWN and waiting_for_input:
-                if event.key == pygame.K_SPACE:
-                    waiting_for_input = False
-                    current_iteration += 1
-                    current_points = []
-                    current_point_index = 0
+            elif event.type == pygame.KEYDOWN:
+                if waiting_for_input:
+                    if event.key == pygame.K_SPACE:
+                        waiting_for_input = False
+                        current_iteration += 1
+                        current_points = []
+                        current_point_index = 0
+                elif waiting_for_new_curve:
+                    if event.key == pygame.K_SPACE:
+                        # Generate new random parameters only if variations are enabled
+                        if USE_VARIATION:
+                            SPLIT_RATIO = random.uniform(0.2, 0.8)
+                            ANGLE_VARIATION = random.uniform(-0.5, 0.5)
+                            print(f"New split ratio: {SPLIT_RATIO:.3f}")
+                            print(f"New angle variation: {ANGLE_VARIATION:.3f} radians")
+                        current_iteration = START_ITERATION
+                        waiting_for_new_curve = False
+                        current_points = []
+                        current_point_index = 0
         
         screen.fill(BLACK)
         
@@ -272,13 +313,17 @@ def main(wait_for_input=True):
                     if delay_start_time is None:
                         delay_start_time = time.time()
                     if time.time() - delay_start_time >= ITERATION_DELAY_TIME:
-                        current_iteration += 1
-                        current_points = []
-                        current_point_index = 0
-                        delay_start_time = None
-        
+                        if current_iteration < max_iterations:
+                            current_iteration += 1
+                            current_points = []
+                            current_point_index = 0
+                            delay_start_time = None
+                        else:
+                            waiting_for_new_curve = True
+            
             if current_iteration > max_iterations:
-                current_iteration = 1    
+                # Wait for space key press before generating new curve
+                waiting_for_new_curve = True
 
         # Draw debug information
         elapsed_time = time.time() - start_time
@@ -288,11 +333,20 @@ def main(wait_for_input=True):
             f"Current Point: {current_point_index}/{len(current_points) if current_points else 0}",
             f"Time: {elapsed_time:.1f}s",
             f"Points per Frame: {points_per_frame}",
-            f"{'GPU' if USE_GPU else 'CPU'} Accelerated"
+            f"{'GPU' if USE_GPU else 'CPU'} Accelerated",
+            f"{'Variations Enabled' if USE_VARIATION else 'Standard Koch Curve'}"
         ]
+        
+        if USE_VARIATION:
+            debug_info.extend([
+                f"Split Ratio: {SPLIT_RATIO:.3f}",
+                f"Angle Variation: {ANGLE_VARIATION:.3f} rad"
+            ])
         
         if waiting_for_input:
             debug_info.append("Press SPACE to continue to next iteration")
+        elif waiting_for_new_curve:
+            debug_info.append("Press SPACE to generate new curve")
         elif current_iteration <= max_iterations:
             debug_info.append("Auto-advancing to next iteration")
         
