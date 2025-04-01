@@ -1,31 +1,55 @@
 import pygame
 import random
 import sys
+import ctypes
 
 # Initialize Pygame
 pygame.init()
 
-# Constants
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-PLAYER_SIZE = 40
-PLATFORM_HEIGHT = 20
-PLATFORM_MIN_WIDTH = 100
-PLATFORM_MAX_WIDTH = 200
-GRAVITY = 0.8
-JUMP_FORCE = -15
-BASE_SCROLL_SPEED = 1
-MAX_SCROLL_SPEED_INC = 5
+# Get the user's screen dimensions
+user32 = ctypes.windll.user32
+SCREEN_WIDTH = user32.GetSystemMetrics(0)  # Width
+SCREEN_HEIGHT = user32.GetSystemMetrics(1)  # Height
+
+# Calculate the maximum game dimensions while accounting for window decorations and taskbar
+# Assuming taskbar is 40px and window decorations are 30px
+TASKBAR_HEIGHT = 40
+WINDOW_DECORATIONS = 30
+MAX_GAME_HEIGHT = SCREEN_HEIGHT - TASKBAR_HEIGHT - WINDOW_DECORATIONS
+MAX_GAME_WIDTH = SCREEN_WIDTH - WINDOW_DECORATIONS
+
+# Base game dimensions (original size)
+BASE_WIDTH = 800
+BASE_HEIGHT = 600
+
+# Calculate scaling factor while maintaining aspect ratio
+width_scale = MAX_GAME_WIDTH / BASE_WIDTH
+height_scale = MAX_GAME_HEIGHT / BASE_HEIGHT
+SCALE_FACTOR = min(width_scale, height_scale)
+
+# Scaled game dimensions
+GAME_WIDTH = int(BASE_WIDTH * SCALE_FACTOR)
+GAME_HEIGHT = int(BASE_HEIGHT * SCALE_FACTOR)
+
+# Scale all game constants
+PLAYER_SIZE = int(40 * SCALE_FACTOR)
+PLATFORM_HEIGHT = int(20 * SCALE_FACTOR)
+PLATFORM_MIN_WIDTH = int(100 * SCALE_FACTOR)
+PLATFORM_MAX_WIDTH = int(200 * SCALE_FACTOR)
+GRAVITY = 0.8 * SCALE_FACTOR
+JUMP_FORCE = -15 * SCALE_FACTOR
+BASE_SCROLL_SPEED = 1 * SCALE_FACTOR
+MAX_SCROLL_SPEED_INC = 5 * SCALE_FACTOR
 MAX_SCROLL_SPEED = BASE_SCROLL_SPEED + MAX_SCROLL_SPEED_INC
-SCROLL_SPEED_INCREASE_RATE = 0.1  # How quickly scroll speed increases
-SCROLL_SPEED_DECREASE_RATE = 0.05  # How quickly scroll speed decreases
-PLATFORM_SPACING = 100  # Reduced from 150 to ensure platforms are reachable
-MAX_HORIZONTAL_DISTANCE = 200  # Maximum horizontal distance between platforms
-MAX_JUMP_HEIGHT = abs(JUMP_FORCE * JUMP_FORCE / (2 * GRAVITY))  # Maximum height player can jump
-PLATFORM_BUFFER = 10  # Number of platforms to generate in advance
-COIN_SIZE = 15  # Size of the coin circle
-SPEED_INCREASE_THRESHOLD = 100  # Score threshold for speed increase
-SPEED_INCREASE_AMOUNT = 1  # Amount to increase base speed by
+SCROLL_SPEED_INCREASE_RATE = 0.1 * SCALE_FACTOR
+SCROLL_SPEED_DECREASE_RATE = 0.05 * SCALE_FACTOR
+PLATFORM_SPACING = int(100 * SCALE_FACTOR)
+MAX_HORIZONTAL_DISTANCE = int(200 * SCALE_FACTOR)
+MAX_JUMP_HEIGHT = abs(JUMP_FORCE * JUMP_FORCE / (2 * GRAVITY))
+PLATFORM_BUFFER = 10
+COIN_SIZE = int(15 * SCALE_FACTOR)
+SPEED_INCREASE_THRESHOLD = 100
+SPEED_INCREASE_AMOUNT = 1 * SCALE_FACTOR
 
 # Colors
 WHITE = (255, 255, 255)
@@ -144,18 +168,18 @@ class Platform:
 
 class Game:
     def __init__(self):
-        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+        self.screen = pygame.display.set_mode((GAME_WIDTH, GAME_HEIGHT), pygame.RESIZABLE)
         pygame.display.set_caption("Infinite Jumper")
         self.clock = pygame.time.Clock()
         self.scroll_speed = BASE_SCROLL_SPEED
-        self.current_level = 1  # Add level tracking
+        self.current_level = 1
         self.reset_game()
 
     def reset_game(self):
         # Create initial platform exactly in the center of the screen
         initial_platform = Platform(
-            (SCREEN_WIDTH - PLATFORM_MIN_WIDTH) // 2,  # Center horizontally
-            SCREEN_HEIGHT - SCREEN_WIDTH*0.33,  # Start closer to bottom
+            (GAME_WIDTH - PLATFORM_MIN_WIDTH) // 2,  # Center horizontally
+            GAME_HEIGHT - GAME_WIDTH*0.33,  # Start closer to bottom
             PLATFORM_MIN_WIDTH
         )
         
@@ -168,8 +192,8 @@ class Game:
         self.game_over = False
         self.score = 0
         self.coins_collected = 0
-        self.current_level = 1  # Reset level on game reset
-        self.font = pygame.font.Font(None, 36)
+        self.current_level = 1
+        self.font = pygame.font.Font(None, int(36 * SCALE_FACTOR))
         
         # Generate initial buffer of platforms
         for _ in range(PLATFORM_BUFFER):
@@ -181,7 +205,7 @@ class Game:
         
         # Calculate the maximum horizontal distance for the next platform
         min_x = max(0, current_platform.x - MAX_HORIZONTAL_DISTANCE)
-        max_x = min(SCREEN_WIDTH - PLATFORM_MIN_WIDTH, 
+        max_x = min(GAME_WIDTH - PLATFORM_MIN_WIDTH, 
                    current_platform.x + MAX_HORIZONTAL_DISTANCE)
         
         # Generate new platform position
@@ -189,8 +213,8 @@ class Game:
         width = random.randint(PLATFORM_MIN_WIDTH, PLATFORM_MAX_WIDTH)
         
         # Ensure the platform doesn't go off screen
-        if x + width > SCREEN_WIDTH:
-            x = SCREEN_WIDTH - width
+        if x + width > GAME_WIDTH:
+            x = GAME_WIDTH - width
         
         # Create the new platform at a fixed distance above the current highest platform
         new_platform = Platform(x, current_platform.y - PLATFORM_SPACING, width)
@@ -240,6 +264,13 @@ class Game:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+            elif event.type == pygame.VIDEORESIZE:
+                # Handle window resize
+                width, height = event.size
+                # Maintain aspect ratio
+                new_width = min(width, MAX_GAME_WIDTH)
+                new_height = min(height, MAX_GAME_HEIGHT)
+                self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
 
         # Check for held jump keys (space, W, or up arrow)
         keys = pygame.key.get_pressed()
@@ -303,7 +334,7 @@ class Game:
         
         if self.game_over:
             game_over_text = self.font.render("Game Over! Press R to restart", True, WHITE)
-            text_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            text_rect = game_over_text.get_rect(center=(GAME_WIDTH // 2, GAME_HEIGHT // 2))
             self.screen.blit(game_over_text, text_rect)
         
         pygame.display.flip()
