@@ -18,7 +18,7 @@ SCROLL_SPEED = 2
 PLATFORM_SPACING = 100  # Reduced from 150 to ensure platforms are reachable
 MAX_HORIZONTAL_DISTANCE = 200  # Maximum horizontal distance between platforms
 MAX_JUMP_HEIGHT = abs(JUMP_FORCE * JUMP_FORCE / (2 * GRAVITY))  # Maximum height player can jump
-PLATFORM_BUFFER = 5  # Number of platforms to generate in advance
+PLATFORM_BUFFER = 10  # Number of platforms to generate in advance
 
 # Colors
 WHITE = (255, 255, 255)
@@ -27,9 +27,9 @@ BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
 
 class Player:
-    def __init__(self):
-        self.x = SCREEN_WIDTH // 2
-        self.y = SCREEN_HEIGHT // 2
+    def __init__(self, start_x, start_y):
+        self.x = start_x
+        self.y = start_y
         self.velocity_y = 0
         self.velocity_x = 0
         self.is_jumping = False
@@ -98,19 +98,22 @@ class Game:
         self.reset_game()
 
     def reset_game(self):
-        self.player = Player()
-        self.platforms = []
+        # Create initial platform exactly in the center of the screen
+        initial_platform = Platform(
+            (SCREEN_WIDTH - PLATFORM_MIN_WIDTH) // 2,  # Center horizontally
+            SCREEN_HEIGHT - SCREEN_WIDTH*0.33,  # Start closer to bottom
+            PLATFORM_MIN_WIDTH
+        )
+        
+        # Initialize player on top of the initial platform
+        player_start_x = initial_platform.x + (initial_platform.width - PLAYER_SIZE) // 2
+        player_start_y = initial_platform.y - PLAYER_SIZE
+        self.player = Player(player_start_x, player_start_y)
+        
+        self.platforms = [initial_platform]
         self.game_over = False
         self.score = 0
         self.font = pygame.font.Font(None, 36)
-
-        # Create initial platform
-        initial_platform = Platform(
-            SCREEN_WIDTH // 2 - PLATFORM_MIN_WIDTH // 2,
-            SCREEN_HEIGHT - 100,  # Start closer to bottom
-            PLATFORM_MIN_WIDTH
-        )
-        self.platforms.append(initial_platform)
         
         # Generate initial buffer of platforms
         for _ in range(PLATFORM_BUFFER):
