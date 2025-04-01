@@ -14,8 +14,9 @@ PLATFORM_MIN_WIDTH = 100
 PLATFORM_MAX_WIDTH = 200
 GRAVITY = 0.8
 JUMP_FORCE = -15
-BASE_SCROLL_SPEED = 2
-MAX_SCROLL_SPEED = 5
+BASE_SCROLL_SPEED = 1
+MAX_SCROLL_SPEED_INC = 5
+MAX_SCROLL_SPEED = BASE_SCROLL_SPEED + MAX_SCROLL_SPEED_INC
 SCROLL_SPEED_INCREASE_RATE = 0.1  # How quickly scroll speed increases
 SCROLL_SPEED_DECREASE_RATE = 0.05  # How quickly scroll speed decreases
 PLATFORM_SPACING = 100  # Reduced from 150 to ensure platforms are reachable
@@ -140,6 +141,7 @@ class Game:
         pygame.display.set_caption("Infinite Jumper")
         self.clock = pygame.time.Clock()
         self.scroll_speed = BASE_SCROLL_SPEED
+        self.current_level = 1  # Add level tracking
         self.reset_game()
 
     def reset_game(self):
@@ -159,6 +161,7 @@ class Game:
         self.game_over = False
         self.score = 0
         self.coins_collected = 0
+        self.current_level = 1  # Reset level on game reset
         self.font = pygame.font.Font(None, 36)
         
         # Generate initial buffer of platforms
@@ -236,9 +239,11 @@ class Game:
                     self.player.jump()
 
         # Increase base scroll speed when score reaches threshold
-        if self.score >= SPEED_INCREASE_THRESHOLD:
+        if self.score >= SPEED_INCREASE_THRESHOLD*self.current_level:
             global BASE_SCROLL_SPEED
-            BASE_SCROLL_SPEED = 3  # Increased from 2 to 3
+            BASE_SCROLL_SPEED += SPEED_INCREASE_AMOUNT
+            MAX_SCROLL_SPEED = BASE_SCROLL_SPEED + MAX_SCROLL_SPEED_INC
+            self.current_level += 1  # Increment level when speed increases
 
         # Update scroll speed based on player position
         self.update_scroll_speed()
@@ -280,11 +285,13 @@ class Game:
         # Draw player
         self.player.draw(self.screen)
         
-        # Draw score and coins
+        # Draw score, coins, and level
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
         coins_text = self.font.render(f"Coins: {self.coins_collected}", True, YELLOW)
+        level_text = self.font.render(f"Level: {self.current_level}", True, WHITE)
         self.screen.blit(score_text, (10, 10))
         self.screen.blit(coins_text, (10, 50))
+        self.screen.blit(level_text, (10, 90))  # Add level display below coins
         
         if self.game_over:
             game_over_text = self.font.render("Game Over! Press R to restart", True, WHITE)
