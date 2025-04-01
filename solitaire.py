@@ -585,32 +585,48 @@ class Solitaire:
             
         # Handle card selection
         if (index >= 0 and pile[index].face_up) or (pile == self.waste_pile and pile):
-            self.selected_card = pile[-1] if pile == self.waste_pile else pile[index]
-            self.selected_pile = pile
-            
-            # For tableau piles, allow dragging multiple cards
+            # For tableau piles, only select the clicked card and cards below it
             if pile in self.tableau_piles:
-                self.selected_cards = pile[index:]
+                # Find the actual card that was clicked by checking the y-position
+                pile_x = int(50 * SCALE_FACTOR) + self.tableau_piles.index(pile) * TABLEAU_SPACING
+                clicked_y = adjusted_pos[1]
+                base_y = int(110 * SCALE_FACTOR)
+                
+                # Calculate which card was actually clicked based on y-position
+                clicked_index = (clicked_y - base_y) // CARD_SPACING
+                if clicked_index < 0:
+                    clicked_index = 0
+                if clicked_index >= len(pile):
+                    clicked_index = len(pile) - 1
+                    
+                # Only select if the card at this position is face up
+                if pile[clicked_index].face_up:
+                    self.selected_card = pile[clicked_index]
+                    self.selected_pile = pile
+                    self.selected_cards = pile[clicked_index:]
+                    self.dragging = True
+                    
+                    # Calculate offset from mouse position to card position
+                    card_x = pile_x
+                    card_y = base_y + clicked_index * CARD_SPACING
+                    self.drag_offset = (adjusted_pos[0] - card_x, adjusted_pos[1] - card_y)
             else:
                 # For waste and foundation piles, only allow dragging one card
+                self.selected_card = pile[-1]
+                self.selected_pile = pile
                 self.selected_cards = [self.selected_card]
+                self.dragging = True
                 
-            self.dragging = True
-            
-            # Calculate offset from mouse position to card position
-            if pile in self.tableau_piles:
-                pile_index = self.tableau_piles.index(pile)
-                card_x = int(50 * SCALE_FACTOR) + pile_index * TABLEAU_SPACING
-                card_y = int(110 * SCALE_FACTOR) + index * CARD_SPACING  # Adjusted from 100 to 110
-            elif pile in self.foundation_piles:
-                pile_index = self.foundation_piles.index(pile)
-                card_x = int(50 * SCALE_FACTOR) + pile_index * TABLEAU_SPACING
-                card_y = int(10 * SCALE_FACTOR)
-            else:  # waste pile
-                card_x = int(150 * SCALE_FACTOR)
-                card_y = int(450 * SCALE_FACTOR)
-                
-            self.drag_offset = (adjusted_pos[0] - card_x, adjusted_pos[1] - card_y)
+                # Calculate offset from mouse position to card position
+                if pile in self.foundation_piles:
+                    pile_index = self.foundation_piles.index(pile)
+                    card_x = int(50 * SCALE_FACTOR) + pile_index * TABLEAU_SPACING
+                    card_y = int(10 * SCALE_FACTOR)
+                else:  # waste pile
+                    card_x = int(150 * SCALE_FACTOR)
+                    card_y = int(450 * SCALE_FACTOR)
+                    
+                self.drag_offset = (adjusted_pos[0] - card_x, adjusted_pos[1] - card_y)
             
         return True
             
@@ -693,8 +709,27 @@ class Solitaire:
             result = self.get_pile_at_pos(adjusted_pos)
             if result:
                 pile, index = result
-                # Only allow double-clicking on the topmost card in a stack
-                if index >= 0 and pile[index].face_up and index == len(pile) - 1:
+                # Handle waste pile differently since it's a single-card display
+                if pile == self.waste_pile and pile:
+                    card = pile[-1]
+                    if DEBUG:
+                        print(f"\nDouble-click detected on waste pile card: {card.value} of {card.suit}")
+                    
+                    # Try to find a valid foundation pile
+                    target_pile = self.find_valid_foundation_pile(card)
+                    if target_pile:
+                        if DEBUG:
+                            print("Moving card to foundation pile")
+                        # Move the card to the foundation pile
+                        if self.move_cards(pile, target_pile, -1):
+                            # Reset the last click time after successful move
+                            self.last_click_time = 0
+                            return True
+                    else:
+                        if DEBUG:
+                            print("No valid foundation pile found")
+                # Handle other piles (tableau and foundation)
+                elif index >= 0 and pile[index].face_up and index == len(pile) - 1:
                     card = pile[index]
                     if DEBUG:
                         print(f"\nDouble-click detected on {card.value} of {card.suit}")
