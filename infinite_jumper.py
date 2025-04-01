@@ -32,7 +32,8 @@ COIN_REWARD = 5
 
 # Load sound effects
 try:
-    COIN_SOUND = pygame.mixer.Sound("coin.mp3")
+    COIN_SOUND = pygame.mixer.Sound("assets/coin.mp3")
+    COIN_SOUND.set_volume(0.7)  # Set volume to 70%
 except:
     print("Warning: Could not load coin.mp3 sound file")
 
