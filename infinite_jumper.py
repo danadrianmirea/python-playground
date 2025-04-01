@@ -19,12 +19,22 @@ PLATFORM_SPACING = 100  # Reduced from 150 to ensure platforms are reachable
 MAX_HORIZONTAL_DISTANCE = 200  # Maximum horizontal distance between platforms
 MAX_JUMP_HEIGHT = abs(JUMP_FORCE * JUMP_FORCE / (2 * GRAVITY))  # Maximum height player can jump
 PLATFORM_BUFFER = 10  # Number of platforms to generate in advance
+COIN_SIZE = 15  # Size of the coin circle
 
 # Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
+YELLOW = (255, 255, 0)
+
+COIN_REWARD = 5
+
+# Load sound effects
+try:
+    COIN_SOUND = pygame.mixer.Sound("coin.mp3")
+except:
+    print("Warning: Could not load coin.mp3 sound file")
 
 class Player:
     def __init__(self, start_x, start_y):
@@ -76,19 +86,40 @@ class Player:
     def draw(self, screen):
         pygame.draw.rect(screen, BLUE, self.rect)
 
-class Platform:
-    def __init__(self, x, y, width):
+class Coin:
+    def __init__(self, x, y):
         self.x = x
         self.y = y
-        self.width = width
-        self.rect = pygame.Rect(x, y, width, PLATFORM_HEIGHT)
+        self.rect = pygame.Rect(x, y, COIN_SIZE, COIN_SIZE)
+        self.collected = False
 
     def update(self):
         self.y += SCROLL_SPEED
         self.rect.y = self.y
 
     def draw(self, screen):
+        if not self.collected:
+            pygame.draw.circle(screen, YELLOW, (self.x + COIN_SIZE//2, self.y + COIN_SIZE//2), COIN_SIZE//2)
+
+class Platform:
+    def __init__(self, x, y, width):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.rect = pygame.Rect(x, y, width, PLATFORM_HEIGHT)
+        # Randomly decide if this platform has a coin
+        self.coin = Coin(x + random.randint(0, width - COIN_SIZE), y - COIN_SIZE) if random.random() < 0.3 else None
+
+    def update(self):
+        self.y += SCROLL_SPEED
+        self.rect.y = self.y
+        if self.coin:
+            self.coin.update()
+
+    def draw(self, screen):
         pygame.draw.rect(screen, GREEN, self.rect)
+        if self.coin:
+            self.coin.draw(screen)
 
 class Game:
     def __init__(self):
@@ -113,6 +144,7 @@ class Game:
         self.platforms = [initial_platform]
         self.game_over = False
         self.score = 0
+        self.coins_collected = 0
         self.font = pygame.font.Font(None, 36)
         
         # Generate initial buffer of platforms
@@ -139,6 +171,18 @@ class Game:
         # Create the new platform at a fixed distance above the current highest platform
         new_platform = Platform(x, current_platform.y - PLATFORM_SPACING, width)
         self.platforms.append(new_platform)
+
+    def check_coin_collision(self):
+        for platform in self.platforms:
+            if platform.coin and not platform.coin.collected:
+                if self.player.rect.colliderect(platform.coin.rect):
+                    platform.coin.collected = True
+                    self.coins_collected += 1
+                    self.score += COIN_REWARD
+                    try:
+                        COIN_SOUND.play()
+                    except:
+                        pass  # Ignore if sound couldn't be loaded
 
     def update(self):
         if self.game_over:
@@ -181,6 +225,9 @@ class Game:
                 self.platforms.remove(platform)
                 self.score += 1
 
+        # Check for coin collection
+        self.check_coin_collision()
+
         # Generate new platforms when we have fewer than PLATFORM_BUFFER platforms above the screen
         visible_platforms = [p for p in self.platforms if p.y > 0]
         if len(visible_platforms) < PLATFORM_BUFFER:
@@ -196,9 +243,11 @@ class Game:
         # Draw player
         self.player.draw(self.screen)
         
-        # Draw score
+        # Draw score and coins
         score_text = self.font.render(f"Score: {self.score}", True, WHITE)
+        coins_text = self.font.render(f"Coins: {self.coins_collected}", True, YELLOW)
         self.screen.blit(score_text, (10, 10))
+        self.screen.blit(coins_text, (10, 50))
         
         if self.game_over:
             game_over_text = self.font.render("Game Over! Press R to restart", True, WHITE)
