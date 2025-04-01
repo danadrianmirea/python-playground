@@ -55,6 +55,8 @@ class Player:
         self.is_jumping = False
         self.rect = pygame.Rect(self.x, self.y, PLAYER_SIZE, PLAYER_SIZE)
         self.speed = 5
+        self.jump_cooldown = 0  # Add jump cooldown timer
+        self.jump_cooldown_time = 10  # Frames to wait between jumps
 
     def update(self):
         # Apply gravity
@@ -78,10 +80,15 @@ class Player:
         self.rect.x = self.x
         self.rect.y = self.y
 
+        # Update jump cooldown
+        if self.jump_cooldown > 0:
+            self.jump_cooldown -= 1
+
     def jump(self):
-        if not self.is_jumping:
+        if not self.is_jumping and self.jump_cooldown == 0:
             self.velocity_y = JUMP_FORCE
             self.is_jumping = True
+            self.jump_cooldown = self.jump_cooldown_time
             try:
                 JUMP_SOUND.play()
             except:
@@ -233,10 +240,11 @@ class Game:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
-            if event.type == pygame.KEYDOWN:
-                # Jump with space, W, or up arrow
-                if event.key in (pygame.K_SPACE, pygame.K_w, pygame.K_UP):
-                    self.player.jump()
+
+        # Check for held jump keys (space, W, or up arrow)
+        keys = pygame.key.get_pressed()
+        if (keys[pygame.K_SPACE] or keys[pygame.K_w] or keys[pygame.K_UP]) and not self.player.is_jumping:
+            self.player.jump()
 
         # Increase base scroll speed when score reaches threshold
         if self.score >= SPEED_INCREASE_THRESHOLD*self.current_level:
