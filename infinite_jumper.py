@@ -34,8 +34,10 @@ COIN_REWARD = 5
 try:
     COIN_SOUND = pygame.mixer.Sound("assets/coin.mp3")
     COIN_SOUND.set_volume(0.7)  # Set volume to 70%
+    JUMP_SOUND = pygame.mixer.Sound("assets/jump.mp3")
+    JUMP_SOUND.set_volume(0.7)  # Set volume to 70%
 except:
-    print("Warning: Could not load coin.mp3 sound file")
+    print("Warning: Could not load sound files")
 
 class Player:
     def __init__(self, start_x, start_y):
@@ -73,6 +75,10 @@ class Player:
         if not self.is_jumping:
             self.velocity_y = JUMP_FORCE
             self.is_jumping = True
+            try:
+                JUMP_SOUND.play()
+            except:
+                pass  # Ignore if sound couldn't be loaded
 
     def check_collision(self, platform):
         if self.rect.colliderect(platform.rect):
