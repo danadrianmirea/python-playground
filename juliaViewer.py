@@ -12,6 +12,10 @@ TRANSPOSE_NUMBA_OUTPUT = True
 USE_GPU = True
 APPLY_SMOOTH_COLORING = True
 
+#c = -0.54 + 0.54i
+JULIA_REAL_PART=-0.4
+JULIA_IMAG_PART=0.6
+
 # Add Numba import for JIT compilation
 try:
     import numba
@@ -47,82 +51,82 @@ cl_buffer_y = None
 # OpenCL kernel code for Julia computation
 OPENCL_KERNEL = """
 // Color mapping utilities for the kernel
-float3 hsv_to_rgb(float h, float s, float v) {
-    float c = v * s;
-    float x = c * (1.0f - fabs(fmod(h * 6.0f, 2.0f) - 1.0f));
-    float m = v - c;  // Add this line to define m
+double3 hsv_to_rgb(double h, double s, double v) {
+    double c = v * s;
+    double x = c * (1.0 - fabs(fmod(h * 6.0, 2.0) - 1.0));
+    double m = v - c;
     
-    float3 rgb;
-    if (h < 1.0f/6.0f)
-        rgb = (float3)(c, x, 0.0f);
-    else if (h < 2.0f/6.0f)
-        rgb = (float3)(x, c, 0.0f);
-    else if (h < 3.0f/6.0f)
-        rgb = (float3)(0.0f, c, x);
-    else if (h < 4.0f/6.0f)
-        rgb = (float3)(0.0f, x, c);
-    else if (h < 5.0f/6.0f)
-        rgb = (float3)(x, 0.0f, c);
+    double3 rgb;
+    if (h < 1.0/6.0)
+        rgb = (double3)(c, x, 0.0);
+    else if (h < 2.0/6.0)
+        rgb = (double3)(x, c, 0.0);
+    else if (h < 3.0/6.0)
+        rgb = (double3)(0.0, c, x);
+    else if (h < 4.0/6.0)
+        rgb = (double3)(0.0, x, c);
+    else if (h < 5.0/6.0)
+        rgb = (double3)(x, 0.0, c);
     else
-        rgb = (float3)(c, 0.0f, x);
+        rgb = (double3)(c, 0.0, x);
     
-    return rgb + (float3)(m, m, m);
+    return rgb + (double3)(m, m, m);
 }
 
 // Apply log smoothing to normalized value
-float apply_log_smooth(float val) {
-    return log(val * 0.5f + 0.5f) / log(1.5f);
+double apply_log_smooth(double val) {
+    return log(val * 0.5 + 0.5) / log(1.5);
 }
 
 // Rainbow palette (mode 0)
-float3 rainbow_palette(float norm_iter, float shift) {
+double3 rainbow_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float phase = fmod((norm_iter * 3.0f) + shift, 1.0f);
+    double phase = fmod((norm_iter * 3.0) + shift, 1.0);
     
     // Convert phase to angle in radians (0 to 2π)
-    float angle = phase * 2.0f * M_PI;
+    double angle = phase * 2.0 * M_PI;
     
     // Calculate RGB components using sine waves (120° phase shifts)
-    float r = sin(angle) * 0.5f + 0.5f;
-    float g = sin(angle + 2.0f * M_PI / 3.0f) * 0.5f + 0.5f;
-    float b = sin(angle + 4.0f * M_PI / 3.0f) * 0.5f + 0.5f;
+    double r = sin(angle) * 0.5 + 0.5;
+    double g = sin(angle + 2.0 * M_PI / 3.0) * 0.5 + 0.5;
+    double b = sin(angle + 4.0 * M_PI / 3.0) * 0.5 + 0.5;
     
     // Scale to enhance colors
-    r = min(r * 1.5f, 1.0f);
-    g = min(g * 1.5f, 1.0f);
-    b = min(b * 1.5f, 1.0f);
+    r = min(r * 1.5, 1.0);
+    g = min(g * 1.5, 1.0);
+    b = min(b * 1.5, 1.0);
     
-    return (float3)(r, g, b);
+    return (double3)(r, g, b);
 }
 
 // Fire palette (mode 1)
-float3 fire_palette(float norm_iter, float shift) {
+double3 fire_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
-    float3 rgb = (float3)(0.0f, 0.0f, 0.0f);
+    double3 rgb = (double3)(0.0, 0.0, 0.0);
     
     // Red component: 0→1 in first quarter, then stay at 1
-    if (t < 0.25f)
-        rgb.x = t * 4.0f;
+    if (t < 0.25)
+        rgb.x = t * 4.0;
     else
-        rgb.x = 1.0f;
+        rgb.x = 1.0;
         
     // Green component: 0 in first quarter, 0→1 in second quarter, then 1
-    if (t >= 0.25f && t < 0.5f)
-        rgb.y = (t - 0.25f) * 4.0f;
-    else if (t >= 0.5f)
-        rgb.y = 1.0f;
+    if (t >= 0.25 && t < 0.5)
+        rgb.y = (t - 0.25) * 4.0;
+    else if (t >= 0.5)
+        rgb.y = 1.0;
         
     // Blue component: 0 in first half, 0→1 in third quarter, then 1
-    if (t >= 0.5f && t < 0.75f)
-        rgb.z = (t - 0.5f) * 4.0f;
-    else if (t >= 0.75f)
-        rgb.z = 1.0f;
+    if (t >= 0.5 && t < 0.75)
+        rgb.z = (t - 0.5) * 4.0;
+    else if (t >= 0.75)
+        rgb.z = 1.0;
         
     // Apply intensity reduction in the last quarter
-    if (t >= 0.75f) {
-        float intensity = 1.0f - (t - 0.75f) * 0.8f;
+    if (t >= 0.75) {
+        double intensity = 1.0 - (t - 0.75) * 0.8;
         rgb *= intensity;
     }
     
@@ -130,154 +134,154 @@ float3 fire_palette(float norm_iter, float shift) {
 }
 
 // Electric blue (mode 2)
-float3 electric_blue(float norm_iter, float shift) {
+double3 electric_blue(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
     // Always high blue with some variation
-    float b = 0.7f + 0.3f * sin(t * M_PI * 4.0f);
+    double b = 0.7 + 0.3 * sin(t * M_PI * 4.0);
     
     // Green component: Higher in the middle
-    float g = 0.4f * (sin(t * M_PI * 2.0f) * sin(t * M_PI * 2.0f)); // Squared using multiplication instead of pow
-    if (t < 0.5f)
-        g += 0.2f + 0.6f * t;
+    double g = 0.4 * (sin(t * M_PI * 2.0) * sin(t * M_PI * 2.0));
+    if (t < 0.5)
+        g += 0.2 + 0.6 * t;
     
     // Red component: Low but with some highlights
-    float r = 0.1f * (sin(t * M_PI * 8.0f) * sin(t * M_PI * 8.0f)); // Squared using multiplication instead of pow
+    double r = 0.1 * (sin(t * M_PI * 8.0) * sin(t * M_PI * 8.0));
     
     // Add white spark effect for lower values
-    if (t < 0.15f) {
-        float spark = 1.0f - t / 0.15f;
+    if (t < 0.15) {
+        double spark = 1.0 - t / 0.15;
         r += spark;
         g += spark;
     }
     
-    return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
+    return (double3)(min(r, 1.0), min(g, 1.0), min(b, 1.0));
 }
 
 // Twilight palette (mode 3)
-float3 twilight_palette(float norm_iter, float shift) {
+double3 twilight_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
-    float3 rgb = (float3)(0.0f, 0.0f, 0.0f);
+    double t = fmod(norm_iter + shift, 1.0);
+    double3 rgb = (double3)(0.0, 0.0, 0.0);
     
     // Purple to blue (0.0-0.3)
-    if (t < 0.3f) {
-        rgb.x = 0.5f + 0.2f * t / 0.3f;
-        rgb.y = 0.2f * t / 0.3f;
-        rgb.z = 0.8f - 0.2f * t / 0.3f;
+    if (t < 0.3) {
+        rgb.x = 0.5 + 0.2 * t / 0.3;
+        rgb.y = 0.2 * t / 0.3;
+        rgb.z = 0.8 - 0.2 * t / 0.3;
     }
     // Blue to teal (0.3-0.5)
-    else if (t < 0.5f) {
-        rgb.x = 0.7f * (t - 0.3f) / 0.2f;
-        rgb.y = 0.2f + 0.4f * (t - 0.3f) / 0.2f;
-        rgb.z = 0.6f + 0.2f * (t - 0.3f) / 0.2f;
+    else if (t < 0.5) {
+        rgb.x = 0.7 * (t - 0.3) / 0.2;
+        rgb.y = 0.2 + 0.4 * (t - 0.3) / 0.2;
+        rgb.z = 0.6 + 0.2 * (t - 0.3) / 0.2;
     }
     // Teal to golden (0.5-0.7)
-    else if (t < 0.7f) {
-        rgb.x = 0.7f + 0.3f * (t - 0.5f) / 0.2f;
-        rgb.y = 0.6f + 0.2f * (t - 0.5f) / 0.2f;
-        rgb.z = 0.8f - 0.8f * (t - 0.5f) / 0.2f;
+    else if (t < 0.7) {
+        rgb.x = 0.7 + 0.3 * (t - 0.5) / 0.2;
+        rgb.y = 0.6 + 0.2 * (t - 0.5) / 0.2;
+        rgb.z = 0.8 - 0.8 * (t - 0.5) / 0.2;
     }
     // Golden to deep red (0.7-1.0)
     else {
-        rgb.x = 1.0f;
-        rgb.y = 0.8f - 0.8f * (t - 0.7f) / 0.3f;
-        rgb.z = 0.0f;
+        rgb.x = 1.0;
+        rgb.y = 0.8 - 0.8 * (t - 0.7) / 0.3;
+        rgb.z = 0.0;
     }
     
     return rgb;
 }
 
 // Neon palette (mode 4)
-float3 neon_palette(float norm_iter, float shift) {
+double3 neon_palette(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
     // Create a striated neon effect based on value
-    float phase = t * 15.0f;  // Multiple cycles for striations
+    double phase = t * 15.0;  // Multiple cycles for striations
     
     // Use sine waves with different frequencies for color pulsing
-    float r = 0.5f * sin(phase * 1.0f + 0.0f) + 0.5f;
-    float g = 0.5f * sin(phase * 1.0f + 2.0f) + 0.5f;
-    float b = 0.5f * sin(phase * 1.0f + 4.0f) + 0.5f;
+    double r = 0.5 * sin(phase * 1.0 + 0.0) + 0.5;
+    double g = 0.5 * sin(phase * 1.0 + 2.0) + 0.5;
+    double b = 0.5 * sin(phase * 1.0 + 4.0) + 0.5;
     
     // Apply a glow effect - brighten colors based on original value
-    if (t < 0.2f) {
-        float glow_strength = 1.0f - t / 0.2f;
+    if (t < 0.2) {
+        double glow_strength = 1.0 - t / 0.2;
         
         // Calculate glow phase for each pixel in the glow mask
-        float glow_phase = fmod(t * 3.0f, 3.0f);
+        double glow_phase = fmod(t * 3.0, 3.0);
         
         // Apply glows to respective channels based on phase
-        if (glow_phase < 1.0f) {
-            r = r * 0.5f + 0.5f * (1.0f - t / 0.2f);
-        } else if (glow_phase < 2.0f) {
-            g = g * 0.5f + 0.5f * (1.0f - t / 0.2f);
+        if (glow_phase < 1.0) {
+            r = r * 0.5 + 0.5 * (1.0 - t / 0.2);
+        } else if (glow_phase < 2.0) {
+            g = g * 0.5 + 0.5 * (1.0 - t / 0.2);
         } else {
-            b = b * 0.5f + 0.5f * (1.0f - t / 0.2f);
+            b = b * 0.5 + 0.5 * (1.0 - t / 0.2);
         }
     }
     
     // Add secondary glow around edges with sharp contrast
-    if (t > 0.2f && t < 0.25f) {
-        float edge_intensity = (t - 0.2f) / 0.05f;
-        r = r * 0.7f + (1.0f - edge_intensity) * 0.3f;
-        g = g * 0.7f + (1.0f - edge_intensity) * 0.3f;
-        b = b * 0.7f + (1.0f - edge_intensity) * 0.3f;
+    if (t > 0.2 && t < 0.25) {
+        double edge_intensity = (t - 0.2) / 0.05;
+        r = r * 0.7 + (1.0 - edge_intensity) * 0.3;
+        g = g * 0.7 + (1.0 - edge_intensity) * 0.3;
+        b = b * 0.7 + (1.0 - edge_intensity) * 0.3;
     }
     
     // Darken the background (high iteration values)
-    if (t >= 0.25f) {
-        float darkness = min(1.0f, (t - 0.25f) * 2.0f);
-        r *= (1.0f - darkness * 0.8f);
-        g *= (1.0f - darkness * 0.8f);
-        b *= (1.0f - darkness * 0.8f);
+    if (t >= 0.25) {
+        double darkness = min(1.0, (t - 0.25) * 2.0);
+        r *= (1.0 - darkness * 0.8);
+        g *= (1.0 - darkness * 0.8);
+        b *= (1.0 - darkness * 0.8);
     }
     
-    return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
+    return (double3)(min(r, 1.0), min(g, 1.0), min(b, 1.0));
 }
 
 // Vintage/Sepia (mode 5)
-float3 vintage_sepia(float norm_iter, float shift) {
+double3 vintage_sepia(double norm_iter, double shift) {
     // Apply shift and wrap to [0,1]
-    float t = fmod(norm_iter + shift, 1.0f);
+    double t = fmod(norm_iter + shift, 1.0);
     
     // Create base grayscale value with contrast
-    float gray = pow(t, 0.8f);  // Explicitly cast t to float for pow function
+    double gray = pow(t, 0.8);
     
     // Apply sepia toning - different multipliers for RGB
-    float r = min(gray * 1.2f, 1.0f);  // More red
-    float g = min(gray * 0.9f, 1.0f);  // Medium green
-    float b = min(gray * 0.6f, 1.0f);  // Less blue
+    double r = min(gray * 1.2, 1.0);  // More red
+    double g = min(gray * 0.9, 1.0);  // Medium green
+    double b = min(gray * 0.6, 1.0);  // Less blue
     
     // Add a vignette effect (darker at edges)
-    float sinValue = sin(t * M_PI);
-    float vignette = 1.0f - 0.2f * (sinValue * sinValue);
+    double sinValue = sin(t * M_PI);
+    double vignette = 1.0 - 0.2 * (sinValue * sinValue);
     r *= vignette;
     g *= vignette;
     b *= vignette;
     
     // Add some "aging" noise to simulate vintage look
-    float aging_effect = 0.05f * sin(t * 37.0f) * sin(t * 23.0f);
+    double aging_effect = 0.05 * sin(t * 37.0) * sin(t * 23.0);
     r += aging_effect;
     g += aging_effect;
     b += aging_effect;
     
-    return (float3)(min(r, 1.0f), min(g, 1.0f), min(b, 1.0f));
+    return (double3)(min(r, 1.0), min(g, 1.0), min(b, 1.0));
 }
 
 __kernel void julia(__global int *iterations_out,
                     __global uchar *rgb_out,
-                    __global float *x_array,
-                    __global float *y_array,
+                    __global double *x_array,
+                    __global double *y_array,
                     const int width,
                     const int height,
                     const int max_iter,
                     const int color_mode,
-                    const float color_shift,
-                    const float julia_cx,
-                    const float julia_cy)
+                    const double color_shift,
+                    const double julia_cx,
+                    const double julia_cy)
 {
     // Get the index of the current element
     int gid_x = get_global_id(0); // column index
@@ -286,18 +290,18 @@ __kernel void julia(__global int *iterations_out,
     // Check if we're within bounds
     if (gid_x < width && gid_y < height) {
         // Get the initial z value (z₀)
-        float zx = x_array[gid_x];
-        float zy = y_array[gid_y];
+        double zx = x_array[gid_x];
+        double zy = y_array[gid_y];
         
         // Initialize iteration counter
         int iteration = 0;
-        float zx2 = zx * zx;
-        float zy2 = zy * zy;
+        double zx2 = zx * zx;
+        double zy2 = zy * zy;
         
         // Main iteration loop
-        while (zx2 + zy2 < 4.0f && iteration < max_iter) {
+        while (zx2 + zy2 < 4.0 && iteration < max_iter) {
             // z -> z^2 + c
-            zy = 2.0f * zx * zy + julia_cy;
+            zy = 2.0 * zx * zy + julia_cy;
             zx = zx2 - zy2 + julia_cx;
             zx2 = zx * zx;
             zy2 = zy * zy;
@@ -318,8 +322,8 @@ __kernel void julia(__global int *iterations_out,
             rgb_out[rgb_idx + 2] = 0;  // B
         } else {
             // Normalize the iteration count
-            float norm_iter = (float)iteration / (float)max_iter;
-            float3 rgb;
+            double norm_iter = (double)iteration / (double)max_iter;
+            double3 rgb;
             
             // Apply coloring based on selected mode
             switch (color_mode) {
@@ -342,14 +346,14 @@ __kernel void julia(__global int *iterations_out,
                     rgb = vintage_sepia(norm_iter, color_shift);
                     break;
                 default: // Default - simple grayscale
-                    rgb = (float3)(norm_iter, norm_iter, norm_iter);
+                    rgb = (double3)(norm_iter, norm_iter, norm_iter);
                     break;
             }
             
             // Store RGB values in output buffer
-            rgb_out[rgb_idx] = (uchar)(rgb.x * 255.0f);      // R
-            rgb_out[rgb_idx + 1] = (uchar)(rgb.y * 255.0f);  // G
-            rgb_out[rgb_idx + 2] = (uchar)(rgb.z * 255.0f);  // B
+            rgb_out[rgb_idx] = (uchar)(rgb.x * 255.0);      // R
+            rgb_out[rgb_idx + 1] = (uchar)(rgb.y * 255.0);  // G
+            rgb_out[rgb_idx + 2] = (uchar)(rgb.z * 255.0);  // B
         }
     }
 }
@@ -491,14 +495,14 @@ try:
     font = pygame.font.SysFont('Arial', scaled_font_size)
     
     # Initial view parameters
-    x_min, x_max = np.float32(-2), np.float32(1)
-    y_min, y_max = np.float32(-1.5), np.float32(1.5)  # These values already maintain a square aspect ratio
+    x_min, x_max = np.float64(-2), np.float64(1)
+    y_min, y_max = np.float64(-1.5), np.float64(1.5)  # These values already maintain a square aspect ratio
     max_iter = 100
     
     # Julia set parameters
-    julia_cx = np.float32(-0.4)  # Real part of c
-    julia_cy = np.float32(0.6)   # Imaginary part of c
-    julia_step = np.float32(0.01)  # Step size for parameter adjustment
+    julia_cx = np.float64(JULIA_REAL_PART)  # Real part of c
+    julia_cy = np.float64(JULIA_IMAG_PART)   # Imaginary part of c
+    julia_step = np.float64(0.01)  # Step size for parameter adjustment
     
     # High-quality rendering flag
     high_quality_mode = True
@@ -512,14 +516,14 @@ try:
     # Zoom modes
     smooth_zoom_mode = True      # Toggle between smooth zoom and rectangle selection
     smooth_zooming = False       # Flag to indicate active smooth zooming 
-    smooth_zoom_factor = np.float32(1.02)    # Per-frame zoom factor (1.02 = 2% closer per frame)
+    smooth_zoom_factor = np.float64(1.02)    # Per-frame zoom factor (1.02 = 2% closer per frame)
     smooth_zoom_out = False      # Flag to indicate if we're zooming out instead of in
     mouse_pos = (WIDTH // 2, HEIGHT // 2)  # Default to center of screen
     
     # Panning
     panning = False              # Flag to indicate active panning
     pan_direction = None         # Current pan direction (up, down, left, right)
-    pan_speed = np.float32(0.02)             # Pan speed as a fraction of current view width/height
+    pan_speed = np.float64(0.02)             # Pan speed as a fraction of current view width/height
     # Track individual key states for diagonal panning
     key_pressed = {
         "up": False,
@@ -599,18 +603,18 @@ try:
         
         try:
             # Create input data for x and y coordinates
-            x = np.linspace(xmin, xmax, width, dtype=np.float32)
-            y = np.linspace(ymin, ymax, height, dtype=np.float32)
+            x = np.linspace(xmin, xmax, width, dtype=np.float64)
+            y = np.linspace(ymin, ymax, height, dtype=np.float64)
             
             # Check if buffers exist or need to be recreated due to size change
-            if cl_buffer_x is None or cl_buffer_x.size != width * 4:  # 4 bytes per float
+            if cl_buffer_x is None or cl_buffer_x.size != width * 8:  # 8 bytes per double
                 if cl_buffer_x is not None:
                     cl_buffer_x.release()
                 cl_buffer_x = cl.Buffer(cl_ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=x)
             else:
                 cl.enqueue_copy(cl_queue, cl_buffer_x, x)
                 
-            if cl_buffer_y is None or cl_buffer_y.size != height * 4:  # 4 bytes per float
+            if cl_buffer_y is None or cl_buffer_y.size != height * 8:  # 8 bytes per double
                 if cl_buffer_y is not None:
                     cl_buffer_y.release()
                 cl_buffer_y = cl.Buffer(cl_ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=y)
@@ -633,9 +637,9 @@ try:
                               np.int32(width), np.int32(height),
                               np.int32(max_iter),
                               np.int32(color_mode),
-                              np.float32(color_shift),
-                              np.float32(julia_cx),
-                              np.float32(julia_cy))
+                              np.float64(color_shift),
+                              np.float64(julia_cx),
+                              np.float64(julia_cy))
                 
                 # Execute the kernel as a 2D grid
                 global_size = (width, height)
@@ -688,12 +692,12 @@ try:
 
     def julia_cpu(h, w, x_min, x_max, y_min, y_max, max_iter):
         """Calculate the Julia set using CPU (either Numba or NumPy)"""
-        # Use float32 for better precision
+        # Use float64 for better precision
         # Set up the x and y ranges with the same orientation as GPU:
         # x increases from left to right: x_min at left, x_max at right
         # y now matches GPU implementation and increases from bottom to top
-        x = np.linspace(x_min, x_max, w, dtype=np.float32)
-        y = np.linspace(y_min, y_max, h, dtype=np.float32)
+        x = np.linspace(x_min, x_max, w, dtype=np.float64)
+        y = np.linspace(y_min, ymax, h, dtype=np.float64)
         
         if USE_NUMBA and HAVE_NUMBA and not force_numpy:
             # Use Numba-accelerated kernel
@@ -1241,7 +1245,8 @@ try:
             "Julia Set Parameters:",
             "  [,]: Decrease/Increase real part (cx)",
             "  .//: Decrease/Increase imaginary part (cy)",
-            "  L: Reset Julia parameters"
+            "  L: Reset Julia parameters",
+            "  U: Enter custom Julia parameters"
         ]
         
         # Settings panel (right)
@@ -1281,11 +1286,11 @@ try:
         settings_texts = [
             "Current Settings:",
             f"Center: ({x_center:.6f}, {y_center:.6f})",
-            f"Width: {width:.6f}",
+            f"Width: {width:.12f}",
             f"Zoom: {zoom_level:.2f}x",
             f"Iterations: {hq_iterations} ({quality_text})",
             f"Color: {color_names[color_mode]} (Shift: {color_shift:.1f})",
-            f"Julia c: ({julia_cx:.4f}, {julia_cy:.4f})",
+            f"Julia c: ({julia_cx:.6f}, {julia_cy:.6f})",
             f"Debug: {debug_text}",
             f"Implementation: {impl_text}",
             f"Resolution: {WIDTH}x{HEIGHT}"
@@ -1351,6 +1356,44 @@ try:
             text_rect.y = y_offset
             screen.blit(text_surface, text_rect)
             y_offset += line_height
+                
+    def get_custom_julia_params():
+        """Get custom Julia set parameters from user input"""
+        global julia_cx, julia_cy, current_pixels
+        
+        try:
+            print("\nEnter custom Julia set parameters:")
+            print("Format: real_part imaginary_part")
+            print("Example: -0.54 0.54")
+            print("Current values:", julia_cx, julia_cy)
+            
+            # Get input from user
+            user_input = input("Enter new values: ").strip()
+            
+            # Split input into real and imaginary parts
+            parts = user_input.split()
+            if len(parts) != 2:
+                print("Error: Please enter exactly two numbers separated by a space")
+                return
+                
+            # Convert to float64 for consistency
+            new_cx = np.float64(parts[0])
+            new_cy = np.float64(parts[1])
+            
+            # Update the parameters
+            julia_cx = new_cx
+            julia_cy = new_cy
+            
+            # Force recalculation
+            current_pixels = None
+            update_julia()
+            
+            print(f"Julia set parameters updated to: c = ({julia_cx:.4f}, {julia_cy:.4f})")
+            
+        except ValueError:
+            print("Error: Please enter valid numbers")
+        except Exception as e:
+            print(f"Error: {e}")
 
     def draw_julia():
         global current_pixels, colored_pixels, base_surface
@@ -1469,14 +1512,14 @@ try:
     def calculate_zoom_area(start_pos, current_pos):
         """Calculate the square zoom area from a selection rectangle"""
         # Calculate the original rectangle bounds drawn by the user
-        rect_x1 = np.float32(min(start_pos[0], current_pos[0]))
-        rect_x2 = np.float32(max(start_pos[0], current_pos[0]))
-        rect_y1 = np.float32(min(start_pos[1], current_pos[1]))
-        rect_y2 = np.float32(max(start_pos[1], current_pos[1]))
+        rect_x1 = np.float64(min(start_pos[0], current_pos[0]))
+        rect_x2 = np.float64(max(start_pos[0], current_pos[0]))
+        rect_y1 = np.float64(min(start_pos[1], current_pos[1]))
+        rect_y2 = np.float64(max(start_pos[1], current_pos[1]))
         
         # Find the center of the rectangle (as floating point for precision)
-        center_x = (rect_x1 + rect_x2) / np.float32(2.0)
-        center_y = (rect_y1 + rect_y2) / np.float32(2.0)
+        center_x = (rect_x1 + rect_x2) / np.float64(2.0)
+        center_y = (rect_y1 + rect_y2) / np.float64(2.0)
         
         # Get the longest dimension (width or height)
         rect_width = rect_x2 - rect_x1
@@ -1485,24 +1528,24 @@ try:
         
         # Ensure zoom_length is not zero to prevent division by zero later
         # Set a minimum size of 5 pixels
-        zoom_length = max(np.float32(5.0), zoom_length)
+        zoom_length = max(np.float64(5.0), zoom_length)
         
         # Calculate the square bounds centered at the original center point
         # Store as floats to maintain precision
-        square_x1 = center_x - zoom_length / np.float32(2.0)
-        square_y1 = center_y - zoom_length / np.float32(2.0)
-        square_x2 = center_x + zoom_length / np.float32(2.0)
-        square_y2 = center_y + zoom_length / np.float32(2.0)
+        square_x1 = center_x - zoom_length / np.float64(2.0)
+        square_y1 = center_y - zoom_length / np.float64(2.0)
+        square_x2 = center_x + zoom_length / np.float64(2.0)
+        square_y2 = center_y + zoom_length / np.float64(2.0)
         
         # Ensure square is within screen bounds
-        square_x1 = max(np.float32(0.0), square_x1)
-        square_y1 = max(np.float32(0.0), square_y1)
-        square_x2 = min(np.float32(WIDTH), square_x2)
-        square_y2 = min(np.float32(HEIGHT), square_y2)
+        square_x1 = max(np.float64(0.0), square_x1)
+        square_y1 = max(np.float64(0.0), square_y1)
+        square_x2 = min(np.float64(WIDTH), square_x2)
+        square_y2 = min(np.float64(HEIGHT), square_y2)
         
         # Recalculate center if square was adjusted
-        center_x = (square_x1 + square_x2) / np.float32(2.0)
-        center_y = (square_y1 + square_y2) / np.float32(2.0)
+        center_x = (square_x1 + square_x2) / np.float64(2.0)
+        center_y = (square_y1 + square_y2) / np.float64(2.0)
         
         # Map the center point from screen coordinates to complex plane
         # With our updated julia function, we directly map:
@@ -1510,8 +1553,8 @@ try:
         # - y from 0 to HEIGHT maps to y_max to y_min (inverted)
         
         # Linear mapping from screen to complex plane with higher precision
-        complex_center_x = np.float32(x_min) + (np.float32(x_max) - np.float32(x_min)) * center_x / np.float32(WIDTH)
-        complex_center_y = np.float32(y_min) + (np.float32(y_max) - np.float32(y_min)) * center_y / np.float32(HEIGHT)
+        complex_center_x = np.float64(x_min) + (np.float64(x_max) - np.float64(x_min)) * center_x / np.float64(WIDTH)
+        complex_center_y = np.float64(y_min) + (np.float64(y_max) - np.float64(y_min)) * center_y / np.float64(HEIGHT)
         
         # Print debugging information to verify mappings
         if hasattr(globals(), 'debug_coordinates') and globals().get('debug_coordinates'):
@@ -1523,26 +1566,26 @@ try:
             print(f"Complex bounds: {top_left_complex} -> {bottom_right_complex}")
         
         # Calculate the width in the complex plane corresponding to zoom_length
-        complex_width = (np.float32(x_max) - np.float32(x_min)) * zoom_length / np.float32(WIDTH)
+        complex_width = (np.float64(x_max) - np.float64(x_min)) * zoom_length / np.float64(WIDTH)
         
         # Ensure complex_width is not zero to prevent division by zero
-        complex_width = max(complex_width, np.float32(1e-15))
+        complex_width = max(complex_width, np.float64(1e-15))
         
         # Calculate zoom factor based on the ratio of current width to new width
-        current_width = np.float32(x_max) - np.float32(x_min)
+        current_width = np.float64(x_max) - np.float64(x_min)
         zoom_factor = current_width / complex_width
         
         # Calculate the new boundaries in the complex plane
-        new_x_min = complex_center_x - complex_width / np.float32(2.0)
-        new_x_max = complex_center_x + complex_width / np.float32(2.0)
+        new_x_min = complex_center_x - complex_width / np.float64(2.0)
+        new_x_max = complex_center_x + complex_width / np.float64(2.0)
         
         # Maintain aspect ratio for y coordinates
         complex_height = complex_width
-        new_y_min = complex_center_y - complex_height / np.float32(2.0)
-        new_y_max = complex_center_y + complex_height / np.float32(2.0)
+        new_y_min = complex_center_y - complex_height / np.float64(2.0)
+        new_y_max = complex_center_y + complex_height / np.float64(2.0)
         
         # Check for floating-point precision issues
-        if abs(new_x_max - new_x_min) < np.float32(1e-15) or abs(new_y_max - new_y_min) < np.float32(1e-15):
+        if abs(new_x_max - new_x_min) < np.float64(1e-15) or abs(new_y_max - new_y_min) < np.float64(1e-15):
             print("Warning: Reached floating-point precision limit")
             return None
         
@@ -1732,8 +1775,8 @@ try:
         global x_min, x_max, y_min, y_max, max_iter, current_pixels
         
         # Reset to initial parameters
-        x_min, x_max = np.float32(-2), np.float32(1)
-        y_min, y_max = np.float32(-1.5), np.float32(1.5)
+        x_min, x_max = np.float64(-2), np.float64(1)
+        y_min, y_max = np.float64(-1.5), np.float64(1.5)
         max_iter = 100
         
         # Force recalculation
@@ -1753,25 +1796,25 @@ try:
         height = y_max - y_min
         
         # Map mouse position to complex coordinates with higher precision
-        # Use numpy's float32 for better precision
-        cx = np.float32(x_min) + np.float32(width) * np.float32(mouse_pos[0]) / np.float32(WIDTH)
-        cy = np.float32(y_min) + np.float32(height) * np.float32(mouse_pos[1]) / np.float32(HEIGHT)
+        # Use numpy's float64 for better precision
+        cx = np.float64(x_min) + np.float64(width) * np.float64(mouse_pos[0]) / np.float64(WIDTH)
+        cy = np.float64(y_min) + np.float64(height) * np.float64(mouse_pos[1]) / np.float64(HEIGHT)
         
         # Calculate new bounds with a small zoom step
         # The zoom factor is applied relative to the cursor position
         if zoom_out:
             # When zooming out, multiply by the factor instead of dividing
-            new_width = np.float32(width) * np.float32(smooth_zoom_factor)
-            new_height = np.float32(height) * np.float32(smooth_zoom_factor)
+            new_width = np.float64(width) * np.float64(smooth_zoom_factor)
+            new_height = np.float64(height) * np.float64(smooth_zoom_factor)
         else:
             # Normal zoom in
-            new_width = np.float32(width) / np.float32(smooth_zoom_factor)
-            new_height = np.float32(height) / np.float32(smooth_zoom_factor)
+            new_width = np.float64(width) / np.float64(smooth_zoom_factor)
+            new_height = np.float64(height) / np.float64(smooth_zoom_factor)
         
         # Calculate new bounds while keeping the cursor point at the same relative position
         # We need to maintain the ratio between cursor position and the edge distances
-        cursor_ratio_x = (cx - np.float32(x_min)) / np.float32(width)
-        cursor_ratio_y = (cy - np.float32(y_min)) / np.float32(height)
+        cursor_ratio_x = (cx - np.float64(x_min)) / np.float64(width)
+        cursor_ratio_y = (cy - np.float64(y_min)) / np.float64(height)
         
         # Apply ratios to calculate new bounds with higher precision
         new_x_min = cx - new_width * cursor_ratio_x
@@ -1780,7 +1823,7 @@ try:
         new_y_max = new_y_min + new_height
         
         # Check for floating-point precision issues
-        if abs(new_x_max - new_x_min) < np.float32(1e-15) or abs(new_y_max - new_y_min) < np.float32(1e-15):
+        if abs(new_x_max - new_x_min) < np.float64(1e-15) or abs(new_y_max - new_y_min) < np.float64(1e-15):
             print("Warning: Reached floating-point precision limit")
             return
         
@@ -1862,10 +1905,10 @@ try:
 
     # Add these global variables with the other global settings around line 130
     # Incremental rendering settings
-    render_scale = np.float32(1.0)           # Current rendering scale (1.0 = full resolution)
-    target_render_scale = np.float32(1.0)    # Target scale to gradually approach
+    render_scale = np.float64(1.0)           # Current rendering scale (1.0 = full resolution)
+    target_render_scale = np.float64(1.0)    # Target scale to gradually approach
     adaptive_render_scale = False # Toggle for adaptive render scaling during movement
-    min_render_scale = np.float32(0.25)      # Minimum rendering scale during movement (0.25 = quarter resolution)
+    min_render_scale = np.float64(0.25)      # Minimum rendering scale during movement (0.25 = quarter resolution)
     is_moving = False            # Flag to track if we're currently panning or zooming
     last_movement_time = 0       # Time of last movement action
     scale_recovery_delay = 0     # No delay before increasing resolution
@@ -2145,6 +2188,11 @@ try:
                     current_pixels = None
                     update_julia()
                     print(f"Julia cy = {julia_cy:.4f}")
+                elif event.key == pygame.K_u:  # 'U' key for custom input
+                    # Pause the game loop temporarily to get user input
+                    pygame.event.set_grab(False)  # Release mouse grab
+                    get_custom_julia_params()
+                    pygame.event.set_grab(True)   # Restore mouse grab
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_e or event.key == pygame.K_q:
                     # Stop smooth zooming when E or Q key is released
@@ -2209,3 +2257,41 @@ def resize_array(arr, target_shape):
         result[:min_h, :min_w] = arr[:min_h, :min_w]
         
     return result
+
+def get_custom_julia_params():
+    """Get custom Julia set parameters from user input"""
+    global julia_cx, julia_cy, current_pixels
+    
+    try:
+        print("\nEnter custom Julia set parameters:")
+        print("Format: real_part imaginary_part")
+        print("Example: -0.54 0.54")
+        print("Current values:", julia_cx, julia_cy)
+        
+        # Get input from user
+        user_input = input("Enter new values: ").strip()
+        
+        # Split input into real and imaginary parts
+        parts = user_input.split()
+        if len(parts) != 2:
+            print("Error: Please enter exactly two numbers separated by a space")
+            return
+            
+        # Convert to float64 for consistency
+        new_cx = np.float64(parts[0])
+        new_cy = np.float64(parts[1])
+        
+        # Update the parameters
+        julia_cx = new_cx
+        julia_cy = new_cy
+        
+        # Force recalculation
+        current_pixels = None
+        update_julia()
+        
+        print(f"Julia set parameters updated to: c = ({julia_cx:.4f}, {julia_cy:.4f})")
+        
+    except ValueError:
+        print("Error: Please enter valid numbers")
+    except Exception as e:
+        print(f"Error: {e}")
