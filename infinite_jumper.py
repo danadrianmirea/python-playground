@@ -14,7 +14,10 @@ PLATFORM_MIN_WIDTH = 100
 PLATFORM_MAX_WIDTH = 200
 GRAVITY = 0.8
 JUMP_FORCE = -15
-SCROLL_SPEED = 2
+BASE_SCROLL_SPEED = 2
+MAX_SCROLL_SPEED = 5
+SCROLL_SPEED_INCREASE_RATE = 0.1  # How quickly scroll speed increases
+SCROLL_SPEED_DECREASE_RATE = 0.05  # How quickly scroll speed decreases
 PLATFORM_SPACING = 100  # Reduced from 150 to ensure platforms are reachable
 MAX_HORIZONTAL_DISTANCE = 200  # Maximum horizontal distance between platforms
 MAX_JUMP_HEIGHT = abs(JUMP_FORCE * JUMP_FORCE / (2 * GRAVITY))  # Maximum height player can jump
@@ -30,12 +33,13 @@ YELLOW = (255, 255, 0)
 
 COIN_REWARD = 5
 
+
 # Load sound effects
 try:
     COIN_SOUND = pygame.mixer.Sound("assets/coin.mp3")
-    COIN_SOUND.set_volume(0.7)  # Set volume to 70%
+    COIN_SOUND.set_volume(0.1)
     JUMP_SOUND = pygame.mixer.Sound("assets/jump.mp3")
-    JUMP_SOUND.set_volume(0.7)  # Set volume to 70%
+    JUMP_SOUND.set_volume(0.1)
 except:
     print("Warning: Could not load sound files")
 
@@ -100,8 +104,8 @@ class Coin:
         self.rect = pygame.Rect(x, y, COIN_SIZE, COIN_SIZE)
         self.collected = False
 
-    def update(self):
-        self.y += SCROLL_SPEED
+    def update(self, scroll_speed):
+        self.y += scroll_speed
         self.rect.y = self.y
 
     def draw(self, screen):
@@ -117,11 +121,11 @@ class Platform:
         # Randomly decide if this platform has a coin
         self.coin = Coin(x + random.randint(0, width - COIN_SIZE), y - COIN_SIZE) if random.random() < 0.3 else None
 
-    def update(self):
-        self.y += SCROLL_SPEED
+    def update(self, scroll_speed):
+        self.y += scroll_speed
         self.rect.y = self.y
         if self.coin:
-            self.coin.update()
+            self.coin.update(scroll_speed)
 
     def draw(self, screen):
         pygame.draw.rect(screen, GREEN, self.rect)
@@ -133,6 +137,7 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("Infinite Jumper")
         self.clock = pygame.time.Clock()
+        self.scroll_speed = BASE_SCROLL_SPEED
         self.reset_game()
 
     def reset_game(self):
@@ -191,6 +196,21 @@ class Game:
                     except:
                         pass  # Ignore if sound couldn't be loaded
 
+    def update_scroll_speed(self):
+        # Calculate how far up the screen the player is (0 to 1)
+        # 0 means bottom of screen, 1 means top of screen
+        screen_position = 1 - (self.player.y / SCREEN_HEIGHT)
+        
+        # Calculate target speed based on screen position
+        # Linear interpolation between BASE_SCROLL_SPEED and MAX_SCROLL_SPEED
+        target_speed = BASE_SCROLL_SPEED + (MAX_SCROLL_SPEED - BASE_SCROLL_SPEED) * screen_position
+        
+        # Smoothly adjust current scroll speed towards target speed
+        if self.scroll_speed < target_speed:
+            self.scroll_speed = min(self.scroll_speed + SCROLL_SPEED_INCREASE_RATE, target_speed)
+        else:
+            self.scroll_speed = max(self.scroll_speed - SCROLL_SPEED_DECREASE_RATE, target_speed)
+
     def update(self):
         if self.game_over:
             # Handle events for game over state
@@ -213,6 +233,9 @@ class Game:
                 if event.key in (pygame.K_SPACE, pygame.K_w, pygame.K_UP):
                     self.player.jump()
 
+        # Update scroll speed based on player position
+        self.update_scroll_speed()
+
         # Update player
         self.player.update()
 
@@ -222,7 +245,7 @@ class Game:
 
         # Update platforms
         for platform in self.platforms[:]:
-            platform.update()
+            platform.update(self.scroll_speed)  # Pass current scroll speed
             
             # Check collision
             self.player.check_collision(platform)
