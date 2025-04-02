@@ -11,6 +11,8 @@ WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 FPS = 60
 
+SPEED_UP_FACTOR = 8
+
 # Colors
 GREEN = (34, 139, 34)  # Pool table green
 BROWN = (139, 69, 19)  # Table border
@@ -41,7 +43,7 @@ POWER_METER_COLOR = (255, 0, 0)  # Red
 POWER_METER_BG = (200, 200, 200)  # Gray
 
 # Shot properties
-MAX_SHOT_POWER = 1000
+MAX_SHOT_POWER = 2000
 MIN_SHOT_POWER = 100
 
 class Ball:
@@ -111,6 +113,10 @@ class PoolGame:
         self.power_increasing = True
         self.max_power = 100
         self.power_speed = 2
+        
+        # Speed control
+        self.speed_multiplier = 1
+        self.SPEED_UP_FACTOR = SPEED_UP_FACTOR
 
     def create_table_boundaries(self):
         wall_thickness = 20
@@ -223,12 +229,6 @@ class PoolGame:
             # Normalize the direction vector
             dir_x = dx / distance
             dir_y = dy / distance
-            print(f"\nShot Direction Debug:")
-            print(f"Mouse position: ({mouse_pos[0]:.1f}, {mouse_pos[1]:.1f})")
-            print(f"Cue ball position: ({cue_pos.x:.1f}, {cue_pos.y:.1f})")
-            print(f"Raw vector: ({dx:.1f}, {dy:.1f})")
-            print(f"Distance: {distance:.1f}")
-            print(f"Normalized direction: ({dir_x:.3f}, {dir_y:.3f})")
             return (dir_x, dir_y)
         return (0, 0)
 
@@ -241,10 +241,6 @@ class PoolGame:
         cue_start_y = cue_pos.y - dir_y * (CUE_LENGTH + BALL_RADIUS)
         cue_end_x = cue_pos.x - dir_x * BALL_RADIUS
         cue_end_y = cue_pos.y - dir_y * BALL_RADIUS
-        
-        print(f"Cue stick positions:")
-        print(f"Start: ({cue_start_x:.1f}, {cue_start_y:.1f})")
-        print(f"End: ({cue_end_x:.1f}, {cue_end_y:.1f})")
         
         # Draw the cue stick
         pygame.draw.line(screen, CUE_COLOR, 
@@ -421,18 +417,26 @@ class PoolGame:
                     # Debug key to stop all balls
                     if event.key == pygame.K_s:
                         self.stop_all_balls()
+                    # Speed up key
+                    elif event.key == pygame.K_SPACE:
+                        self.speed_multiplier = self.SPEED_UP_FACTOR
+                elif event.type == pygame.KEYUP:
+                    # Return to normal speed when space is released
+                    if event.key == pygame.K_SPACE:
+                        self.speed_multiplier = 1
 
             # Update power meter while aiming
             self.update_power()
 
-            # Update physics
-            self.space.step(1/FPS)
+            # Update physics multiple times if speed up is active
+            for _ in range(self.speed_multiplier):
+                self.space.step(1/FPS)
             
             # Draw everything
             self.draw()
             
-            # Cap the framerate
-            self.clock.tick(FPS)
+            # Cap the framerate (adjusted for speed multiplier)
+            self.clock.tick(FPS * self.speed_multiplier)
 
         pygame.quit()
 
