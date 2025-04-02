@@ -143,11 +143,11 @@ class PoolGame:
         self.setup_balls()
         
         # Shooting mechanics
-        self.aiming = False
-        self.power = 0
-        self.power_increasing = True
-        self.max_power = 100
+        self.aiming = True  # Start with aiming enabled
+        self.power = 75  # Start at 75% power
         self.power_speed = 2
+        self.max_power = 100
+        self.min_power = 1
         
         # Speed control
         self.speed_multiplier = 1
@@ -346,6 +346,10 @@ class PoolGame:
                 # Set velocity to 0 if below threshold
                 ball.body.velocity = (0, 0)
         
+        # Re-enable aiming when balls stop moving
+        if not any_ball_moving:
+            self.aiming = True
+            
         return any_ball_moving
 
     def save_game(self):
@@ -462,16 +466,15 @@ class PoolGame:
         if not self.aiming:
             return
             
-        if self.power_increasing:
-            self.power += self.power_speed
-            if self.power >= self.max_power:
-                self.power = self.max_power
-                self.power_increasing = False
-        else:
-            self.power -= self.power_speed
-            if self.power <= 0:
-                self.power = 0
-                self.power_increasing = True
+        # Get mouse button states
+        left_button = pygame.mouse.get_pressed()[0]
+        right_button = pygame.mouse.get_pressed()[2]
+        
+        # Update power based on button states
+        if left_button:
+            self.power = min(self.power + self.power_speed, self.max_power)
+        elif right_button:
+            self.power = max(self.power - self.power_speed, self.min_power)
 
     def stop_all_balls(self):
         """Stop all balls by setting their velocities to zero."""
@@ -495,9 +498,7 @@ class PoolGame:
         self.setup_balls()
         
         # Reset shooting mechanics
-        self.aiming = False
-        self.power = 0
-        self.power_increasing = True
+        self.aiming = True  # Keep aiming enabled after reset
 
     def run(self):
         while self.running:
@@ -534,58 +535,51 @@ class PoolGame:
                     if event.pos[1] < MENU_HEIGHT or (self.menu.active_menu and event.pos[1] < MENU_HEIGHT + len(self.menu.menu_items[self.menu.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.menu.padding)):
                         continue
                         
-                    # Start aiming only if not clicking in menu area
-                    if event.button == 1:  # Left click
-                        self.aiming = True
-                        self.power = 0
-                        self.power_increasing = True
-                elif event.type == pygame.MOUSEBUTTONUP:
-                    # Check if clicking on menu area (including active menu)
-                    if event.pos[1] < MENU_HEIGHT or (self.menu.active_menu and event.pos[1] < MENU_HEIGHT + len(self.menu.menu_items[self.menu.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.menu.padding)):
-                        continue
-                        
-                    # Shoot the ball only if not clicking in menu area
-                    if event.button == 1:  # Left click
-                        if self.aiming:
-                            print("\n" + "="*50)
-                            print("TAKING SHOT")
-                            print("="*50)
-                            
-                            mouse_pos = pygame.mouse.get_pos()
-                            cue_pos = self.cue_ball.body.position
-                            dir_x, dir_y = self.calculate_shot_direction(mouse_pos, cue_pos)
-                            
-                            # Calculate force based on power (between MIN and MAX)
-                            power_factor = self.power / self.max_power
-                            force = MIN_SHOT_POWER + (MAX_SHOT_POWER - MIN_SHOT_POWER) * power_factor
-                            
-                            # Apply force in the direction from ball to mouse
-                            impulse = (dir_x * force, dir_y * force)
-                            print(f"\nShot Execution Debug:")
-                            print(f"Power: {self.power:.1f}%")
-                            print(f"Force: {force:.1f}")
-                            print(f"Final impulse: ({impulse[0]:.1f}, {impulse[1]:.1f})")
-                            print(f"Cue ball velocity before shot: {self.cue_ball.body.velocity}")
-                            
-                            # Apply impulse directly to the ball's center
-                            self.cue_ball.body.apply_impulse_at_local_point(impulse, (0, 0))
-                            
-                            # Ensure the velocity follows the intended direction
-                            current_velocity = self.cue_ball.body.velocity
-                            speed = math.sqrt(current_velocity.x * current_velocity.x + current_velocity.y * current_velocity.y)
-                            self.cue_ball.body.velocity = (dir_x * speed, dir_y * speed)
-                            
-                            # Add some damping to the velocity immediately after the shot
-                            self.cue_ball.body.velocity *= 0.95
-                            
-                            print(f"Cue ball velocity after shot: {self.cue_ball.body.velocity}")
-                            print("="*50 + "\n")
-                        self.aiming = False
-                        self.power = 0
+                    # Start aiming if not clicking in menu area
+                    if event.button in [1, 3]:  # Left or right click
+                        self.aiming = True  # This line can stay but isn't strictly necessary anymore
                 elif event.type == pygame.KEYDOWN:
                     # Speed up key
                     if event.key == pygame.K_s:
                         self.speed_multiplier = self.SPEED_UP_FACTOR
+                    # Shoot with space key
+                    elif event.key == pygame.K_SPACE and self.aiming and not self.are_balls_moving():
+                        print("\n" + "="*50)
+                        print("TAKING SHOT")
+                        print("="*50)
+                        
+                        mouse_pos = pygame.mouse.get_pos()
+                        cue_pos = self.cue_ball.body.position
+                        dir_x, dir_y = self.calculate_shot_direction(mouse_pos, cue_pos)
+                        
+                        # Calculate force based on power (between MIN and MAX)
+                        power_factor = self.power / self.max_power
+                        force = MIN_SHOT_POWER + (MAX_SHOT_POWER - MIN_SHOT_POWER) * power_factor
+                        
+                        # Apply force in the direction from ball to mouse
+                        impulse = (dir_x * force, dir_y * force)
+                        print(f"\nShot Execution Debug:")
+                        print(f"Power: {self.power:.1f}%")
+                        print(f"Force: {force:.1f}")
+                        print(f"Final impulse: ({impulse[0]:.1f}, {impulse[1]:.1f})")
+                        print(f"Cue ball velocity before shot: {self.cue_ball.body.velocity}")
+                        
+                        # Apply impulse directly to the ball's center
+                        self.cue_ball.body.apply_impulse_at_local_point(impulse, (0, 0))
+                        
+                        # Ensure the velocity follows the intended direction
+                        current_velocity = self.cue_ball.body.velocity
+                        speed = math.sqrt(current_velocity.x * current_velocity.x + current_velocity.y * current_velocity.y)
+                        self.cue_ball.body.velocity = (dir_x * speed, dir_y * speed)
+                        
+                        # Add some damping to the velocity immediately after the shot
+                        self.cue_ball.body.velocity *= 0.95
+                        
+                        print(f"Cue ball velocity after shot: {self.cue_ball.body.velocity}")
+                        print("="*50 + "\n")
+                        
+                        # Reset aiming state
+                        self.aiming = False
                 elif event.type == pygame.KEYUP:
                     # Return to normal speed when S is released
                     if event.key == pygame.K_s:
