@@ -9,6 +9,9 @@ import os
 # Initialize Pygame
 pygame.init()
 
+# Debug flag
+DEBUG = False
+
 # Get the user's screen dimensions
 user32 = ctypes.windll.user32
 SCREEN_WIDTH = user32.GetSystemMetrics(0)  # Width
@@ -395,15 +398,18 @@ class PoolGame:
         try:
             with open(SAVE_FILE, 'w') as f:
                 json.dump(game_state, f)
-            print("Game saved successfully")
+            if DEBUG:
+                print("Game saved successfully")
         except Exception as e:
-            print(f"Error saving game: {e}")
+            if DEBUG:
+                print(f"Error saving game: {e}")
 
     def load_game(self):
         """Load a saved game state from a file."""
         try:
             if not os.path.exists(SAVE_FILE):
-                print("No save file found")
+                if DEBUG:
+                    print("No save file found")
                 return False
                 
             with open(SAVE_FILE, 'r') as f:
@@ -430,11 +436,13 @@ class PoolGame:
             self.cue_ball.body.velocity = cue_data['velocity']
             self.balls.append(self.cue_ball)
             
-            print("Game loaded successfully")
+            if DEBUG:
+                print("Game loaded successfully")
             return True
             
         except Exception as e:
-            print(f"Error loading game: {e}")
+            if DEBUG:
+                print(f"Error loading game: {e}")
             return False
 
     def check_pocket_collision(self, ball):
@@ -564,14 +572,18 @@ class PoolGame:
 
     def stop_all_balls(self):
         """Stop all balls by setting their velocities to zero."""
-        print("\n" + "="*50)
-        print("STOPPING ALL BALLS")
-        print("="*50)
-        for ball in self.balls:
-            print(f"Ball {ball.number} velocity before stop: {ball.body.velocity}")
-            ball.body.velocity = (0, 0)
-            print(f"Ball {ball.number} velocity after stop: {ball.body.velocity}")
-        print("="*50 + "\n")
+        if DEBUG:
+            print("\n" + "="*50)
+            print("STOPPING ALL BALLS")
+            print("="*50)
+            for ball in self.balls:
+                print(f"Ball {ball.number} velocity before stop: {ball.body.velocity}")
+                ball.body.velocity = (0, 0)
+                print(f"Ball {ball.number} velocity after stop: {ball.body.velocity}")
+            print("="*50 + "\n")
+        else:
+            for ball in self.balls:
+                ball.body.velocity = (0, 0)
 
     def reset_game(self):
         """Reset the game to its initial state"""
@@ -633,9 +645,10 @@ class PoolGame:
                         self.show_controls = not self.show_controls
                     # Shoot with space key
                     elif event.key == pygame.K_SPACE and self.aiming and not self.are_balls_moving():
-                        print("\n" + "="*50)
-                        print("TAKING SHOT")
-                        print("="*50)
+                        if DEBUG:
+                            print("\n" + "="*50)
+                            print("TAKING SHOT")
+                            print("="*50)
                         
                         mouse_pos = pygame.mouse.get_pos()
                         cue_pos = self.cue_ball.body.position
@@ -647,11 +660,12 @@ class PoolGame:
                         
                         # Apply force in the direction from ball to mouse
                         impulse = (dir_x * force, dir_y * force)
-                        print(f"\nShot Execution Debug:")
-                        print(f"Power: {self.power:.1f}%")
-                        print(f"Force: {force:.1f}")
-                        print(f"Final impulse: ({impulse[0]:.1f}, {impulse[1]:.1f})")
-                        print(f"Cue ball velocity before shot: {self.cue_ball.body.velocity}")
+                        if DEBUG:
+                            print(f"\nShot Execution Debug:")
+                            print(f"Power: {self.power:.1f}%")
+                            print(f"Force: {force:.1f}")
+                            print(f"Final impulse: ({impulse[0]:.1f}, {impulse[1]:.1f})")
+                            print(f"Cue ball velocity before shot: {self.cue_ball.body.velocity}")
                         
                         # Apply impulse directly to the ball's center
                         self.cue_ball.body.apply_impulse_at_local_point(impulse, (0, 0))
@@ -664,8 +678,9 @@ class PoolGame:
                         # Add some damping to the velocity immediately after the shot
                         self.cue_ball.body.velocity *= 0.95
                         
-                        print(f"Cue ball velocity after shot: {self.cue_ball.body.velocity}")
-                        print("="*50 + "\n")
+                        if DEBUG:
+                            print(f"Cue ball velocity after shot: {self.cue_ball.body.velocity}")
+                            print("="*50 + "\n")
                         
                         # Reset aiming state
                         self.aiming = False
