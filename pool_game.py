@@ -27,8 +27,8 @@ BROWN_BALL = (139, 69, 19)
 # Ball properties
 BALL_RADIUS = 15
 BALL_MASS = 1.0
-FRICTION = 0.3
-ELASTICITY = 0.8
+FRICTION = 0.7
+ELASTICITY = 0.6
 
 # Cue stick properties
 CUE_LENGTH = 200
@@ -41,8 +41,8 @@ POWER_METER_COLOR = (255, 0, 0)  # Red
 POWER_METER_BG = (200, 200, 200)  # Gray
 
 # Shot properties
-MAX_SHOT_POWER = 8000  # Maximum force that can be applied
-MIN_SHOT_POWER = 1000  # Minimum force that can be applied
+MAX_SHOT_POWER = 4000  # Maximum force that can be applied
+MIN_SHOT_POWER = 500  # Minimum force that can be applied
 
 class Ball:
     def __init__(self, space, x, y, color, number=0, is_striped=False):
@@ -96,7 +96,7 @@ class PoolGame:
         
         # Create pymunk space
         self.space = pymunk.Space()
-        self.space.damping = 0.9  # Add some drag to the space
+        self.space.damping = 0.85
         
         # Create table boundaries
         self.create_table_boundaries()
@@ -152,24 +152,59 @@ class PoolGame:
         # Create the rack of balls
         rack = []
         
-        # Add the 8-ball in the center
-        rack.append(Ball(self.space, start_x, start_y, BLACK, 8))
-        
-        # Add solid balls (1-7)
-        for i in range(7):
-            row = i // 3
-            col = i % 3
-            x = start_x + (row * spacing)
-            y = start_y + (col * spacing) - (row * spacing / 2)
-            rack.append(Ball(self.space, x, y, solid_colors[i], i + 1))
-        
-        # Add striped balls (9-15)
-        for i in range(7):
-            row = (i + 7) // 3
-            col = (i + 7) % 3
-            x = start_x + (row * spacing)
-            y = start_y + (col * spacing) - (row * spacing / 2)
-            rack.append(Ball(self.space, x, y, striped_colors[i], i + 9, is_striped=True))
+        # Standard 8-ball rack formation (rotated 180 degrees counterclockwise)
+        # Column 1 (rightmost) - 5 balls
+        for i in range(5):
+            x = start_x + 2 * spacing
+            y = start_y + (i - 2) * spacing
+            if i == 0:
+                rack.append(Ball(self.space, x, y, solid_colors[0], 1))  # Yellow
+            elif i == 1:
+                rack.append(Ball(self.space, x, y, striped_colors[0], 9, is_striped=True))  # Yellow stripe
+            elif i == 2:
+                rack.append(Ball(self.space, x, y, solid_colors[1], 2))  # Blue
+            elif i == 3:
+                rack.append(Ball(self.space, x, y, striped_colors[1], 10, is_striped=True))  # Blue stripe
+            elif i == 4:
+                rack.append(Ball(self.space, x, y, solid_colors[2], 3))  # Red
+
+        # Column 2 - 4 balls
+        for i in range(4):
+            x = start_x + spacing
+            y = start_y + (i - 1.5) * spacing
+            if i == 0:
+                rack.append(Ball(self.space, x, y, striped_colors[2], 11, is_striped=True))  # Red stripe
+            elif i == 1:
+                rack.append(Ball(self.space, x, y, solid_colors[3], 4))  # Purple
+            elif i == 2:
+                rack.append(Ball(self.space, x, y, striped_colors[3], 12, is_striped=True))  # Purple stripe
+            elif i == 3:
+                rack.append(Ball(self.space, x, y, solid_colors[4], 5))  # Orange
+
+        # Column 3 (center) - 3 balls
+        for i in range(3):
+            x = start_x
+            y = start_y + (i - 1) * spacing
+            if i == 0:
+                rack.append(Ball(self.space, x, y, striped_colors[4], 13, is_striped=True))  # Orange stripe
+            elif i == 1:
+                rack.append(Ball(self.space, x, y, BLACK, 8))  # 8-ball in center
+            elif i == 2:
+                rack.append(Ball(self.space, x, y, solid_colors[5], 6))  # Green
+
+        # Column 4 - 2 balls
+        for i in range(2):
+            x = start_x - spacing
+            y = start_y + (i - 0.5) * spacing
+            if i == 0:
+                rack.append(Ball(self.space, x, y, striped_colors[5], 14, is_striped=True))  # Green stripe
+            elif i == 1:
+                rack.append(Ball(self.space, x, y, solid_colors[6], 7))  # Brown
+
+        # Column 5 (leftmost) - 1 ball
+        x = start_x - 2 * spacing
+        y = start_y
+        rack.append(Ball(self.space, x, y, striped_colors[6], 15, is_striped=True))  # Brown stripe
         
         # Sort balls by number
         rack.sort(key=lambda x: x.number)
@@ -225,6 +260,22 @@ class PoolGame:
         text_rect = text.get_rect(center=(WINDOW_WIDTH // 2, meter_y - 20))
         screen.blit(text, text_rect)
 
+    def are_balls_moving(self):
+        # Threshold for considering a ball "stopped" (in pixels per second)
+        VELOCITY_THRESHOLD = 10
+        any_ball_moving = False
+        
+        for ball in self.balls:
+            velocity = ball.body.velocity
+            speed = math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y)
+            if speed > VELOCITY_THRESHOLD:
+                any_ball_moving = True
+            else:
+                # Set velocity to 0 if below threshold
+                ball.body.velocity = (0, 0)
+        
+        return any_ball_moving
+
     def draw(self):
         self.screen.fill(GREEN)
         
@@ -235,37 +286,43 @@ class PoolGame:
         for ball in self.balls:
             ball.draw(self.screen)
             
-        # Draw targeting line and cue stick
-        mouse_pos = pygame.mouse.get_pos()
-        cue_pos = self.cue_ball.body.position
-        
-        # Draw targeting line (dashed)
-        dx = mouse_pos[0] - cue_pos.x
-        dy = mouse_pos[1] - cue_pos.y
-        distance = math.sqrt(dx * dx + dy * dy)
-        if distance > 0:
-            dir_x = dx / distance
-            dir_y = dy / distance
-            line_length = 1000  # Long enough to reach any point on screen
-            end_x = cue_pos.x + dir_x * line_length
-            end_y = cue_pos.y + dir_y * line_length
+        # Only show targeting line and cue stick if balls are not moving
+        if not self.are_balls_moving():
+            # Draw targeting line (dashed)
+            mouse_pos = pygame.mouse.get_pos()
+            cue_pos = self.cue_ball.body.position
             
-            # Draw dashed line
-            dash_length = 10
-            gap_length = 5
-            current_x = cue_pos.x
-            current_y = cue_pos.y
-            while math.sqrt((current_x - cue_pos.x)**2 + (current_y - cue_pos.y)**2) < line_length:
-                # Draw dash
-                pygame.draw.line(self.screen, (255, 255, 255, 128),
-                               (int(current_x), int(current_y)),
-                               (int(current_x + dir_x * dash_length),
-                                int(current_y + dir_y * dash_length)), 1)
-                # Move to next dash position
-                current_x += dir_x * (dash_length + gap_length)
-                current_y += dir_y * (dash_length + gap_length)
-        
-        self.draw_cue_stick(self.screen, mouse_pos)
+            dx = mouse_pos[0] - cue_pos.x
+            dy = mouse_pos[1] - cue_pos.y
+            distance = math.sqrt(dx * dx + dy * dy)
+            if distance > 0:
+                dir_x = dx / distance
+                dir_y = dy / distance
+                line_length = 1000  # Long enough to reach any point on screen
+                end_x = cue_pos.x + dir_x * line_length
+                end_y = cue_pos.y + dir_y * line_length
+                
+                # Draw dashed line
+                dash_length = 10
+                gap_length = 5
+                current_x = cue_pos.x
+                current_y = cue_pos.y
+                while math.sqrt((current_x - cue_pos.x)**2 + (current_y - cue_pos.y)**2) < line_length:
+                    # Draw dash
+                    pygame.draw.line(self.screen, (255, 255, 255, 128),
+                                   (int(current_x), int(current_y)),
+                                   (int(current_x + dir_x * dash_length),
+                                    int(current_y + dir_y * dash_length)), 1)
+                    # Move to next dash position
+                    current_x += dir_x * (dash_length + gap_length)
+                    current_y += dir_y * (dash_length + gap_length)
+            
+            self.draw_cue_stick(self.screen, mouse_pos)
+        else:
+            font = pygame.font.Font(None, 36)
+            text = font.render("Wait for balls to stop...", True, WHITE)
+            text_rect = text.get_rect(center=(WINDOW_WIDTH // 2, WINDOW_HEIGHT - 100))
+            self.screen.blit(text, text_rect)
             
         # Draw power meter
         self.draw_power_meter(self.screen)
