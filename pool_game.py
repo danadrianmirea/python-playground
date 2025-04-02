@@ -3,6 +3,8 @@ import math
 import pymunk
 import random
 import ctypes
+import json
+import os
 
 # Initialize Pygame
 pygame.init()
@@ -30,7 +32,13 @@ SCALE_FACTOR = min(width_scale, height_scale) * 0.85  # Add 15% margin
 
 # Scaled game dimensions
 WINDOW_WIDTH = int(BASE_WIDTH * SCALE_FACTOR)
-WINDOW_HEIGHT = int(BASE_HEIGHT * SCALE_FACTOR)
+
+# Menu constants
+MENU_HEIGHT = int(30 * SCALE_FACTOR)
+SAVE_FILE = "pool_game_save.json"
+
+# Scaled game dimensions (continued)
+WINDOW_HEIGHT = int(BASE_HEIGHT * SCALE_FACTOR) + MENU_HEIGHT  # Add menu height to total window height
 
 # Scale all game constants
 BALL_RADIUS = int(15 * SCALE_FACTOR)
@@ -55,6 +63,7 @@ PURPLE = (128, 0, 128)
 ORANGE = (255, 165, 0)
 GREEN_BALL = (0, 255, 0)
 BROWN_BALL = (139, 69, 19)
+GRAY = (128, 128, 128)
 
 # Ball properties
 BALL_MASS = 1.0
@@ -68,7 +77,7 @@ POWER_METER_COLOR = (255, 0, 0)  # Red
 POWER_METER_BG = (200, 200, 200)  # Gray
 
 # Shot properties
-MAX_SHOT_POWER = 2000
+MAX_SHOT_POWER = 3000
 MIN_SHOT_POWER = 100
 
 class Ball:
@@ -143,6 +152,9 @@ class PoolGame:
         # Speed control
         self.speed_multiplier = 1
         self.SPEED_UP_FACTOR = SPEED_UP_FACTOR
+        
+        # Add menu
+        self.menu = Menu()
 
     def handle_resize(self, width, height):
         """Handle window resize events"""
@@ -164,11 +176,11 @@ class PoolGame:
         wall_thickness = WALL_THICKNESS
         walls = [
             # Left wall
-            [(wall_thickness/2, WINDOW_HEIGHT/2), (wall_thickness, WINDOW_HEIGHT)],
+            [(wall_thickness/2, (WINDOW_HEIGHT + MENU_HEIGHT)/2), (wall_thickness, WINDOW_HEIGHT - MENU_HEIGHT)],
             # Right wall
-            [(WINDOW_WIDTH - wall_thickness/2, WINDOW_HEIGHT/2), (wall_thickness, WINDOW_HEIGHT)],
+            [(WINDOW_WIDTH - wall_thickness/2, (WINDOW_HEIGHT + MENU_HEIGHT)/2), (wall_thickness, WINDOW_HEIGHT - MENU_HEIGHT)],
             # Top wall
-            [(WINDOW_WIDTH/2, wall_thickness/2), (WINDOW_WIDTH, wall_thickness)],
+            [(WINDOW_WIDTH/2, wall_thickness/2 + MENU_HEIGHT), (WINDOW_WIDTH, wall_thickness)],
             # Bottom wall
             [(WINDOW_WIDTH/2, WINDOW_HEIGHT - wall_thickness/2), (WINDOW_WIDTH, wall_thickness)]
         ]
@@ -336,11 +348,72 @@ class PoolGame:
         
         return any_ball_moving
 
+    def save_game(self):
+        """Save the current game state to a file."""
+        game_state = {
+            'balls': [{
+                'number': ball.number,
+                'color': ball.color,
+                'is_striped': ball.is_striped,
+                'position': (ball.body.position.x, ball.body.position.y),
+                'velocity': (ball.body.velocity.x, ball.body.velocity.y)
+            } for ball in self.balls if ball != self.cue_ball],  # Exclude cue ball from regular balls
+            'cue_ball': {
+                'position': (self.cue_ball.body.position.x, self.cue_ball.body.position.y),
+                'velocity': (self.cue_ball.body.velocity.x, self.cue_ball.body.velocity.y)
+            }
+        }
+        
+        try:
+            with open(SAVE_FILE, 'w') as f:
+                json.dump(game_state, f)
+            print("Game saved successfully")
+        except Exception as e:
+            print(f"Error saving game: {e}")
+
+    def load_game(self):
+        """Load a saved game state from a file."""
+        try:
+            if not os.path.exists(SAVE_FILE):
+                print("No save file found")
+                return False
+                
+            with open(SAVE_FILE, 'r') as f:
+                game_state = json.load(f)
+                
+            # Clear all balls from the space
+            for ball in self.balls:
+                self.space.remove(ball.body, ball.shape)
+            self.balls.clear()
+            
+            # Load regular balls (excluding cue ball)
+            for ball_data in game_state['balls']:
+                # Skip the cue ball (white ball) as we'll load it separately
+                if ball_data['color'] == WHITE:
+                    continue
+                ball = Ball(self.space, ball_data['position'][0], ball_data['position'][1],
+                          ball_data['color'], ball_data['number'], ball_data['is_striped'])
+                ball.body.velocity = ball_data['velocity']
+                self.balls.append(ball)
+                
+            # Load cue ball
+            cue_data = game_state['cue_ball']
+            self.cue_ball = Ball(self.space, cue_data['position'][0], cue_data['position'][1], WHITE)
+            self.cue_ball.body.velocity = cue_data['velocity']
+            self.balls.append(self.cue_ball)
+            
+            print("Game loaded successfully")
+            return True
+            
+        except Exception as e:
+            print(f"Error loading game: {e}")
+            return False
+
     def draw(self):
         self.screen.fill(GREEN)
         
         # Draw table border
-        pygame.draw.rect(self.screen, BROWN, (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT), WALL_THICKNESS)
+        pygame.draw.rect(self.screen, BROWN, (0, MENU_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT - MENU_HEIGHT), WALL_THICKNESS)
         
         # Draw balls
         for ball in self.balls:
@@ -379,6 +452,9 @@ class PoolGame:
             
         # Draw power meter
         self.draw_power_meter(self.screen)
+        
+        # Draw menu
+        self.menu.draw(self.screen)
 
         pygame.display.flip()
 
@@ -437,13 +513,38 @@ class PoolGame:
                     self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
                     self.handle_resize(new_width, new_height)
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # Start aiming
+                    # First check for menu clicks
+                    menu_result = self.menu.handle_click(event.pos)
+                    if menu_result:
+                        menu_name, item = menu_result
+                        if menu_name == 'File':
+                            if item == 'New Game':
+                                self.reset_game()
+                            elif item == 'Save Game':
+                                self.save_game()
+                            elif item == 'Load Game':
+                                self.load_game()
+                            elif item == 'Quit':
+                                self.running = False
+                        # Close the menu after selecting an option
+                        self.menu.active_menu = None
+                        continue
+                    
+                    # Check if clicking on menu area (including active menu)
+                    if event.pos[1] < MENU_HEIGHT or (self.menu.active_menu and event.pos[1] < MENU_HEIGHT + len(self.menu.menu_items[self.menu.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.menu.padding)):
+                        continue
+                        
+                    # Start aiming only if not clicking in menu area
                     if event.button == 1:  # Left click
                         self.aiming = True
                         self.power = 0
                         self.power_increasing = True
                 elif event.type == pygame.MOUSEBUTTONUP:
-                    # Shoot the ball
+                    # Check if clicking on menu area (including active menu)
+                    if event.pos[1] < MENU_HEIGHT or (self.menu.active_menu and event.pos[1] < MENU_HEIGHT + len(self.menu.menu_items[self.menu.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.menu.padding)):
+                        continue
+                        
+                    # Shoot the ball only if not clicking in menu area
                     if event.button == 1:  # Left click
                         if self.aiming:
                             print("\n" + "="*50)
@@ -510,6 +611,109 @@ class PoolGame:
             self.clock.tick(FPS * self.speed_multiplier)
 
         pygame.quit()
+
+class Menu:
+    def __init__(self):
+        self.font = pygame.font.Font(None, int(24 * SCALE_FACTOR))
+        self.menu_items = {
+            'File': ['New Game', 'Save Game', 'Load Game', 'Quit']
+        }
+        self.active_menu = None
+        self.menu_rects = {}
+        self.item_rects = {}
+        self.padding = int(10 * SCALE_FACTOR)  # Padding around menu items
+        
+    def draw(self, screen):
+        # Draw menu bar background
+        pygame.draw.rect(screen, GRAY, (0, 0, WINDOW_WIDTH, MENU_HEIGHT))
+        
+        # Draw menu items
+        x = self.padding
+        for menu_name in self.menu_items:
+            text = self.font.render(menu_name, True, BLACK)
+            text_rect = text.get_rect(topleft=(x, int(5 * SCALE_FACTOR)))
+            
+            # Draw menu item background with padding
+            menu_rect = pygame.Rect(
+                x - self.padding,
+                0,
+                text_rect.width + 2 * self.padding,
+                MENU_HEIGHT
+            )
+            pygame.draw.rect(screen, GRAY, menu_rect)
+            pygame.draw.rect(screen, BLACK, menu_rect, 1)  # Add border
+            
+            screen.blit(text, text_rect)
+            self.menu_rects[menu_name] = menu_rect
+            x += text_rect.width + 2 * self.padding + int(20 * SCALE_FACTOR)  # Add spacing between menu items
+            
+        # Draw active menu if any
+        if self.active_menu:
+            menu_y = MENU_HEIGHT
+            # Calculate menu width based on longest item
+            max_width = 0
+            for item in self.menu_items[self.active_menu]:
+                text = self.font.render(item, True, BLACK)
+                max_width = max(max_width, text.get_width())
+            
+            # Add padding to width
+            menu_width = max_width + 2 * self.padding
+            menu_height = len(self.menu_items[self.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.padding)
+            
+            # Draw menu background
+            menu_rect = pygame.Rect(0, menu_y, menu_width, menu_height)
+            pygame.draw.rect(screen, GRAY, menu_rect)
+            pygame.draw.rect(screen, BLACK, menu_rect, 1)  # Add border
+            
+            # Draw menu items with padding
+            item_y = menu_y + self.padding
+            for item in self.menu_items[self.active_menu]:
+                text = self.font.render(item, True, BLACK)
+                text_rect = text.get_rect(topleft=(self.padding, item_y))
+                
+                # Draw item background with padding
+                item_rect = pygame.Rect(
+                    self.padding,
+                    item_y - self.padding,
+                    menu_width - 2 * self.padding,
+                    int(25 * SCALE_FACTOR) + 2 * self.padding
+                )
+                pygame.draw.rect(screen, GRAY, item_rect)
+                
+                screen.blit(text, text_rect)
+                self.item_rects[item] = item_rect
+                item_y += int(25 * SCALE_FACTOR) + 2 * self.padding
+                
+    def handle_click(self, pos):
+        x, y = pos
+        
+        # Check if clicking on menu bar
+        if y < MENU_HEIGHT:
+            for menu_name, rect in self.menu_rects.items():
+                if rect.collidepoint(pos):
+                    self.active_menu = menu_name if self.active_menu != menu_name else None
+                    return None
+                    
+        # Check if clicking on menu items
+        if self.active_menu and y >= MENU_HEIGHT:
+            # Check if click is within menu bounds
+            max_width = 0
+            for item in self.menu_items[self.active_menu]:
+                text = self.font.render(item, True, BLACK)
+                max_width = max(max_width, text.get_width())
+            
+            menu_width = max_width + 2 * self.padding
+            menu_height = len(self.menu_items[self.active_menu]) * (int(25 * SCALE_FACTOR) + 2 * self.padding)
+            
+            if x < menu_width and y < MENU_HEIGHT + menu_height:
+                for item, rect in self.item_rects.items():
+                    if rect.collidepoint(pos):
+                        return (self.active_menu, item)
+            else:
+                # Clicked outside menu, close it
+                self.active_menu = None
+                    
+        return None
 
 if __name__ == "__main__":
     game = PoolGame()
