@@ -30,6 +30,20 @@ BALL_MASS = 1.0
 FRICTION = 0.3
 ELASTICITY = 0.8
 
+# Cue stick properties
+CUE_LENGTH = 200
+CUE_WIDTH = 8
+CUE_COLOR = (139, 69, 19)  # Brown
+CUE_TIP_COLOR = (255, 255, 255)  # White
+POWER_METER_WIDTH = 200
+POWER_METER_HEIGHT = 20
+POWER_METER_COLOR = (255, 0, 0)  # Red
+POWER_METER_BG = (200, 200, 200)  # Gray
+
+# Shot properties
+MAX_SHOT_POWER = 8000  # Maximum force that can be applied
+MIN_SHOT_POWER = 1000  # Minimum force that can be applied
+
 class Ball:
     def __init__(self, space, x, y, color, number=0, is_striped=False):
         self.color = color
@@ -90,6 +104,13 @@ class PoolGame:
         self.balls = []
         self.cue_ball = None
         self.setup_balls()
+        
+        # Shooting mechanics
+        self.aiming = False
+        self.power = 0
+        self.power_increasing = True
+        self.max_power = 100
+        self.power_speed = 2
 
     def create_table_boundaries(self):
         wall_thickness = 20
@@ -154,6 +175,56 @@ class PoolGame:
         rack.sort(key=lambda x: x.number)
         self.balls.extend(rack)
 
+    def draw_cue_stick(self, screen, mouse_pos):
+        cue_pos = self.cue_ball.body.position
+        dx = mouse_pos[0] - cue_pos.x
+        dy = mouse_pos[1] - cue_pos.y
+        distance = math.sqrt(dx * dx + dy * dy)
+        
+        if distance > 0:
+            # Calculate the direction vector
+            dir_x = dx / distance
+            dir_y = dy / distance
+            
+            # Calculate the cue stick position
+            cue_start_x = cue_pos.x - dir_x * (CUE_LENGTH + BALL_RADIUS)
+            cue_start_y = cue_pos.y - dir_y * (CUE_LENGTH + BALL_RADIUS)
+            cue_end_x = cue_pos.x - dir_x * BALL_RADIUS
+            cue_end_y = cue_pos.y - dir_y * BALL_RADIUS
+            
+            # Draw the cue stick
+            pygame.draw.line(screen, CUE_COLOR, 
+                           (int(cue_start_x), int(cue_start_y)),
+                           (int(cue_end_x), int(cue_end_y)),
+                           CUE_WIDTH)
+            
+            # Draw the cue tip
+            pygame.draw.circle(screen, CUE_TIP_COLOR,
+                             (int(cue_end_x), int(cue_end_y)),
+                             CUE_WIDTH // 2)
+
+    def draw_power_meter(self, screen):
+        # Draw power meter background
+        meter_x = WINDOW_WIDTH // 2 - POWER_METER_WIDTH // 2
+        meter_y = WINDOW_HEIGHT - 40
+        pygame.draw.rect(screen, POWER_METER_BG,
+                        (meter_x, meter_y, POWER_METER_WIDTH, POWER_METER_HEIGHT))
+        
+        # Draw power level
+        power_width = int(POWER_METER_WIDTH * (self.power / self.max_power))
+        pygame.draw.rect(screen, POWER_METER_COLOR,
+                        (meter_x, meter_y, power_width, POWER_METER_HEIGHT))
+        
+        # Draw power meter border
+        pygame.draw.rect(screen, BLACK,
+                        (meter_x, meter_y, POWER_METER_WIDTH, POWER_METER_HEIGHT), 2)
+        
+        # Draw power percentage text
+        font = pygame.font.Font(None, 24)
+        text = font.render(f"{int(self.power)}%", True, BLACK)
+        text_rect = text.get_rect(center=(WINDOW_WIDTH // 2, meter_y - 20))
+        screen.blit(text, text_rect)
+
     def draw(self):
         self.screen.fill(GREEN)
         
@@ -163,8 +234,58 @@ class PoolGame:
         # Draw balls
         for ball in self.balls:
             ball.draw(self.screen)
+            
+        # Draw targeting line and cue stick
+        mouse_pos = pygame.mouse.get_pos()
+        cue_pos = self.cue_ball.body.position
+        
+        # Draw targeting line (dashed)
+        dx = mouse_pos[0] - cue_pos.x
+        dy = mouse_pos[1] - cue_pos.y
+        distance = math.sqrt(dx * dx + dy * dy)
+        if distance > 0:
+            dir_x = dx / distance
+            dir_y = dy / distance
+            line_length = 1000  # Long enough to reach any point on screen
+            end_x = cue_pos.x + dir_x * line_length
+            end_y = cue_pos.y + dir_y * line_length
+            
+            # Draw dashed line
+            dash_length = 10
+            gap_length = 5
+            current_x = cue_pos.x
+            current_y = cue_pos.y
+            while math.sqrt((current_x - cue_pos.x)**2 + (current_y - cue_pos.y)**2) < line_length:
+                # Draw dash
+                pygame.draw.line(self.screen, (255, 255, 255, 128),
+                               (int(current_x), int(current_y)),
+                               (int(current_x + dir_x * dash_length),
+                                int(current_y + dir_y * dash_length)), 1)
+                # Move to next dash position
+                current_x += dir_x * (dash_length + gap_length)
+                current_y += dir_y * (dash_length + gap_length)
+        
+        self.draw_cue_stick(self.screen, mouse_pos)
+            
+        # Draw power meter
+        self.draw_power_meter(self.screen)
 
         pygame.display.flip()
+
+    def update_power(self):
+        if not self.aiming:
+            return
+            
+        if self.power_increasing:
+            self.power += self.power_speed
+            if self.power >= self.max_power:
+                self.power = self.max_power
+                self.power_increasing = False
+        else:
+            self.power -= self.power_speed
+            if self.power <= 0:
+                self.power = 0
+                self.power_increasing = True
 
     def run(self):
         while self.running:
@@ -172,18 +293,31 @@ class PoolGame:
                 if event.type == pygame.QUIT:
                     self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    # Handle shooting
+                    # Start aiming
                     if event.button == 1:  # Left click
-                        mouse_x, mouse_y = pygame.mouse.get_pos()
-                        cue_pos = self.cue_ball.body.position
-                        dx = mouse_x - cue_pos.x
-                        dy = mouse_y - cue_pos.y
-                        distance = math.sqrt(dx * dx + dy * dy)
-                        if distance > 0:
-                            # Apply impulse to cue ball
-                            force = 5000
-                            impulse = (dx / distance * force, dy / distance * force)
-                            self.cue_ball.body.apply_impulse_at_local_point(impulse)
+                        self.aiming = True
+                        self.power = 0
+                        self.power_increasing = True
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    # Shoot the ball
+                    if event.button == 1:  # Left click
+                        if self.aiming:
+                            mouse_x, mouse_y = pygame.mouse.get_pos()
+                            cue_pos = self.cue_ball.body.position
+                            dx = mouse_x - cue_pos.x
+                            dy = mouse_y - cue_pos.y
+                            distance = math.sqrt(dx * dx + dy * dy)
+                            if distance > 0:
+                                # Calculate force based on power (between MIN and MAX)
+                                power_factor = self.power / self.max_power
+                                force = MIN_SHOT_POWER + (MAX_SHOT_POWER - MIN_SHOT_POWER) * power_factor
+                                impulse = (dx / distance * force, dy / distance * force)
+                                self.cue_ball.body.apply_impulse_at_local_point(impulse)
+                        self.aiming = False
+                        self.power = 0
+
+            # Update power meter while aiming
+            self.update_power()
 
             # Update physics
             self.space.step(1/FPS)
