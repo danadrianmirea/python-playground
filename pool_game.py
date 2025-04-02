@@ -163,6 +163,9 @@ class PoolGame:
         
         # Add menu
         self.menu = Menu()
+        
+        # Control visibility
+        self.show_controls = True  # Controls are visible by default
 
     def handle_resize(self, width, height):
         """Handle window resize events"""
@@ -334,7 +337,7 @@ class PoolGame:
     def draw_power_meter(self, screen):
         # Draw power meter background
         meter_x = WINDOW_WIDTH // 2 - POWER_METER_WIDTH // 2
-        meter_y = WINDOW_HEIGHT - 100  # Moved up from 40 to 100
+        meter_y = WINDOW_HEIGHT - 120  # Moved up from 40 to 100
         pygame.draw.rect(screen, POWER_METER_BG,
                         (meter_x, meter_y, POWER_METER_WIDTH, POWER_METER_HEIGHT))
         
@@ -459,6 +462,34 @@ class PoolGame:
             self.space.remove(ball.body, ball.shape)
             self.balls.remove(ball)
 
+    def draw_controls(self, screen):
+        """Draw control instructions for the player."""
+        if not self.show_controls:
+            return
+            
+        font = pygame.font.Font(None, int(20 * SCALE_FACTOR))
+        
+        # Create control text with icons
+        controls = [
+            ("LMB", "+Power", (255, 255, 255)),
+            ("RMB", "-Power", (255, 255, 255)),
+            ("Space", "Shoot", (255, 255, 255)),
+            ("H", "Hide/Show", (255, 255, 255))
+        ]
+        
+        # Draw controls in the top-right corner, moved 100 pixels left
+        start_x = WINDOW_WIDTH - 250  # Changed from 200 to 250 to move text further left
+        start_y = MENU_HEIGHT + 10
+        
+        for i, (key, action, color) in enumerate(controls):
+            # Draw key name
+            key_text = font.render(key, True, color)
+            screen.blit(key_text, (start_x, start_y + i * 25))
+            
+            # Draw action description
+            action_text = font.render(action, True, color)
+            screen.blit(action_text, (start_x + 70, start_y + i * 25))  # Reduced spacing since text is shorter
+
     def draw(self):
         self.screen.fill(GREEN)
         
@@ -508,6 +539,9 @@ class PoolGame:
             
         # Draw power meter
         self.draw_power_meter(self.screen)
+        
+        # Draw controls
+        self.draw_controls(self.screen)
         
         # Draw menu
         self.menu.draw(self.screen)
@@ -594,6 +628,9 @@ class PoolGame:
                     # Speed up key
                     if event.key == pygame.K_s:
                         self.speed_multiplier = self.SPEED_UP_FACTOR
+                    # Toggle controls visibility
+                    elif event.key == pygame.K_h:
+                        self.show_controls = not self.show_controls
                     # Shoot with space key
                     elif event.key == pygame.K_SPACE and self.aiming and not self.are_balls_moving():
                         print("\n" + "="*50)
