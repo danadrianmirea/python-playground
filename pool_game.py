@@ -70,6 +70,10 @@ BALL_MASS = 1.0
 FRICTION = 0.5
 ELASTICITY = 0.8
 
+# Pocket properties
+POCKET_RADIUS = int(28 * SCALE_FACTOR)  # Radius of pocket holes
+POCKET_COLOR = BLACK  # Color of pocket holes
+
 # Cue stick properties
 CUE_COLOR = (139, 69, 19)  # Brown
 CUE_TIP_COLOR = (255, 255, 255)  # White
@@ -138,6 +142,10 @@ class PoolGame:
         # Create table boundaries
         self.create_table_boundaries()
         
+        # Initialize pockets
+        self.pockets = []
+        self.setup_pockets()
+        
         self.balls = []
         self.cue_ball = None
         self.setup_balls()
@@ -172,17 +180,30 @@ class PoolGame:
         self.balls = []
         self.setup_balls()
 
+    def setup_pockets(self):
+        """Create pocket positions at the corners and middle of the long sides."""
+        # Corner pockets
+        self.pockets = [
+            (WALL_THICKNESS, WALL_THICKNESS + MENU_HEIGHT),  # Top-left
+            (WINDOW_WIDTH - WALL_THICKNESS, WALL_THICKNESS + MENU_HEIGHT),  # Top-right
+            (WALL_THICKNESS, WINDOW_HEIGHT - WALL_THICKNESS),  # Bottom-left
+            (WINDOW_WIDTH - WALL_THICKNESS, WINDOW_HEIGHT - WALL_THICKNESS),  # Bottom-right
+            (WINDOW_WIDTH // 2, WALL_THICKNESS + MENU_HEIGHT),  # Top-middle
+            (WINDOW_WIDTH // 2, WINDOW_HEIGHT - WALL_THICKNESS)  # Bottom-middle
+        ]
+
     def create_table_boundaries(self):
         wall_thickness = WALL_THICKNESS
+        # Create walls with gaps for pockets
         walls = [
-            # Left wall
-            [(wall_thickness/2, (WINDOW_HEIGHT + MENU_HEIGHT)/2), (wall_thickness, WINDOW_HEIGHT - MENU_HEIGHT)],
-            # Right wall
-            [(WINDOW_WIDTH - wall_thickness/2, (WINDOW_HEIGHT + MENU_HEIGHT)/2), (wall_thickness, WINDOW_HEIGHT - MENU_HEIGHT)],
-            # Top wall
-            [(WINDOW_WIDTH/2, wall_thickness/2 + MENU_HEIGHT), (WINDOW_WIDTH, wall_thickness)],
-            # Bottom wall
-            [(WINDOW_WIDTH/2, WINDOW_HEIGHT - wall_thickness/2), (WINDOW_WIDTH, wall_thickness)]
+            # Left wall (with gaps for pockets)
+            [(wall_thickness/2, (WINDOW_HEIGHT + MENU_HEIGHT)/2), (wall_thickness, WINDOW_HEIGHT - MENU_HEIGHT - 2*POCKET_RADIUS)],
+            # Right wall (with gaps for pockets)
+            [(WINDOW_WIDTH - wall_thickness/2, (WINDOW_HEIGHT + MENU_HEIGHT)/2), (wall_thickness, WINDOW_HEIGHT - MENU_HEIGHT - 2*POCKET_RADIUS)],
+            # Top wall (with gaps for pockets)
+            [(WINDOW_WIDTH/2, wall_thickness/2 + MENU_HEIGHT), (WINDOW_WIDTH - 2*POCKET_RADIUS, wall_thickness)],
+            # Bottom wall (with gaps for pockets)
+            [(WINDOW_WIDTH/2, WINDOW_HEIGHT - wall_thickness/2), (WINDOW_WIDTH - 2*POCKET_RADIUS, wall_thickness)]
         ]
         
         for pos, size in walls:
@@ -313,7 +334,7 @@ class PoolGame:
     def draw_power_meter(self, screen):
         # Draw power meter background
         meter_x = WINDOW_WIDTH // 2 - POWER_METER_WIDTH // 2
-        meter_y = WINDOW_HEIGHT - 40
+        meter_y = WINDOW_HEIGHT - 100  # Moved up from 40 to 100
         pygame.draw.rect(screen, POWER_METER_BG,
                         (meter_x, meter_y, POWER_METER_WIDTH, POWER_METER_HEIGHT))
         
@@ -413,11 +434,42 @@ class PoolGame:
             print(f"Error loading game: {e}")
             return False
 
+    def check_pocket_collision(self, ball):
+        """Check if a ball has entered a pocket."""
+        ball_pos = ball.body.position
+        for pocket_pos in self.pockets:
+            # Calculate distance between ball and pocket
+            dx = ball_pos.x - pocket_pos[0]
+            dy = ball_pos.y - pocket_pos[1]
+            distance = math.sqrt(dx * dx + dy * dy)
+            
+            # If ball is close enough to pocket, consider it pocketed
+            if distance < POCKET_RADIUS:
+                return True
+        return False
+
+    def handle_pocketed_ball(self, ball):
+        """Handle a ball that has been pocketed."""
+        if ball == self.cue_ball:
+            # If cue ball is pocketed, reset it to starting position
+            ball.body.position = (WINDOW_WIDTH // 4, WINDOW_HEIGHT // 2)
+            ball.body.velocity = (0, 0)
+        else:
+            # For other balls, remove them from the game
+            self.space.remove(ball.body, ball.shape)
+            self.balls.remove(ball)
+
     def draw(self):
         self.screen.fill(GREEN)
         
         # Draw table border
         pygame.draw.rect(self.screen, BROWN, (0, MENU_HEIGHT, WINDOW_WIDTH, WINDOW_HEIGHT - MENU_HEIGHT), WALL_THICKNESS)
+        
+        # Draw pockets
+        for pocket_pos in self.pockets:
+            pygame.draw.circle(self.screen, POCKET_COLOR, 
+                             (int(pocket_pos[0]), int(pocket_pos[1])), 
+                             POCKET_RADIUS)
         
         # Draw balls
         for ball in self.balls:
@@ -591,6 +643,11 @@ class PoolGame:
             # Update physics multiple times if speed up is active
             for _ in range(self.speed_multiplier):
                 self.space.step(1/FPS)
+                
+                # Check for pocketed balls
+                for ball in self.balls[:]:  # Use slice copy to avoid modifying list while iterating
+                    if self.check_pocket_collision(ball):
+                        self.handle_pocketed_ball(ball)
             
             # Draw everything
             self.draw()
