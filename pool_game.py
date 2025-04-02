@@ -97,14 +97,14 @@ class Ball:
         pygame.draw.circle(screen, self.color, (x, y), BALL_RADIUS)
         
         # Draw the number
-        font = pygame.font.Font(None, 24)
+        font = pygame.font.Font(None, int(24 * SCALE_FACTOR))
         text = font.render(str(self.number), True, WHITE if self.color == BLACK else BLACK)
         text_rect = text.get_rect(center=(x, y))
         screen.blit(text, text_rect)
         
         # Draw stripe for striped balls
         if self.is_striped:
-            stripe_width = 8
+            stripe_width = int(8 * SCALE_FACTOR)
             stripe_height = BALL_RADIUS * 2
             stripe_rect = pygame.Rect(
                 x - stripe_width//2,
@@ -195,7 +195,10 @@ class PoolGame:
         # Setup the rack position
         start_x = WINDOW_WIDTH * 3 // 4
         start_y = WINDOW_HEIGHT // 2
-        spacing = BALL_RADIUS * 2.2  # Slightly larger spacing to prevent initial overlap
+        
+        # Calculate spacing - balls should be touching each other
+        # The distance between ball centers should be exactly 2 * BALL_RADIUS
+        spacing = BALL_RADIUS * 2
 
         # Create the rack of balls
         rack = []
@@ -405,6 +408,21 @@ class PoolGame:
             print(f"Ball {ball.number} velocity after stop: {ball.body.velocity}")
         print("="*50 + "\n")
 
+    def reset_game(self):
+        """Reset the game to its initial state"""
+        # Clear all balls from the space
+        for ball in self.balls:
+            self.space.remove(ball.body, ball.shape)
+        self.balls.clear()
+        
+        # Recreate the balls in their initial positions
+        self.setup_balls()
+        
+        # Reset shooting mechanics
+        self.aiming = False
+        self.power = 0
+        self.power_increasing = True
+
     def run(self):
         while self.running:
             for event in pygame.event.get():
@@ -470,6 +488,9 @@ class PoolGame:
                     # Speed up key
                     elif event.key == pygame.K_SPACE:
                         self.speed_multiplier = self.SPEED_UP_FACTOR
+                    # Reset game key
+                    elif event.key == pygame.K_r:
+                        self.reset_game()
                 elif event.type == pygame.KEYUP:
                     # Return to normal speed when space is released
                     if event.key == pygame.K_SPACE:
