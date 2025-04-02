@@ -77,7 +77,7 @@ POWER_METER_COLOR = (255, 0, 0)  # Red
 POWER_METER_BG = (200, 200, 200)  # Gray
 
 # Shot properties
-MAX_SHOT_POWER = 3000
+MAX_SHOT_POWER = 2500
 MIN_SHOT_POWER = 100
 
 class Ball:
@@ -583,18 +583,12 @@ class PoolGame:
                         self.aiming = False
                         self.power = 0
                 elif event.type == pygame.KEYDOWN:
-                    # Debug key to stop all balls
-                    if event.key == pygame.K_s:
-                        self.stop_all_balls()
                     # Speed up key
-                    elif event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_s:
                         self.speed_multiplier = self.SPEED_UP_FACTOR
-                    # Reset game key
-                    elif event.key == pygame.K_r:
-                        self.reset_game()
                 elif event.type == pygame.KEYUP:
-                    # Return to normal speed when space is released
-                    if event.key == pygame.K_SPACE:
+                    # Return to normal speed when S is released
+                    if event.key == pygame.K_s:
                         self.speed_multiplier = 1
 
             # Update power meter while aiming
