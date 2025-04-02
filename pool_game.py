@@ -27,7 +27,7 @@ BROWN_BALL = (139, 69, 19)
 # Ball properties
 BALL_RADIUS = 15
 BALL_MASS = 1.0
-FRICTION = 3
+FRICTION = 0.5
 ELASTICITY = 0.8
 
 # Cue stick properties
@@ -41,8 +41,8 @@ POWER_METER_COLOR = (255, 0, 0)  # Red
 POWER_METER_BG = (200, 200, 200)  # Gray
 
 # Shot properties
-MAX_SHOT_POWER = 4000  # Maximum force that can be applied
-MIN_SHOT_POWER = 500  # Minimum force that can be applied
+MAX_SHOT_POWER = 1000
+MIN_SHOT_POWER = 100
 
 class Ball:
     def __init__(self, space, x, y, color, number=0, is_striped=False):
@@ -358,8 +358,14 @@ class PoolGame:
 
     def stop_all_balls(self):
         """Stop all balls by setting their velocities to zero."""
+        print("\n" + "="*50)
+        print("STOPPING ALL BALLS")
+        print("="*50)
         for ball in self.balls:
+            print(f"Ball {ball.number} velocity before stop: {ball.body.velocity}")
             ball.body.velocity = (0, 0)
+            print(f"Ball {ball.number} velocity after stop: {ball.body.velocity}")
+        print("="*50 + "\n")
 
     def run(self):
         while self.running:
@@ -376,6 +382,10 @@ class PoolGame:
                     # Shoot the ball
                     if event.button == 1:  # Left click
                         if self.aiming:
+                            print("\n" + "="*50)
+                            print("TAKING SHOT")
+                            print("="*50)
+                            
                             mouse_pos = pygame.mouse.get_pos()
                             cue_pos = self.cue_ball.body.position
                             dir_x, dir_y = self.calculate_shot_direction(mouse_pos, cue_pos)
@@ -392,9 +402,19 @@ class PoolGame:
                             print(f"Final impulse: ({impulse[0]:.1f}, {impulse[1]:.1f})")
                             print(f"Cue ball velocity before shot: {self.cue_ball.body.velocity}")
                             
-                            self.cue_ball.body.apply_impulse_at_local_point(impulse)
+                            # Apply impulse directly to the ball's center
+                            self.cue_ball.body.apply_impulse_at_local_point(impulse, (0, 0))
+                            
+                            # Ensure the velocity follows the intended direction
+                            current_velocity = self.cue_ball.body.velocity
+                            speed = math.sqrt(current_velocity.x * current_velocity.x + current_velocity.y * current_velocity.y)
+                            self.cue_ball.body.velocity = (dir_x * speed, dir_y * speed)
+                            
+                            # Add some damping to the velocity immediately after the shot
+                            self.cue_ball.body.velocity *= 0.95
                             
                             print(f"Cue ball velocity after shot: {self.cue_ball.body.velocity}")
+                            print("="*50 + "\n")
                         self.aiming = False
                         self.power = 0
                 elif event.type == pygame.KEYDOWN:
