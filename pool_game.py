@@ -2,15 +2,45 @@ import pygame
 import math
 import pymunk
 import random
+import ctypes
 
 # Initialize Pygame
 pygame.init()
 
-# Constants
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 600
-FPS = 60
+# Get the user's screen dimensions
+user32 = ctypes.windll.user32
+SCREEN_WIDTH = user32.GetSystemMetrics(0)  # Width
+SCREEN_HEIGHT = user32.GetSystemMetrics(1)  # Height
 
+# Calculate the maximum game dimensions while accounting for window decorations and taskbar
+# Assuming taskbar is 40px and window decorations are 30px
+TASKBAR_HEIGHT = 40
+WINDOW_DECORATIONS = 30
+MAX_GAME_HEIGHT = SCREEN_HEIGHT - TASKBAR_HEIGHT - WINDOW_DECORATIONS
+MAX_GAME_WIDTH = SCREEN_WIDTH - WINDOW_DECORATIONS
+
+# Base game dimensions (original size)
+BASE_WIDTH = 800
+BASE_HEIGHT = 600
+
+# Calculate scaling factor while maintaining aspect ratio
+width_scale = MAX_GAME_WIDTH / BASE_WIDTH
+height_scale = MAX_GAME_HEIGHT / BASE_HEIGHT
+SCALE_FACTOR = min(width_scale, height_scale) * 0.85  # Add 15% margin
+
+# Scaled game dimensions
+WINDOW_WIDTH = int(BASE_WIDTH * SCALE_FACTOR)
+WINDOW_HEIGHT = int(BASE_HEIGHT * SCALE_FACTOR)
+
+# Scale all game constants
+BALL_RADIUS = int(15 * SCALE_FACTOR)
+CUE_LENGTH = int(200 * SCALE_FACTOR)
+CUE_WIDTH = int(8 * SCALE_FACTOR)
+POWER_METER_WIDTH = int(200 * SCALE_FACTOR)
+POWER_METER_HEIGHT = int(20 * SCALE_FACTOR)
+WALL_THICKNESS = int(20 * SCALE_FACTOR)
+
+FPS = 60
 SPEED_UP_FACTOR = 8
 
 # Colors
@@ -27,18 +57,13 @@ GREEN_BALL = (0, 255, 0)
 BROWN_BALL = (139, 69, 19)
 
 # Ball properties
-BALL_RADIUS = 15
 BALL_MASS = 1.0
 FRICTION = 0.5
 ELASTICITY = 0.8
 
 # Cue stick properties
-CUE_LENGTH = 200
-CUE_WIDTH = 8
 CUE_COLOR = (139, 69, 19)  # Brown
 CUE_TIP_COLOR = (255, 255, 255)  # White
-POWER_METER_WIDTH = 200
-POWER_METER_HEIGHT = 20
 POWER_METER_COLOR = (255, 0, 0)  # Red
 POWER_METER_BG = (200, 200, 200)  # Gray
 
@@ -91,7 +116,8 @@ class Ball:
 
 class PoolGame:
     def __init__(self):
-        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+        # Create resizable window
+        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
         pygame.display.set_caption("2D Pool Game")
         self.clock = pygame.time.Clock()
         self.running = True
@@ -118,8 +144,24 @@ class PoolGame:
         self.speed_multiplier = 1
         self.SPEED_UP_FACTOR = SPEED_UP_FACTOR
 
+    def handle_resize(self, width, height):
+        """Handle window resize events"""
+        # Update window dimensions
+        global WINDOW_WIDTH, WINDOW_HEIGHT
+        WINDOW_WIDTH = width
+        WINDOW_HEIGHT = height
+        
+        # Recreate table boundaries
+        self.space = pymunk.Space()
+        self.space.damping = 0.85
+        self.create_table_boundaries()
+        
+        # Recreate balls
+        self.balls = []
+        self.setup_balls()
+
     def create_table_boundaries(self):
-        wall_thickness = 20
+        wall_thickness = WALL_THICKNESS
         walls = [
             # Left wall
             [(wall_thickness/2, WINDOW_HEIGHT/2), (wall_thickness, WINDOW_HEIGHT)],
@@ -295,7 +337,7 @@ class PoolGame:
         self.screen.fill(GREEN)
         
         # Draw table border
-        pygame.draw.rect(self.screen, BROWN, (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT), 20)
+        pygame.draw.rect(self.screen, BROWN, (0, 0, WINDOW_WIDTH, WINDOW_HEIGHT), WALL_THICKNESS)
         
         # Draw balls
         for ball in self.balls:
@@ -368,6 +410,14 @@ class PoolGame:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
+                elif event.type == pygame.VIDEORESIZE:
+                    # Handle window resize
+                    width, height = event.size
+                    # Maintain aspect ratio
+                    new_width = min(width, MAX_GAME_WIDTH)
+                    new_height = min(height, MAX_GAME_HEIGHT)
+                    self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
+                    self.handle_resize(new_width, new_height)
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     # Start aiming
                     if event.button == 1:  # Left click
