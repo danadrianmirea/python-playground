@@ -73,11 +73,18 @@ class Canvas(QWidget):
         self.brush_tool = True  # Brush is the default tool
         self.selection_mode = False
         self.shape_tool = False
-        self.fill_tool = False  # Add fill tool property
-        self.shape_type = None  # 'circle' or 'rectangle'
+        self.fill_tool = False
+        self.move_tool = False
+        self.shape_type = None
         self.selection_start = QPoint()
         self.selection_end = QPoint()
         self.has_selection = False
+        # Add selection movement properties
+        self.moving_selection = False
+        self.move_start = QPoint()
+        self.original_selection_start = QPoint()
+        self.original_selection_end = QPoint()
+        self.selected_content = None  # Initialize selected_content
         # Add image history
         self.image_history = [self.image.copy()]
         self.current_history_index = 0
@@ -106,47 +113,96 @@ class Canvas(QWidget):
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
+            pos = QPoint(event.pos() / self.scale_factor)
+            
+            # Check if clicking inside existing selection
+            if self.has_selection and self.get_selection_rect().contains(pos):
+                self.moving_selection = True
+                self.move_start = pos
+                self.original_selection_start = self.selection_start
+                self.original_selection_end = self.selection_end
+                # Store the selected content
+                self.selected_content = self.image.copy(self.get_selection_rect())
+                return
+            
             if self.selection_mode:
-                self.selection_start = QPoint(event.pos() / self.scale_factor)
+                self.selection_start = pos
                 self.selection_end = self.selection_start
                 self.has_selection = True
-                # Set focus when making a selection
                 self.setFocus()
             elif self.brush_tool:
                 self.drawing = True
-                self.last_point = QPoint(event.pos() / self.scale_factor)
+                self.last_point = pos
             elif self.shape_tool:
                 self.drawing = True
-                self.selection_start = QPoint(event.pos() / self.scale_factor)
+                self.selection_start = pos
                 self.selection_end = self.selection_start
             elif self.fill_tool:
-                # Get the color at the clicked position
-                pos = event.pos() / self.scale_factor
                 target_color = self.image.pixelColor(int(pos.x()), int(pos.y()))
-                # Perform flood fill
                 self.flood_fill(pos.x(), pos.y(), target_color, self.foreground_color)
                 self.save_to_history()
                 self.update()
+            elif self.move_tool and self.has_selection:
+                # Start moving selected content
+                self.moving_selection = True
+                self.move_start = pos
+                self.original_selection_start = self.selection_start
+                self.original_selection_end = self.selection_end
+                # Store the selected content
+                self.selected_content = self.image.copy(self.get_selection_rect())
     
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.LeftButton:
+            pos = QPoint(event.pos() / self.scale_factor)
+            
+            if self.moving_selection and self.selected_content is not None:
+                # Calculate the movement delta
+                delta = pos - self.move_start
+                # Update selection position
+                self.selection_start = self.original_selection_start + delta
+                self.selection_end = self.original_selection_end + delta
+                
+                if self.move_tool and self.has_selection:
+                    # Create a temporary image for preview
+                    temp_image = self.image.copy()
+                    painter = QPainter(temp_image)
+                    # Clear the original selection area
+                    painter.fillRect(self.get_selection_rect(), self.background_color)
+                    # Draw the selected content at the new position
+                    painter.drawImage(self.get_selection_rect(), self.selected_content)
+                    painter.end()
+                    # Update the display
+                    self.image = temp_image
+                
+                self.update()
+                return
+            
             if self.selection_mode and self.has_selection:
-                self.selection_end = QPoint(event.pos() / self.scale_factor)
+                self.selection_end = pos
                 self.update()
             elif self.brush_tool and self.drawing:
-                current_point = QPoint(event.pos() / self.scale_factor)
+                current_point = pos
                 painter = QPainter(self.image)
                 painter.setPen(QPen(self.foreground_color, self.brush_size, Qt.SolidLine))
                 painter.drawLine(self.last_point, current_point)
                 self.last_point = current_point
                 self.update()
             elif self.shape_tool and self.drawing:
-                self.selection_end = QPoint(event.pos() / self.scale_factor)
+                self.selection_end = pos
                 self.update()
     
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            if self.selection_mode:
+            if self.moving_selection:
+                self.moving_selection = False
+                if self.move_tool and self.has_selection:
+                    # Save the moved content to history
+                    self.save_to_history()
+                else:
+                    # Just update the selection position
+                    self.update()
+                self.selected_content = None  # Clear the selected content
+            elif self.selection_mode:
                 self.selection_end = QPoint(event.pos() / self.scale_factor)
                 self.update()
             elif self.brush_tool:
@@ -368,6 +424,12 @@ class DrawingApp(QMainWindow):
         self.selection_action.triggered.connect(self.toggle_selection_tool)
         toolbar.addAction(self.selection_action)
         
+        # Move tool toggle
+        self.move_action = QAction('Move Tool', self)
+        self.move_action.setCheckable(True)
+        self.move_action.triggered.connect(self.toggle_move_tool)
+        toolbar.addAction(self.move_action)
+        
         # Shape tool toggles
         self.circle_action = QAction('Circle Tool', self)
         self.circle_action.setCheckable(True)
@@ -471,7 +533,7 @@ class DrawingApp(QMainWindow):
             self.brush_action.setChecked(False)
             self.circle_action.setChecked(False)
             self.rectangle_action.setChecked(False)
-            self.fill_action.setChecked(False)  # Deselect fill tool
+            self.fill_action.setChecked(False)
             
             # Set selection tool properties
             self.canvas.brush_tool = False
@@ -479,7 +541,7 @@ class DrawingApp(QMainWindow):
             self.canvas.shape_tool = False
             self.canvas.fill_tool = False
             self.canvas.shape_type = None
-            self.canvas.has_selection = False
+            # Don't clear selection
             self.canvas.update()
     
     def change_brush_size(self, size):
@@ -491,7 +553,7 @@ class DrawingApp(QMainWindow):
             self.selection_action.setChecked(False)
             self.circle_action.setChecked(False)
             self.rectangle_action.setChecked(False)
-            self.fill_action.setChecked(False)  # Deselect fill tool
+            self.fill_action.setChecked(False)
             
             # Set brush tool properties
             self.canvas.brush_tool = True
@@ -499,7 +561,7 @@ class DrawingApp(QMainWindow):
             self.canvas.shape_tool = False
             self.canvas.fill_tool = False
             self.canvas.shape_type = None
-            self.canvas.has_selection = False
+            # Don't clear selection
             self.canvas.update()
     
     def toggle_shape_tool(self, shape_type):
@@ -507,26 +569,22 @@ class DrawingApp(QMainWindow):
             # Deselect all other tools
             self.brush_action.setChecked(False)
             self.selection_action.setChecked(False)
-            self.fill_action.setChecked(False)  # Deselect fill tool
+            self.fill_action.setChecked(False)
             
-            # If switching between circle and rectangle, just update shape type
-            if self.canvas.shape_tool:
-                self.canvas.shape_type = shape_type
+            # Deselect the other shape tool
+            if shape_type == 'circle':
+                self.rectangle_action.setChecked(False)
             else:
-                # Deselect the other shape tool
-                if shape_type == 'circle':
-                    self.rectangle_action.setChecked(False)
-                else:
-                    self.circle_action.setChecked(False)
-                
-                # Set shape tool properties
-                self.canvas.brush_tool = False
-                self.canvas.selection_mode = False
-                self.canvas.shape_tool = True
-                self.canvas.fill_tool = False
-                self.canvas.shape_type = shape_type
-                self.canvas.has_selection = False
-                self.canvas.update()
+                self.circle_action.setChecked(False)
+            
+            # Set shape tool properties
+            self.canvas.brush_tool = False
+            self.canvas.selection_mode = False
+            self.canvas.shape_tool = True
+            self.canvas.fill_tool = False
+            self.canvas.shape_type = shape_type
+            # Don't clear selection
+            self.canvas.update()
         else:
             # If both shape tools are unchecked, switch back to brush
             self.brush_action.setChecked(True)
@@ -534,6 +592,7 @@ class DrawingApp(QMainWindow):
             self.canvas.shape_tool = False
             self.canvas.fill_tool = False
             self.canvas.shape_type = None
+            # Don't clear selection
             self.canvas.update()
 
     def toggle_fill_tool(self, checked):
@@ -550,13 +609,40 @@ class DrawingApp(QMainWindow):
             self.canvas.shape_tool = False
             self.canvas.fill_tool = True
             self.canvas.shape_type = None
-            self.canvas.has_selection = False
+            # Don't clear selection
             self.canvas.update()
         else:
             # If fill tool is unchecked, switch back to brush
             self.brush_action.setChecked(True)
             self.canvas.brush_tool = True
             self.canvas.fill_tool = False
+            # Don't clear selection
+            self.canvas.update()
+
+    def toggle_move_tool(self, checked):
+        if checked:
+            # Deselect all other tools
+            self.brush_action.setChecked(False)
+            self.selection_action.setChecked(False)
+            self.circle_action.setChecked(False)
+            self.rectangle_action.setChecked(False)
+            self.fill_action.setChecked(False)
+            
+            # Set move tool properties
+            self.canvas.brush_tool = False
+            self.canvas.selection_mode = False
+            self.canvas.shape_tool = False
+            self.canvas.fill_tool = False
+            self.canvas.move_tool = True
+            self.canvas.shape_type = None
+            # Don't clear selection
+            self.canvas.update()
+        else:
+            # If move tool is unchecked, switch back to brush
+            self.brush_action.setChecked(True)
+            self.canvas.brush_tool = True
+            self.canvas.move_tool = False
+            # Don't clear selection
             self.canvas.update()
 
 if __name__ == '__main__':
