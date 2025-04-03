@@ -11,6 +11,9 @@ WINDOW_HEIGHT = 600
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("Mini Survival Game")
 
+# Hide the default cursor
+pygame.mouse.set_visible(False)
+
 # Colors
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
@@ -61,6 +64,11 @@ key_states = {
     pygame.K_a: False,
     pygame.K_d: False
 }
+
+# Crosshair properties
+CROSSHAIR_SIZE = 20  # Size of the crosshair
+CROSSHAIR_THICKNESS = 2  # Thickness of the lines
+CROSSHAIR_GAP = 4  # Gap in the center
 
 class Bullet:
     def __init__(self, x, y, angle):
@@ -267,6 +275,26 @@ while running:
         # Draw enemies
         for enemy in enemies:
             enemy.draw(screen)
+            
+        # Draw crosshair
+        # Horizontal line
+        pygame.draw.line(screen, WHITE, 
+                        (mouse_x - CROSSHAIR_SIZE//2, mouse_y),
+                        (mouse_x - CROSSHAIR_GAP//2, mouse_y),
+                        CROSSHAIR_THICKNESS)
+        pygame.draw.line(screen, WHITE,
+                        (mouse_x + CROSSHAIR_GAP//2, mouse_y),
+                        (mouse_x + CROSSHAIR_SIZE//2, mouse_y),
+                        CROSSHAIR_THICKNESS)
+        # Vertical line
+        pygame.draw.line(screen, WHITE,
+                        (mouse_x, mouse_y - CROSSHAIR_SIZE//2),
+                        (mouse_x, mouse_y - CROSSHAIR_GAP//2),
+                        CROSSHAIR_THICKNESS)
+        pygame.draw.line(screen, WHITE,
+                        (mouse_x, mouse_y + CROSSHAIR_GAP//2),
+                        (mouse_x, mouse_y + CROSSHAIR_SIZE//2),
+                        CROSSHAIR_THICKNESS)
     else:
         # Draw game over screen
         font = pygame.font.SysFont(None, 72)

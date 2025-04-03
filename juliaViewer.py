@@ -12,6 +12,10 @@ TRANSPOSE_NUMBA_OUTPUT = True
 USE_GPU = True
 APPLY_SMOOTH_COLORING = True
 
+#c = -0.54 + 0.54i
+JULIA_REAL_PART=-0.4
+JULIA_IMAG_PART=0.6
+
 # Add Numba import for JIT compilation
 try:
     import numba
@@ -44,13 +48,13 @@ cl_program = None
 cl_buffer_x = None
 cl_buffer_y = None
 
-# OpenCL kernel code for Mandelbrot computation
+# OpenCL kernel code for Julia computation
 OPENCL_KERNEL = """
 // Color mapping utilities for the kernel
 double3 hsv_to_rgb(double h, double s, double v) {
     double c = v * s;
     double x = c * (1.0 - fabs(fmod(h * 6.0, 2.0) - 1.0));
-    double m = v - c;  // Add this line to define m
+    double m = v - c;
     
     double3 rgb;
     if (h < 1.0/6.0)
@@ -138,12 +142,12 @@ double3 electric_blue(double norm_iter, double shift) {
     double b = 0.7 + 0.3 * sin(t * M_PI * 4.0);
     
     // Green component: Higher in the middle
-    double g = 0.4 * (sin(t * M_PI * 2.0) * sin(t * M_PI * 2.0)); // Squared using multiplication instead of pow
+    double g = 0.4 * (sin(t * M_PI * 2.0) * sin(t * M_PI * 2.0));
     if (t < 0.5)
         g += 0.2 + 0.6 * t;
     
     // Red component: Low but with some highlights
-    double r = 0.1 * (sin(t * M_PI * 8.0) * sin(t * M_PI * 8.0)); // Squared using multiplication instead of pow
+    double r = 0.1 * (sin(t * M_PI * 8.0) * sin(t * M_PI * 8.0));
     
     // Add white spark effect for lower values
     if (t < 0.15) {
@@ -244,7 +248,7 @@ double3 vintage_sepia(double norm_iter, double shift) {
     double t = fmod(norm_iter + shift, 1.0);
     
     // Create base grayscale value with contrast
-    double gray = pow(t, 0.8);  // Explicitly cast t to double for pow function
+    double gray = pow(t, 0.8);
     
     // Apply sepia toning - different multipliers for RGB
     double r = min(gray * 1.2, 1.0);  // More red
@@ -267,15 +271,17 @@ double3 vintage_sepia(double norm_iter, double shift) {
     return (double3)(min(r, 1.0), min(g, 1.0), min(b, 1.0));
 }
 
-__kernel void mandelbrot(__global int *iterations_out,
-                         __global uchar *rgb_out,
-                         __global double *x_array,
-                         __global double *y_array,
-                         const int width,
-                         const int height,
-                         const int max_iter,
-                         const int color_mode,
-                         const double color_shift)
+__kernel void julia(__global int *iterations_out,
+                    __global uchar *rgb_out,
+                    __global double *x_array,
+                    __global double *y_array,
+                    const int width,
+                    const int height,
+                    const int max_iter,
+                    const int color_mode,
+                    const double color_shift,
+                    const double julia_cx,
+                    const double julia_cy)
 {
     // Get the index of the current element
     int gid_x = get_global_id(0); // column index
@@ -283,26 +289,22 @@ __kernel void mandelbrot(__global int *iterations_out,
     
     // Check if we're within bounds
     if (gid_x < width && gid_y < height) {
-        // Get the complex coordinates
-        double x0 = x_array[gid_x];
-        double y0 = y_array[gid_y];
-        
-        // Initialize z = 0
-        double x = 0.0;
-        double y = 0.0;
+        // Get the initial z value (z₀)
+        double zx = x_array[gid_x];
+        double zy = y_array[gid_y];
         
         // Initialize iteration counter
         int iteration = 0;
-        double x2 = 0.0;
-        double y2 = 0.0;
+        double zx2 = zx * zx;
+        double zy2 = zy * zy;
         
         // Main iteration loop
-        while (x2 + y2 < 4.0 && iteration < max_iter) {
+        while (zx2 + zy2 < 4.0 && iteration < max_iter) {
             // z -> z^2 + c
-            y = 2.0 * x * y + y0;
-            x = x2 - y2 + x0;
-            x2 = x * x;
-            y2 = y * y;
+            zy = 2.0 * zx * zy + julia_cy;
+            zx = zx2 - zy2 + julia_cx;
+            zx2 = zx * zx;
+            zy2 = zy * zy;
             iteration++;
         }
         
@@ -456,7 +458,7 @@ try:
     SCALE_FACTOR = max(1.0, WIDTH / 600)  # Base scale on a 600x600 reference size
     
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Mandelbrot Set")
+    pygame.display.set_caption("Julia Set")
     
     # Show loading screen while Numba compiles (if available and enabled)
     if USE_NUMBA and HAVE_NUMBA:
@@ -497,6 +499,11 @@ try:
     y_min, y_max = np.float64(-1.5), np.float64(1.5)  # These values already maintain a square aspect ratio
     max_iter = 100
     
+    # Julia set parameters
+    julia_cx = np.float64(JULIA_REAL_PART)  # Real part of c
+    julia_cy = np.float64(JULIA_IMAG_PART)   # Imaginary part of c
+    julia_step = np.float64(0.01)  # Step size for parameter adjustment
+    
     # High-quality rendering flag
     high_quality_mode = True
     high_quality_multiplier = 4  # 4x more iterations in high quality mode
@@ -525,7 +532,7 @@ try:
         "right": False
     }
     
-    # Store the current Mandelbrot set
+    # Store the current Julia set
     current_pixels = None
     
     # Rectangle drawing variables
@@ -554,42 +561,45 @@ try:
     # Store initial view as the first item in history
     zoom_history.append((x_min, x_max, y_min, y_max, max_iter))
     
-    # Define a Numba-optimized function for calculating mandelbrot escape times
+    # Define a Numba-optimized function for calculating julia escape times
     if HAVE_NUMBA:
         @jit(nopython=True, parallel=True, fastmath=True, cache=True)
-        def mandelbrot_kernel(x, y, max_iter):
-            """Numba-optimized kernel for Mandelbrot calculation"""
+        def julia_kernel(x, y, max_iter):
+            """Numba-optimized kernel for Julia calculation"""
             height, width = len(y), len(x)
             output = np.zeros((height, width), dtype=np.int32)
             
             # Use prange for parallel computation across rows
-            # In NumPy implementation: c[i,j] = x[j] + 1j * y[i]
-            # We need to match the same orientation here
             for i in prange(height):
                 for j in range(width):
                     # In NumPy broadcasting, x is spread across columns and y across rows
                     # So coordinate (i,j) corresponds to complex number (x[j], y[i])
-                    c = complex(x[j], y[i])
-                    z = 0.0j
+                    zx = x[j]
+                    zy = y[i]
+                    zx2 = zx * zx
+                    zy2 = zy * zy
                     
                     # Compute how quickly this point escapes
                     for iteration in range(max_iter):
-                        z = z**2 + c
-                        if (z.real*z.real + z.imag*z.imag) >= 4.0:
+                        if zx2 + zy2 >= 4.0:
                             output[i, j] = iteration
                             break
+                        zy = 2.0 * zx * zy + julia_cy
+                        zx = zx2 - zy2 + julia_cx
+                        zx2 = zx * zx
+                        zy2 = zy * zy
                     else:
                         output[i, j] = max_iter
                     
             return output
     
-    def mandelbrot_gpu(xmin, xmax, ymin, ymax, width, height, max_iter, color_mode, color_shift):
+    def julia_gpu(xmin, xmax, ymin, ymax, width, height, max_iter, color_mode, color_shift):
         global cl_ctx, cl_queue, cl_program, cl_buffer_x, cl_buffer_y, HAVE_GPU
         
         # If OpenCL not initialized, try to do so or fall back to CPU
         if cl_ctx is None and not init_gpu():
             print("GPU acceleration unavailable, falling back to CPU")
-            return mandelbrot_cpu(height, width, xmin, xmax, ymin, ymax, max_iter), None
+            return julia_cpu(height, width, xmin, xmax, ymin, ymax, max_iter), None
         
         try:
             # Create input data for x and y coordinates
@@ -621,18 +631,20 @@ try:
             
             # Execute kernel
             try:
-                mandelbrot_kernel = cl_program.mandelbrot
-                mandelbrot_kernel.set_args(iterations_buffer, rgb_buffer,
-                                      cl_buffer_x, cl_buffer_y,
-                                      np.int32(width), np.int32(height),
-                                      np.int32(max_iter),
-                                      np.int32(color_mode),
-                                      np.float64(color_shift))  # Changed from float32 to float64
+                julia_kernel = cl_program.julia
+                julia_kernel.set_args(iterations_buffer, rgb_buffer,
+                              cl_buffer_x, cl_buffer_y,
+                              np.int32(width), np.int32(height),
+                              np.int32(max_iter),
+                              np.int32(color_mode),
+                              np.float64(color_shift),
+                              np.float64(julia_cx),
+                              np.float64(julia_cy))
                 
                 # Execute the kernel as a 2D grid
                 global_size = (width, height)
                 local_size = None  # Let OpenCL choose the work-group size
-                cl.enqueue_nd_range_kernel(cl_queue, mandelbrot_kernel, global_size, local_size)
+                cl.enqueue_nd_range_kernel(cl_queue, julia_kernel, global_size, local_size)
                 cl_queue.finish()
             except cl.RuntimeError as e:
                 error_msg = str(e)
@@ -648,7 +660,7 @@ try:
                 
                 # Fall back to CPU
                 print("Falling back to CPU computation")
-                return mandelbrot_cpu(height, width, xmin, xmax, ymin, ymax, max_iter), None
+                return julia_cpu(height, width, xmin, xmax, ymin, ymax, max_iter), None
             
             # Read back RGB buffer directly from device
             cl.enqueue_copy(cl_queue, rgb_output, rgb_buffer)
@@ -676,22 +688,22 @@ try:
                 HAVE_GPU = False  # Disable GPU for future calculations in this session
             
             print("Falling back to CPU computation")
-            return mandelbrot_cpu(height, width, xmin, xmax, ymin, ymax, max_iter), None
+            return julia_cpu(height, width, xmin, xmax, ymin, ymax, max_iter), None
 
-    def mandelbrot_cpu(h, w, x_min, x_max, y_min, y_max, max_iter):
-        """Calculate the Mandelbrot set using CPU (either Numba or NumPy)"""
+    def julia_cpu(h, w, x_min, x_max, y_min, y_max, max_iter):
+        """Calculate the Julia set using CPU (either Numba or NumPy)"""
         # Use float64 for better precision
         # Set up the x and y ranges with the same orientation as GPU:
         # x increases from left to right: x_min at left, x_max at right
         # y now matches GPU implementation and increases from bottom to top
         x = np.linspace(x_min, x_max, w, dtype=np.float64)
-        y = np.linspace(y_min, y_max, h, dtype=np.float64)  # Fixed typo: ymax -> y_max
+        y = np.linspace(y_min, ymax, h, dtype=np.float64)
         
         if USE_NUMBA and HAVE_NUMBA and not force_numpy:
             # Use Numba-accelerated kernel
             # We pass x and y arrays directly to the kernel
             # The kernel maps (i,j) to complex number (x[j], y[i]), matching the NumPy orientation
-            output = mandelbrot_kernel(x, y, max_iter)
+            output = julia_kernel(x, y, max_iter)
             
             # If the output is rotated compared to NumPy, transpose it
             if TRANSPOSE_NUMBA_OUTPUT:
@@ -702,22 +714,22 @@ try:
             # c[i,j] = x[j] + 1j * y[i]
             # This makes c[0,0] = x[0] + 1j * y[0] = bottom-left corner now
             # And maps screen coordinates directly to the complex plane with the same orientation as GPU
-            c = x[:, np.newaxis] + 1j * y
-            z = np.zeros_like(c, dtype=np.complex128)
-            mask = np.ones_like(c, dtype=bool)
-            output = np.zeros_like(c, dtype=int)
+            z = x[:, np.newaxis] + 1j * y
+            c = julia_cx + 1j * julia_cy
+            mask = np.ones_like(z, dtype=bool)
+            output = np.zeros_like(z, dtype=int)
             
             # Optimize the calculation to reduce floating-point errors
             for i in range(max_iter):
-                z[mask] = z[mask]**2 + c[mask]
+                z[mask] = z[mask]**2 + c
                 mask_new = abs(z) < 2
                 output[mask & ~mask_new] = i
                 mask = mask_new
         
         return output
 
-    def mandelbrot(w, h, xa, xb, ya, yb, max_iter, color_mode, color_shift):
-        """Calculate Mandelbrot set using the selected implementation"""
+    def julia(w, h, xa, xb, ya, yb, max_iter, color_mode, color_shift):
+        """Calculate Julia set using the selected implementation"""
         global colored_pixels
         
         # If adaptive resolution is enabled, apply scaling
@@ -726,10 +738,10 @@ try:
             scaled_w = max(1, int(w * render_scale))
             scaled_h = max(1, int(h * render_scale))
             
-            # Calculate the Mandelbrot set at reduced resolution
+            # Calculate the Julia set at reduced resolution
             if USE_GPU:
                 try:
-                    iterations, rgb_array = mandelbrot_gpu(xa, xb, ya, yb, scaled_w, scaled_h, max_iter, color_mode, color_shift)
+                    iterations, rgb_array = julia_gpu(xa, xb, ya, yb, scaled_w, scaled_h, max_iter, color_mode, color_shift)
                     # OpenCL kernel already applies coloring, so we can use rgb_array directly
                     if rgb_array is not None:
                         colored_pixels = rgb_array
@@ -755,7 +767,7 @@ try:
                 except Exception as e:
                     print(f"GPU computation failed, falling back to CPU: {e}")
                     # Fall back to CPU if GPU computation fails
-                    iterations = mandelbrot_cpu(scaled_h, scaled_w, xa, xb, ya, yb, max_iter)
+                    iterations = julia_cpu(scaled_h, scaled_w, xa, xb, ya, yb, max_iter)
                     
                     # Upscale the colored pixels to the target resolution
                     if scaled_w != w or scaled_h != h:
@@ -769,7 +781,7 @@ try:
                     
                     return iterations
             else:
-                iterations = mandelbrot_cpu(scaled_h, scaled_w, xa, xb, ya, yb, max_iter)
+                iterations = julia_cpu(scaled_h, scaled_w, xa, xb, ya, yb, max_iter)
 
                 # Upscale the colored pixels to the target resolution
                 if scaled_w != w or scaled_h != h:
@@ -786,7 +798,7 @@ try:
         # Full resolution calculation
         if USE_GPU:
             try:
-                iterations, rgb_array = mandelbrot_gpu(xa, xb, ya, yb, w, h, max_iter, color_mode, color_shift)
+                iterations, rgb_array = julia_gpu(xa, xb, ya, yb, w, h, max_iter, color_mode, color_shift)
                 # Store the colored pixels for immediate use if not None
                 if rgb_array is not None:
                     colored_pixels = rgb_array
@@ -794,10 +806,10 @@ try:
             except Exception as e:
                 print(f"GPU computation failed, falling back to CPU: {e}")
                 # Fall back to CPU if GPU computation fails
-                return mandelbrot_cpu(h, w, xa, xb, ya, yb, max_iter)
+                return julia_cpu(h, w, xa, xb, ya, yb, max_iter)
         else:
             # CPU calculation
-            iterations = mandelbrot_cpu(h, w, xa, xb, ya, yb, max_iter)
+            iterations = julia_cpu(h, w, xa, xb, ya, yb, max_iter)
             return iterations
 
     def create_smooth_colormap():
@@ -805,12 +817,12 @@ try:
         cmap = np.zeros((256, 3), dtype=np.uint8)
         for i in range(256):
             # Normalized value in [0, 1]
-            t = np.float64(i) / np.float64(255.0)
+            t = np.float32(i) / np.float32(255.0)
             
             # Calculate HSV
             h = t  # hue = normalized value
-            s = np.float64(0.8)  # saturation
-            v = np.float64(1.0) if t < np.float64(0.95) else (np.float64(1.0) - t) * np.float64(20)  # falloff for high values
+            s = np.float32(0.8)  # saturation
+            v = np.float32(1.0) if t < np.float32(0.95) else (np.float32(1.0) - t) * np.float32(20)  # falloff for high values
             
             # Convert HSV to RGB
             r, g, b = hsv_to_rgb(h, s, v)
@@ -867,7 +879,7 @@ try:
         
         if mode == 0:  # Classic rainbow palette using sine waves
             # Direct RGB calculation for rainbow palette
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values = np.zeros_like(iterations, dtype=np.float32)
             norm_values[mask] = iterations[mask] / max_iter
             
             # Scale and shift
@@ -898,7 +910,7 @@ try:
         
         elif mode == 1:  # Fire palette
             # Simplified fire palette calculation
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values = np.zeros_like(iterations, dtype=np.float32)
             norm_values[mask] = iterations[mask] / max_iter
             
             # Apply shift
@@ -938,7 +950,7 @@ try:
         
         elif mode == 2:  # Electric blue
             # Electric blue with vibrant cyan to deep blue transitions
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values = np.zeros_like(iterations, dtype=np.float32)
             norm_values[mask] = iterations[mask] / max_iter
             
             # Apply shift
@@ -972,7 +984,7 @@ try:
         
         elif mode == 3:  # Twilight palette (purple to orange)
             # Twilight-inspired color gradient
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values = np.zeros_like(iterations, dtype=np.float32)
             norm_values[mask] = iterations[mask] / max_iter
             
             # Apply shift
@@ -1014,7 +1026,7 @@ try:
             rgb_array[..., 2] = (np.clip(b, 0, 1) * 255).astype(np.uint8)
         
         elif mode == 4:  # Neon palette with bright glows and dark backgrounds
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values = np.zeros_like(iterations, dtype=np.float32)
             norm_values[mask] = iterations[mask] / max_iter
             
             # Apply shift
@@ -1085,7 +1097,7 @@ try:
 
         elif mode == 5:  # Vintage/Sepia
             # Vintage/sepia tones with a worn look
-            norm_values = np.zeros_like(iterations, dtype=np.float64)
+            norm_values = np.zeros_like(iterations, dtype=np.float32)
             norm_values[mask] = iterations[mask] / max_iter
             
             # Apply shift
@@ -1229,7 +1241,12 @@ try:
             "P: Print current settings",
             "Backspace: Zoom out",
             "H: Toggle help panels",
-            "ESC: Exit"
+            "ESC: Exit",
+            "Julia Set Parameters:",
+            "  [,]: Decrease/Increase real part (cx)",
+            "  .//: Decrease/Increase imaginary part (cy)",
+            "  L: Reset Julia parameters",
+            "  U: Enter custom Julia parameters"
         ]
         
         # Settings panel (right)
@@ -1269,10 +1286,11 @@ try:
         settings_texts = [
             "Current Settings:",
             f"Center: ({x_center:.6f}, {y_center:.6f})",
-            f"Width: {width:.6f}",
+            f"Width: {width:.12f}",
             f"Zoom: {zoom_level:.2f}x",
             f"Iterations: {hq_iterations} ({quality_text})",
             f"Color: {color_names[color_mode]} (Shift: {color_shift:.1f})",
+            f"Julia c: ({julia_cx:.6f}, {julia_cy:.6f})",
             f"Debug: {debug_text}",
             f"Implementation: {impl_text}",
             f"Resolution: {WIDTH}x{HEIGHT}"
@@ -1338,8 +1356,46 @@ try:
             text_rect.y = y_offset
             screen.blit(text_surface, text_rect)
             y_offset += line_height
+                
+    def get_custom_julia_params():
+        """Get custom Julia set parameters from user input"""
+        global julia_cx, julia_cy, current_pixels
+        
+        try:
+            print("\nEnter custom Julia set parameters:")
+            print("Format: real_part imaginary_part")
+            print("Example: -0.54 0.54")
+            print("Current values:", julia_cx, julia_cy)
+            
+            # Get input from user
+            user_input = input("Enter new values: ").strip()
+            
+            # Split input into real and imaginary parts
+            parts = user_input.split()
+            if len(parts) != 2:
+                print("Error: Please enter exactly two numbers separated by a space")
+                return
+                
+            # Convert to float64 for consistency
+            new_cx = np.float64(parts[0])
+            new_cy = np.float64(parts[1])
+            
+            # Update the parameters
+            julia_cx = new_cx
+            julia_cy = new_cy
+            
+            # Force recalculation
+            current_pixels = None
+            update_julia()
+            
+            print(f"Julia set parameters updated to: c = ({julia_cx:.4f}, {julia_cy:.4f})")
+            
+        except ValueError:
+            print("Error: Please enter valid numbers")
+        except Exception as e:
+            print(f"Error: {e}")
 
-    def draw_mandelbrot():
+    def draw_julia():
         global current_pixels, colored_pixels, base_surface
         
         # Check if we need to update the render scale
@@ -1348,7 +1404,7 @@ try:
         if current_pixels is None or scale_changed:
             # Calculate the effective iterations based on quality mode
             effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
-            current_pixels = mandelbrot(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, effective_iter, color_mode, color_shift)
+            current_pixels = julia(HEIGHT, WIDTH, x_min, x_max, y_min, y_max, effective_iter, color_mode, color_shift)
         
         # If colored_pixels is not already calculated by GPU, do it on CPU now
         if USE_GPU and HAVE_GPU and colored_pixels is not None:
@@ -1375,7 +1431,7 @@ try:
         
         pygame.display.flip()
 
-    def update_mandelbrot():
+    def update_julia():
         global current_pixels, colored_pixels, base_surface, is_moving
         
         # Mark that we're actively moving (panning or zooming)
@@ -1383,7 +1439,7 @@ try:
         
         # Force recalculation with new view parameters
         current_pixels = None
-        draw_mandelbrot()
+        draw_julia()
 
     def toggle_quality_mode():
         """Toggle between standard and high quality rendering"""
@@ -1401,7 +1457,7 @@ try:
             print(f"Standard quality mode: {max_iter} iterations")
         
         # Update the display
-        update_mandelbrot()
+        update_julia()
 
     def adjust_quality_multiplier(increase=True):
         """Adjust the high quality multiplier up or down"""
@@ -1430,7 +1486,7 @@ try:
             
             # Update the display if in high quality mode
             if high_quality_mode:
-                update_mandelbrot()
+                update_julia()
 
     def zoom_out():
         """Revert to the previous view from history"""
@@ -1444,7 +1500,7 @@ try:
             
             # Reset current pixels to force recalculation
             current_pixels = None
-            update_mandelbrot()
+            update_julia()
             
             # Print current coordinates for debugging
             effective_iter = max_iter * high_quality_multiplier if high_quality_mode else max_iter
@@ -1492,7 +1548,7 @@ try:
         center_y = (square_y1 + square_y2) / np.float64(2.0)
         
         # Map the center point from screen coordinates to complex plane
-        # With our updated mandelbrot function, we directly map:
+        # With our updated julia function, we directly map:
         # - x from 0 to WIDTH maps to x_min to x_max
         # - y from 0 to HEIGHT maps to y_max to y_min (inverted)
         
@@ -1545,7 +1601,7 @@ try:
         }
 
     def draw_selection_rectangle():
-        """Draw the current Mandelbrot set with a selection rectangle overlay"""
+        """Draw the current Julia set with a selection rectangle overlay"""
         if base_surface is None or start_pos is None or current_pos is None:
             return
             
@@ -1565,8 +1621,13 @@ try:
         zoom_factor = zoom_area["zoom_factor"]
         new_x_min, new_x_max, new_y_min, new_y_max = zoom_area["new_bounds"]
         
-        # Draw the original rectangle (dimmed)
-        original_rect = pygame.Rect(rect_x1, rect_y1, rect_width, rect_height)
+        # Draw the original rectangle (dimmed) - convert to integers
+        original_rect = pygame.Rect(
+            int(rect_x1),
+            int(rect_y1),
+            int(rect_width),
+            int(rect_height)
+        )
         pygame.draw.rect(screen, (100, 100, 100), original_rect, max(1, int(SCALE_FACTOR / 2)))
         
         # Draw the square that will be zoomed into (highlighted)
@@ -1687,7 +1748,7 @@ try:
         
         # Reset current pixels to force recalculation
         current_pixels = None
-        update_mandelbrot()
+        update_julia()
 
     def toggle_numpy_mode():
         """Toggle between NumPy and Numba implementations"""
@@ -1705,7 +1766,7 @@ try:
                 print("Using Numba implementation for acceleration")
                 
             # Update the display
-            update_mandelbrot()
+            update_julia()
         else:
             print("Numba not available or disabled in configuration, using NumPy implementation only")
 
@@ -1722,7 +1783,7 @@ try:
         current_pixels = None
         
         # Update the display
-        update_mandelbrot()
+        update_julia()
         
         print("View reset to initial state")
 
@@ -1808,7 +1869,7 @@ try:
             x_min += pan_amount_x
             x_max += pan_amount_x
         
-        # Force recalculation of the Mandelbrot set
+        # Force recalculation of the Julia set
         current_pixels = None
         
         # Print debug info if enabled
@@ -1833,12 +1894,12 @@ try:
             
             # Update status in console
             if USE_GPU:
-                print("Using GPU acceleration for Mandelbrot calculations")
+                print("Using GPU acceleration for Julia calculations")
             else:
-                print("Using CPU implementation for Mandelbrot calculations")
+                print("Using CPU implementation for Julia calculations")
                 
             # Update the display
-            update_mandelbrot()
+            update_julia()
         else:
             print("GPU acceleration not available (install PyOpenCL for GPU support)")
 
@@ -1853,15 +1914,15 @@ try:
     scale_recovery_delay = 0     # No delay before increasing resolution
 
     # Print a message indicating successful initialization
-    print("Mandelbrot Viewer successfully initialized...")
+    print("Julia Set Viewer successfully initialized...")
     
     # Main loop
     running = True
     clock = pygame.time.Clock()  # Add a clock to control the frame rate
     
-    # Ensure we start with a rendered Mandelbrot
+    # Ensure we start with a rendered Julia set
     current_pixels = None
-    draw_mandelbrot()
+    draw_julia()
     
     # Save history at regular intervals during smooth zoom
     smooth_zoom_history_counter = 0
@@ -1875,7 +1936,7 @@ try:
             smooth_zoom_to_cursor(smooth_zoom_out)
             
             # Update the display
-            update_mandelbrot()
+            update_julia()
             
             # Save zoom history periodically during smooth zoom
             smooth_zoom_history_counter += 1
@@ -1890,7 +1951,7 @@ try:
         # Handle active panning
         if panning:
             pan_view()
-            update_mandelbrot()
+            update_julia()
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -1966,7 +2027,7 @@ try:
                 # Only draw selection rectangle in rectangle selection mode
                 if not smooth_zoom_mode and drawing:
                     current_pos = event.pos
-                    # Draw the selection rectangle without recalculating the Mandelbrot set
+                    # Draw the selection rectangle without recalculating the Julia set
                     draw_selection_rectangle()
             elif event.type == pygame.KEYDOWN:
                 # Cancel any active selection when pressing any key
@@ -1979,7 +2040,7 @@ try:
                     # Toggle zoom mode (smooth vs rectangle selection)
                     smooth_zoom_mode = not smooth_zoom_mode
                     print(f"Zoom mode: {'Smooth zoom' if smooth_zoom_mode else 'Rectangle selection'}")
-                    draw_mandelbrot()  # Redraw to update UI panel
+                    draw_julia()  # Redraw to update UI panel
                 elif event.key == pygame.K_e:
                     # Start smooth zooming in when E key is pressed
                     smooth_zooming = True
@@ -2010,29 +2071,29 @@ try:
                     # Force recalculation when using GPU to ensure the color mode is applied
                     if USE_GPU:
                         current_pixels = None
-                    draw_mandelbrot()
+                    draw_julia()
                 elif event.key == pygame.K_z:
                     # Shift colors left
                     color_shift = (color_shift - 0.1) % 1.0
                     # Force recalculation when using GPU to ensure the color shift is applied
                     if USE_GPU:
                         current_pixels = None
-                    draw_mandelbrot()
+                    draw_julia()
                 elif event.key == pygame.K_x:
                     # Shift colors right
                     color_shift = (color_shift + 0.1) % 1.0
                     # Force recalculation when using GPU to ensure the color shift is applied
                     if USE_GPU:
                         current_pixels = None
-                    draw_mandelbrot()
+                    draw_julia()
                 elif event.key == pygame.K_i:
                     # Increase max iterations
                     max_iter = min(max_iter * 2, 2000)
-                    update_mandelbrot()
+                    update_julia()
                 elif event.key == pygame.K_o:  # Changed from D to O for decrease iterations
                     # Decrease max iterations
                     max_iter = max(max_iter // 2, 50)
-                    update_mandelbrot()
+                    update_julia()
                 elif event.key == pygame.K_BACKSPACE:
                     # Alternative way to zoom out
                     zoom_out()
@@ -2045,7 +2106,7 @@ try:
                 elif event.key == pygame.K_h:
                     # Toggle UI visibility without global declaration
                     globals()['show_ui_panels'] = not show_ui_panels
-                    draw_mandelbrot()
+                    draw_julia()
                 # Add escape key to exit
                 elif event.key == pygame.K_ESCAPE:
                     running = False
@@ -2055,7 +2116,7 @@ try:
                 elif event.key == pygame.K_v:
                     # Toggle debug mode
                     globals()['debug_coordinates'] = not debug_coordinates
-                    draw_mandelbrot()
+                    draw_julia()
                 elif event.key == pygame.K_n:
                     # Toggle NumPy mode
                     toggle_numpy_mode()
@@ -2087,7 +2148,7 @@ try:
                         else:
                             print("Adaptive render scaling disabled - always renders at full resolution")
                             render_scale = 1.0  # Reset to full resolution
-                        draw_mandelbrot()
+                        draw_julia()
                     else:
                         print("Adaptive render scaling is only available in CPU mode")
                 elif event.key == pygame.K_j:
@@ -2096,6 +2157,42 @@ try:
                 elif event.key == pygame.K_k:
                     # Increase quality multiplier
                     adjust_quality_multiplier(increase=True)
+                elif event.key == pygame.K_l:
+                    # Reset Julia parameters to default values
+                    julia_cx = np.float32(-0.4)
+                    julia_cy = np.float32(0.6)
+                    current_pixels = None
+                    update_julia()
+                    print(f"Julia parameters reset to: c = ({julia_cx:.4f}, {julia_cy:.4f})")
+                elif event.key == pygame.K_COMMA:  # Left bracket
+                    # Decrease real part
+                    julia_cx -= julia_step
+                    current_pixels = None
+                    update_julia()
+                    print(f"Julia cx = {julia_cx:.4f}")
+                elif event.key == pygame.K_PERIOD:  # Right bracket
+                    # Increase real part
+                    julia_cx += julia_step
+                    current_pixels = None
+                    update_julia()
+                    print(f"Julia cx = {julia_cx:.4f}")
+                elif event.key == pygame.K_SLASH:  # Forward slash
+                    # Decrease imaginary part
+                    julia_cy -= julia_step
+                    current_pixels = None
+                    update_julia()
+                    print(f"Julia cy = {julia_cy:.4f}")
+                elif event.key == pygame.K_BACKSLASH:  # Backslash
+                    # Increase imaginary part
+                    julia_cy += julia_step
+                    current_pixels = None
+                    update_julia()
+                    print(f"Julia cy = {julia_cy:.4f}")
+                elif event.key == pygame.K_u:  # 'U' key for custom input
+                    # Pause the game loop temporarily to get user input
+                    pygame.event.set_grab(False)  # Release mouse grab
+                    get_custom_julia_params()
+                    pygame.event.set_grab(True)   # Restore mouse grab
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_e or event.key == pygame.K_q:
                     # Stop smooth zooming when E or Q key is released
@@ -2103,7 +2200,7 @@ try:
                     # Immediately render at full resolution
                     render_scale = 1.0
                     current_pixels = None
-                    draw_mandelbrot()
+                    draw_julia()
                 
                 # Stop panning when W, S, A, or D key is released
                 elif event.key in [pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d]:
@@ -2122,7 +2219,7 @@ try:
                         # Immediately render at full resolution
                         render_scale = 1.0
                         current_pixels = None
-                        draw_mandelbrot()
+                        draw_julia()
         
         # Limit the frame rate
         clock.tick(30)
@@ -2131,12 +2228,12 @@ try:
         if not is_moving and render_scale < 1.0:
             # Initiate a redraw if we need to increase resolution
             if update_render_scale():
-                draw_mandelbrot()
+                draw_julia()
         
         # Reset the movement flag at the end of each frame
         is_moving = smooth_zooming or panning
     
-    print("Exiting Mandelbrot Viewer...")
+    print("Exiting Julia Set Viewer...")
     pygame.quit()
 
 except Exception as e:
@@ -2160,3 +2257,41 @@ def resize_array(arr, target_shape):
         result[:min_h, :min_w] = arr[:min_h, :min_w]
         
     return result
+
+def get_custom_julia_params():
+    """Get custom Julia set parameters from user input"""
+    global julia_cx, julia_cy, current_pixels
+    
+    try:
+        print("\nEnter custom Julia set parameters:")
+        print("Format: real_part imaginary_part")
+        print("Example: -0.54 0.54")
+        print("Current values:", julia_cx, julia_cy)
+        
+        # Get input from user
+        user_input = input("Enter new values: ").strip()
+        
+        # Split input into real and imaginary parts
+        parts = user_input.split()
+        if len(parts) != 2:
+            print("Error: Please enter exactly two numbers separated by a space")
+            return
+            
+        # Convert to float64 for consistency
+        new_cx = np.float64(parts[0])
+        new_cy = np.float64(parts[1])
+        
+        # Update the parameters
+        julia_cx = new_cx
+        julia_cy = new_cy
+        
+        # Force recalculation
+        current_pixels = None
+        update_julia()
+        
+        print(f"Julia set parameters updated to: c = ({julia_cx:.4f}, {julia_cy:.4f})")
+        
+    except ValueError:
+        print("Error: Please enter valid numbers")
+    except Exception as e:
+        print(f"Error: {e}")
