@@ -222,7 +222,7 @@ class Canvas(QWidget):
         self.update()
 
     def flood_fill(self, x, y, target_color, replacement_color):
-        """Flood fill algorithm to fill an enclosed area"""
+        """Simple and efficient flood fill algorithm"""
         # Convert coordinates to account for scale factor
         x = int(x / self.scale_factor)
         y = int(y / self.scale_factor)
@@ -240,28 +240,24 @@ class Canvas(QWidget):
         if pixel_color == replacement_color:
             return
             
-        # Create a stack for the flood fill
+        # Use a stack for the flood fill
         stack = [(x, y)]
         
         while stack:
             current_x, current_y = stack.pop()
             
-            # Check if current pixel matches target color
+            # Skip if pixel is already filled or doesn't match target color
             if self.image.pixelColor(current_x, current_y) != target_color:
                 continue
                 
-            # Set the current pixel to replacement color
+            # Fill current pixel
             self.image.setPixelColor(current_x, current_y, replacement_color)
             
             # Check neighboring pixels
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                new_x, new_y = current_x + dx, current_y + dy
-                
-                # Check bounds
-                if 0 <= new_x < width and 0 <= new_y < height:
-                    # Check if pixel matches target color
-                    if self.image.pixelColor(new_x, new_y) == target_color:
-                        stack.append((new_x, new_y))
+                next_x, next_y = current_x + dx, current_y + dy
+                if 0 <= next_x < width and 0 <= next_y < height:
+                    stack.append((next_x, next_y))
 
 class DrawingApp(QMainWindow):
     def __init__(self):
@@ -475,11 +471,13 @@ class DrawingApp(QMainWindow):
             self.brush_action.setChecked(False)
             self.circle_action.setChecked(False)
             self.rectangle_action.setChecked(False)
+            self.fill_action.setChecked(False)  # Deselect fill tool
             
             # Set selection tool properties
             self.canvas.brush_tool = False
             self.canvas.selection_mode = True
             self.canvas.shape_tool = False
+            self.canvas.fill_tool = False
             self.canvas.shape_type = None
             self.canvas.has_selection = False
             self.canvas.update()
@@ -493,11 +491,13 @@ class DrawingApp(QMainWindow):
             self.selection_action.setChecked(False)
             self.circle_action.setChecked(False)
             self.rectangle_action.setChecked(False)
+            self.fill_action.setChecked(False)  # Deselect fill tool
             
             # Set brush tool properties
             self.canvas.brush_tool = True
             self.canvas.selection_mode = False
             self.canvas.shape_tool = False
+            self.canvas.fill_tool = False
             self.canvas.shape_type = None
             self.canvas.has_selection = False
             self.canvas.update()
@@ -507,6 +507,7 @@ class DrawingApp(QMainWindow):
             # Deselect all other tools
             self.brush_action.setChecked(False)
             self.selection_action.setChecked(False)
+            self.fill_action.setChecked(False)  # Deselect fill tool
             
             # If switching between circle and rectangle, just update shape type
             if self.canvas.shape_tool:
@@ -522,6 +523,7 @@ class DrawingApp(QMainWindow):
                 self.canvas.brush_tool = False
                 self.canvas.selection_mode = False
                 self.canvas.shape_tool = True
+                self.canvas.fill_tool = False
                 self.canvas.shape_type = shape_type
                 self.canvas.has_selection = False
                 self.canvas.update()
@@ -530,6 +532,7 @@ class DrawingApp(QMainWindow):
             self.brush_action.setChecked(True)
             self.canvas.brush_tool = True
             self.canvas.shape_tool = False
+            self.canvas.fill_tool = False
             self.canvas.shape_type = None
             self.canvas.update()
 
