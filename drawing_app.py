@@ -20,7 +20,8 @@ class Canvas(QWidget):
         self.foreground_color = Qt.black
         self.background_color = Qt.white
         self.brush_size = 3
-        # Selection tool properties
+        # Tool properties
+        self.brush_tool = True  # Brush is the default tool
         self.selection_mode = False
         self.selection_start = QPoint()
         self.selection_end = QPoint()
@@ -222,6 +223,19 @@ class DrawingApp(QMainWindow):
         toolbar = QToolBar()
         self.addToolBar(toolbar)
         
+        # Brush tool toggle
+        self.brush_action = QAction('Brush Tool', self)
+        self.brush_action.setCheckable(True)
+        self.brush_action.setChecked(True)  # Brush is the default tool
+        self.brush_action.triggered.connect(self.toggle_brush_tool)
+        toolbar.addAction(self.brush_action)
+        
+        # Selection tool toggle
+        self.selection_action = QAction('Selection Tool', self)
+        self.selection_action.setCheckable(True)
+        self.selection_action.triggered.connect(self.toggle_selection_tool)
+        toolbar.addAction(self.selection_action)
+        
         # Foreground color picker action
         fg_color_action = QAction('Foreground Color', self)
         fg_color_action.triggered.connect(self.choose_foreground_color)
@@ -231,12 +245,6 @@ class DrawingApp(QMainWindow):
         bg_color_action = QAction('Background Color', self)
         bg_color_action.triggered.connect(self.choose_background_color)
         toolbar.addAction(bg_color_action)
-        
-        # Selection tool toggle
-        self.selection_action = QAction('Selection Tool', self)
-        self.selection_action.setCheckable(True)
-        self.selection_action.triggered.connect(self.toggle_selection_tool)
-        toolbar.addAction(self.selection_action)
         
         # Brush size selector
         brush_label = QLabel('Brush Size:', self)
@@ -301,13 +309,25 @@ class DrawingApp(QMainWindow):
             self.canvas.background_color = color
     
     def toggle_selection_tool(self, checked):
-        self.canvas.selection_mode = checked
-        if not checked:
+        if checked:
+            self.brush_action.setChecked(False)
+            self.selection_action.setChecked(True)
+            self.canvas.brush_tool = False
+            self.canvas.selection_mode = True
             self.canvas.has_selection = False
             self.canvas.update()
     
     def change_brush_size(self, size):
         self.canvas.brush_size = size
+
+    def toggle_brush_tool(self, checked):
+        if checked:
+            self.brush_action.setChecked(True)
+            self.selection_action.setChecked(False)
+            self.canvas.brush_tool = True
+            self.canvas.selection_mode = False
+            self.canvas.has_selection = False
+            self.canvas.update()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
