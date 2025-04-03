@@ -41,7 +41,7 @@ class PriceTracker:
             df.to_csv(self.price_history_file, index=False)
         self.price_history = pd.read_csv(self.price_history_file)
 
-    def add_product(self, name, url, target_price):
+    def add_product(self, url, target_price):
         """Add a new product to track"""
         # Validate URL
         if not self.is_valid_url(url):
@@ -49,14 +49,13 @@ class PriceTracker:
             return False
 
         product = {
-            'name': name,
             'url': url,
             'target_price': float(target_price),
             'store': self.detect_store(url)
         }
         self.products.append(product)
         self.save_products()
-        print(f"Added {name} to tracking list")
+        print(f"Added product from {product['store']} to tracking list")
         return True
 
     def is_valid_url(self, url):
@@ -195,14 +194,12 @@ def main():
     if not tracker.products:
         # Example Amazon product
         tracker.add_product(
-            "Example Amazon Product",
             "https://www.amazon.com/example-product",
             100.0
         )
         
         # Example eMAG product
         tracker.add_product(
-            "Example eMAG Product",
             "https://www.emag.ro/example-product",
             500.0
         )
