@@ -23,6 +23,8 @@ class Canvas(QWidget):
         # Tool properties
         self.brush_tool = True  # Brush is the default tool
         self.selection_mode = False
+        self.shape_tool = False
+        self.shape_type = None  # 'circle' or 'rectangle'
         self.selection_start = QPoint()
         self.selection_end = QPoint()
         self.has_selection = False
@@ -54,18 +56,25 @@ class Canvas(QWidget):
             elif self.brush_tool:
                 self.drawing = True
                 self.last_point = QPoint(event.pos() / self.scale_factor)
+            elif self.shape_tool:
+                self.drawing = True
+                self.selection_start = QPoint(event.pos() / self.scale_factor)
+                self.selection_end = self.selection_start
     
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.LeftButton:
             if self.selection_mode and self.has_selection:
                 self.selection_end = QPoint(event.pos() / self.scale_factor)
                 self.update()
-            elif self.drawing:
+            elif self.brush_tool and self.drawing:
                 current_point = QPoint(event.pos() / self.scale_factor)
                 painter = QPainter(self.image)
                 painter.setPen(QPen(self.foreground_color, self.brush_size, Qt.SolidLine))
                 painter.drawLine(self.last_point, current_point)
                 self.last_point = current_point
+                self.update()
+            elif self.shape_tool and self.drawing:
+                self.selection_end = QPoint(event.pos() / self.scale_factor)
                 self.update()
     
     def mouseReleaseEvent(self, event):
@@ -73,9 +82,26 @@ class Canvas(QWidget):
             if self.selection_mode:
                 self.selection_end = QPoint(event.pos() / self.scale_factor)
                 self.update()
-            else:
+            elif self.brush_tool:
                 self.drawing = False
                 self.save_to_history()
+            elif self.shape_tool:
+                self.drawing = False
+                self.draw_shape()
+                self.save_to_history()
+    
+    def draw_shape(self):
+        painter = QPainter(self.image)
+        painter.setPen(QPen(self.foreground_color, self.brush_size, Qt.SolidLine))
+        rect = self.get_selection_rect()
+        
+        if self.shape_type == 'circle':
+            painter.drawEllipse(rect)
+        elif self.shape_type == 'rectangle':
+            painter.drawRect(rect)
+        
+        painter.end()
+        self.update()
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete and self.has_selection:
@@ -236,6 +262,17 @@ class DrawingApp(QMainWindow):
         self.selection_action.triggered.connect(self.toggle_selection_tool)
         toolbar.addAction(self.selection_action)
         
+        # Shape tool toggles
+        self.circle_action = QAction('Circle Tool', self)
+        self.circle_action.setCheckable(True)
+        self.circle_action.triggered.connect(lambda: self.toggle_shape_tool('circle'))
+        toolbar.addAction(self.circle_action)
+        
+        self.rectangle_action = QAction('Rectangle Tool', self)
+        self.rectangle_action.setCheckable(True)
+        self.rectangle_action.triggered.connect(lambda: self.toggle_shape_tool('rectangle'))
+        toolbar.addAction(self.rectangle_action)
+        
         # Foreground color picker action
         fg_color_action = QAction('Foreground Color', self)
         fg_color_action.triggered.connect(self.choose_foreground_color)
@@ -310,10 +347,16 @@ class DrawingApp(QMainWindow):
     
     def toggle_selection_tool(self, checked):
         if checked:
+            # Deselect all other tools
             self.brush_action.setChecked(False)
-            self.selection_action.setChecked(True)
+            self.circle_action.setChecked(False)
+            self.rectangle_action.setChecked(False)
+            
+            # Set selection tool properties
             self.canvas.brush_tool = False
             self.canvas.selection_mode = True
+            self.canvas.shape_tool = False
+            self.canvas.shape_type = None
             self.canvas.has_selection = False
             self.canvas.update()
     
@@ -322,11 +365,48 @@ class DrawingApp(QMainWindow):
 
     def toggle_brush_tool(self, checked):
         if checked:
-            self.brush_action.setChecked(True)
+            # Deselect all other tools
             self.selection_action.setChecked(False)
+            self.circle_action.setChecked(False)
+            self.rectangle_action.setChecked(False)
+            
+            # Set brush tool properties
             self.canvas.brush_tool = True
             self.canvas.selection_mode = False
+            self.canvas.shape_tool = False
+            self.canvas.shape_type = None
             self.canvas.has_selection = False
+            self.canvas.update()
+    
+    def toggle_shape_tool(self, shape_type):
+        if self.circle_action.isChecked() or self.rectangle_action.isChecked():
+            # Deselect all other tools
+            self.brush_action.setChecked(False)
+            self.selection_action.setChecked(False)
+            
+            # If switching between circle and rectangle, just update shape type
+            if self.canvas.shape_tool:
+                self.canvas.shape_type = shape_type
+            else:
+                # Deselect the other shape tool
+                if shape_type == 'circle':
+                    self.rectangle_action.setChecked(False)
+                else:
+                    self.circle_action.setChecked(False)
+                
+                # Set shape tool properties
+                self.canvas.brush_tool = False
+                self.canvas.selection_mode = False
+                self.canvas.shape_tool = True
+                self.canvas.shape_type = shape_type
+                self.canvas.has_selection = False
+                self.canvas.update()
+        else:
+            # If both shape tools are unchecked, switch back to brush
+            self.brush_action.setChecked(True)
+            self.canvas.brush_tool = True
+            self.canvas.shape_tool = False
+            self.canvas.shape_type = None
             self.canvas.update()
 
 if __name__ == '__main__':
