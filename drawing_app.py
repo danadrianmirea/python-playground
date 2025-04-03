@@ -3,20 +3,28 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QFileDialog,
                              QMenu, QMessageBox, QScrollArea, QWidget, QToolBar,
                              QColorDialog, QSpinBox, QLabel)
 from PyQt5.QtGui import QPainter, QPen, QImage, QTransform, QColor, QIcon
-from PyQt5.QtCore import Qt, QPoint, QSize
+from PyQt5.QtCore import Qt, QPoint, QSize, QRect
 
 class Canvas(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.image = QImage(800, 600, QImage.Format_RGB32)
+        self.image = QImage(800, 600, QImage.Format_ARGB32)
         self.image.fill(Qt.white)
         self.drawing = False
         self.last_point = QPoint()
         self.scale_factor = 1.0
         self.setMinimumSize(800, 600)
+        # Enable keyboard focus
+        self.setFocusPolicy(Qt.StrongFocus)
         # Add drawing properties
-        self.current_color = Qt.black
+        self.foreground_color = Qt.black
+        self.background_color = Qt.white
         self.brush_size = 3
+        # Selection tool properties
+        self.selection_mode = False
+        self.selection_start = QPoint()
+        self.selection_end = QPoint()
+        self.has_selection = False
         # Add image history
         self.image_history = [self.image.copy()]
         self.current_history_index = 0
@@ -25,26 +33,76 @@ class Canvas(QWidget):
         canvas_painter = QPainter(self)
         canvas_painter.scale(self.scale_factor, self.scale_factor)
         canvas_painter.drawImage(0, 0, self.image)
+        
+        # Draw selection rectangle if active
+        if self.has_selection:
+            canvas_painter.setPen(QPen(Qt.blue, 1, Qt.DashLine))
+            canvas_painter.drawRect(self.get_selection_rect())
+    
+    def get_selection_rect(self):
+        return QRect(self.selection_start, self.selection_end).normalized()
     
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.drawing = True
-            self.last_point = QPoint(event.pos() / self.scale_factor)
+            if self.selection_mode:
+                self.selection_start = QPoint(event.pos() / self.scale_factor)
+                self.selection_end = self.selection_start
+                self.has_selection = True
+                # Set focus when making a selection
+                self.setFocus()
+            else:
+                self.drawing = True
+                self.last_point = QPoint(event.pos() / self.scale_factor)
     
     def mouseMoveEvent(self, event):
-        if (event.buttons() & Qt.LeftButton) and self.drawing:
-            current_point = QPoint(event.pos() / self.scale_factor)
-            painter = QPainter(self.image)
-            painter.setPen(QPen(self.current_color, self.brush_size, Qt.SolidLine))
-            painter.drawLine(self.last_point, current_point)
-            self.last_point = current_point
-            self.update()
+        if event.buttons() & Qt.LeftButton:
+            if self.selection_mode and self.has_selection:
+                self.selection_end = QPoint(event.pos() / self.scale_factor)
+                self.update()
+            elif self.drawing:
+                current_point = QPoint(event.pos() / self.scale_factor)
+                painter = QPainter(self.image)
+                painter.setPen(QPen(self.foreground_color, self.brush_size, Qt.SolidLine))
+                painter.drawLine(self.last_point, current_point)
+                self.last_point = current_point
+                self.update()
     
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            self.drawing = False
-            # Save the new state to history
+            if self.selection_mode:
+                self.selection_end = QPoint(event.pos() / self.scale_factor)
+                self.update()
+            else:
+                self.drawing = False
+                self.save_to_history()
+    
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Delete and self.has_selection:
+            # Create a new image with the selection area cleared
+            new_image = self.image.copy()
+            painter = QPainter(new_image)
+            painter.setCompositionMode(QPainter.CompositionMode_Clear)
+            painter.fillRect(self.get_selection_rect(), Qt.transparent)
+            painter.end()
+            
+            # Convert transparent pixels to background color
+            for y in range(new_image.height()):
+                for x in range(new_image.width()):
+                    if new_image.pixelColor(x, y).alpha() == 0:
+                        new_image.setPixelColor(x, y, self.background_color)
+            
+            self.image = new_image
+            self.has_selection = False
+            self.update()
             self.save_to_history()
+            # Accept the event to prevent it from being passed to parent
+            event.accept()
+        else:
+            super().keyPressEvent(event)
+    
+    def fill_selection(self):
+        painter = QPainter(self.image)
+        painter.fillRect(self.get_selection_rect(), self.background_color)
     
     def save_to_history(self):
         # Remove any states after current position
@@ -171,10 +229,21 @@ class DrawingApp(QMainWindow):
         toolbar = QToolBar()
         self.addToolBar(toolbar)
         
-        # Color picker action
-        color_action = QAction('Color', self)
-        color_action.triggered.connect(self.choose_color)
-        toolbar.addAction(color_action)
+        # Foreground color picker action
+        fg_color_action = QAction('Foreground Color', self)
+        fg_color_action.triggered.connect(self.choose_foreground_color)
+        toolbar.addAction(fg_color_action)
+        
+        # Background color picker action
+        bg_color_action = QAction('Background Color', self)
+        bg_color_action.triggered.connect(self.choose_background_color)
+        toolbar.addAction(bg_color_action)
+        
+        # Selection tool toggle
+        self.selection_action = QAction('Selection Tool', self)
+        self.selection_action.setCheckable(True)
+        self.selection_action.triggered.connect(self.toggle_selection_tool)
+        toolbar.addAction(self.selection_action)
         
         # Brush size selector
         brush_label = QLabel('Brush Size:', self)
@@ -187,7 +256,7 @@ class DrawingApp(QMainWindow):
         toolbar.addWidget(self.brush_size_spinbox)
     
     def new_canvas(self):
-        new_image = QImage(800, 600, QImage.Format_RGB32)
+        new_image = QImage(800, 600, QImage.Format_ARGB32)
         new_image.fill(Qt.white)
         self.canvas.setImage(new_image)
     
@@ -228,10 +297,21 @@ class DrawingApp(QMainWindow):
         
         self.canvas.setScaleFactor(scale)
     
-    def choose_color(self):
-        color = QColorDialog.getColor(self.canvas.current_color, self)
+    def choose_foreground_color(self):
+        color = QColorDialog.getColor(self.canvas.foreground_color, self)
         if color.isValid():
-            self.canvas.current_color = color
+            self.canvas.foreground_color = color
+    
+    def choose_background_color(self):
+        color = QColorDialog.getColor(self.canvas.background_color, self)
+        if color.isValid():
+            self.canvas.background_color = color
+    
+    def toggle_selection_tool(self, checked):
+        self.canvas.selection_mode = checked
+        if not checked:
+            self.canvas.has_selection = False
+            self.canvas.update()
     
     def change_brush_size(self, size):
         self.canvas.brush_size = size
