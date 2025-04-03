@@ -78,18 +78,11 @@ class Canvas(QWidget):
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete and self.has_selection:
-            # Create a new image with the selection area cleared
+            # Create a new image with the selection area filled with background color
             new_image = self.image.copy()
             painter = QPainter(new_image)
-            painter.setCompositionMode(QPainter.CompositionMode_Clear)
-            painter.fillRect(self.get_selection_rect(), Qt.transparent)
+            painter.fillRect(self.get_selection_rect(), self.background_color)
             painter.end()
-            
-            # Convert transparent pixels to background color
-            for y in range(new_image.height()):
-                for x in range(new_image.width()):
-                    if new_image.pixelColor(x, y).alpha() == 0:
-                        new_image.setPixelColor(x, y, self.background_color)
             
             self.image = new_image
             self.has_selection = False
