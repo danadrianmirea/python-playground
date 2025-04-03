@@ -1,9 +1,58 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QFileDialog, 
                              QMenu, QMessageBox, QScrollArea, QWidget, QToolBar,
-                             QColorDialog, QSpinBox, QLabel)
+                             QColorDialog, QSpinBox, QLabel, QDialog, QPushButton,
+                             QGridLayout, QVBoxLayout)
 from PyQt5.QtGui import QPainter, QPen, QImage, QTransform, QColor, QIcon
 from PyQt5.QtCore import Qt, QPoint, QSize, QRect
+
+class ColorPickerDialog(QDialog):
+    def __init__(self, current_color, parent=None):
+        super().__init__(parent)
+        self.selected_color = current_color
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setWindowTitle("Select Color")
+        layout = QVBoxLayout()
+        
+        # Create grid of color buttons
+        grid = QGridLayout()
+        
+        # Define colors
+        colors = [
+            Qt.black, Qt.darkGray, Qt.gray, Qt.lightGray, Qt.white,
+            Qt.red, Qt.green, Qt.blue, Qt.yellow, Qt.cyan,
+            Qt.magenta, Qt.darkRed, Qt.darkGreen, Qt.darkBlue, Qt.darkYellow,
+            Qt.darkCyan, Qt.darkMagenta
+        ]
+        
+        # Add color buttons to grid
+        for i, color in enumerate(colors):
+            btn = QPushButton()
+            btn.setFixedSize(30, 30)
+            btn.setStyleSheet(f"background-color: {color.name()};")
+            btn.clicked.connect(lambda checked, c=color: self.color_selected(c))
+            grid.addWidget(btn, i // 5, i % 5)
+        
+        layout.addLayout(grid)
+        
+        # Add custom color button
+        custom_btn = QPushButton("Custom Color...")
+        custom_btn.clicked.connect(self.choose_custom_color)
+        layout.addWidget(custom_btn)
+        
+        self.setLayout(layout)
+    
+    def color_selected(self, color):
+        self.selected_color = color
+        self.accept()
+    
+    def choose_custom_color(self):
+        dialog = QColorDialog(self.selected_color, self)
+        if dialog.exec_():
+            self.selected_color = dialog.selectedColor()
+            self.accept()
 
 class Canvas(QWidget):
     def __init__(self, parent=None):
@@ -166,6 +215,7 @@ class Canvas(QWidget):
 class DrawingApp(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.color_dialog = None  # Initialize as None
         self.init_ui()
         
     def init_ui(self):
@@ -345,14 +395,22 @@ class DrawingApp(QMainWindow):
         self.canvas.setScaleFactor(scale)
     
     def choose_foreground_color(self):
-        color = QColorDialog.getColor(self.canvas.foreground_color, self)
-        if color.isValid():
-            self.canvas.foreground_color = color
+        if self.color_dialog is None:
+            self.color_dialog = QColorDialog(self)
+            self.color_dialog.setOption(QColorDialog.ShowAlphaChannel, False)
+        self.color_dialog.setCurrentColor(self.canvas.foreground_color)
+        self.color_dialog.setWindowTitle("Select Foreground Color")
+        if self.color_dialog.exec_():
+            self.canvas.foreground_color = self.color_dialog.selectedColor()
     
     def choose_background_color(self):
-        color = QColorDialog.getColor(self.canvas.background_color, self)
-        if color.isValid():
-            self.canvas.background_color = color
+        if self.color_dialog is None:
+            self.color_dialog = QColorDialog(self)
+            self.color_dialog.setOption(QColorDialog.ShowAlphaChannel, False)
+        self.color_dialog.setCurrentColor(self.canvas.background_color)
+        self.color_dialog.setWindowTitle("Select Background Color")
+        if self.color_dialog.exec_():
+            self.canvas.background_color = self.color_dialog.selectedColor()
     
     def toggle_selection_tool(self, checked):
         if checked:
