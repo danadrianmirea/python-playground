@@ -41,6 +41,15 @@ class Canvas(QWidget):
         if self.has_selection:
             canvas_painter.setPen(QPen(Qt.blue, 1, Qt.DashLine))
             canvas_painter.drawRect(self.get_selection_rect())
+        
+        # Draw shape preview while dragging
+        if self.shape_tool and self.drawing:
+            canvas_painter.setPen(QPen(self.foreground_color, self.brush_size, Qt.SolidLine))
+            rect = self.get_selection_rect()
+            if self.shape_type == 'circle':
+                canvas_painter.drawEllipse(rect)
+            elif self.shape_type == 'rectangle':
+                canvas_painter.drawRect(rect)
     
     def get_selection_rect(self):
         return QRect(self.selection_start, self.selection_end).normalized()
