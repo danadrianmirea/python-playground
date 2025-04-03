@@ -166,11 +166,15 @@ class Canvas(QWidget):
                     # Create a temporary image for preview
                     temp_image = self.image.copy()
                     painter = QPainter(temp_image)
+                    
                     # Clear the original selection area
-                    painter.fillRect(self.get_selection_rect(), self.background_color)
+                    original_rect = QRect(self.original_selection_start, self.original_selection_end).normalized()
+                    painter.fillRect(original_rect, self.background_color)
+                    
                     # Draw the selected content at the new position
                     painter.drawImage(self.get_selection_rect(), self.selected_content)
                     painter.end()
+                    
                     # Update the display
                     self.image = temp_image
                 
@@ -534,12 +538,14 @@ class DrawingApp(QMainWindow):
             self.circle_action.setChecked(False)
             self.rectangle_action.setChecked(False)
             self.fill_action.setChecked(False)
+            self.move_action.setChecked(False)  # Deselect move tool
             
             # Set selection tool properties
             self.canvas.brush_tool = False
             self.canvas.selection_mode = True
             self.canvas.shape_tool = False
             self.canvas.fill_tool = False
+            self.canvas.move_tool = False  # Ensure move tool is disabled
             self.canvas.shape_type = None
             # Don't clear selection
             self.canvas.update()
@@ -554,12 +560,14 @@ class DrawingApp(QMainWindow):
             self.circle_action.setChecked(False)
             self.rectangle_action.setChecked(False)
             self.fill_action.setChecked(False)
+            self.move_action.setChecked(False)  # Deselect move tool
             
             # Set brush tool properties
             self.canvas.brush_tool = True
             self.canvas.selection_mode = False
             self.canvas.shape_tool = False
             self.canvas.fill_tool = False
+            self.canvas.move_tool = False  # Ensure move tool is disabled
             self.canvas.shape_type = None
             # Don't clear selection
             self.canvas.update()
@@ -570,6 +578,7 @@ class DrawingApp(QMainWindow):
             self.brush_action.setChecked(False)
             self.selection_action.setChecked(False)
             self.fill_action.setChecked(False)
+            self.move_action.setChecked(False)  # Deselect move tool
             
             # Deselect the other shape tool
             if shape_type == 'circle':
@@ -582,6 +591,7 @@ class DrawingApp(QMainWindow):
             self.canvas.selection_mode = False
             self.canvas.shape_tool = True
             self.canvas.fill_tool = False
+            self.canvas.move_tool = False  # Ensure move tool is disabled
             self.canvas.shape_type = shape_type
             # Don't clear selection
             self.canvas.update()
@@ -591,6 +601,7 @@ class DrawingApp(QMainWindow):
             self.canvas.brush_tool = True
             self.canvas.shape_tool = False
             self.canvas.fill_tool = False
+            self.canvas.move_tool = False  # Ensure move tool is disabled
             self.canvas.shape_type = None
             # Don't clear selection
             self.canvas.update()
@@ -602,12 +613,14 @@ class DrawingApp(QMainWindow):
             self.selection_action.setChecked(False)
             self.circle_action.setChecked(False)
             self.rectangle_action.setChecked(False)
+            self.move_action.setChecked(False)  # Deselect move tool
             
             # Set fill tool properties
             self.canvas.brush_tool = False
             self.canvas.selection_mode = False
             self.canvas.shape_tool = False
             self.canvas.fill_tool = True
+            self.canvas.move_tool = False  # Ensure move tool is disabled
             self.canvas.shape_type = None
             # Don't clear selection
             self.canvas.update()
@@ -616,6 +629,7 @@ class DrawingApp(QMainWindow):
             self.brush_action.setChecked(True)
             self.canvas.brush_tool = True
             self.canvas.fill_tool = False
+            self.canvas.move_tool = False  # Ensure move tool is disabled
             # Don't clear selection
             self.canvas.update()
 
@@ -630,7 +644,7 @@ class DrawingApp(QMainWindow):
             
             # Set move tool properties
             self.canvas.brush_tool = False
-            self.canvas.selection_mode = False
+            self.canvas.selection_mode = False  # Ensure selection mode is disabled
             self.canvas.shape_tool = False
             self.canvas.fill_tool = False
             self.canvas.move_tool = True
