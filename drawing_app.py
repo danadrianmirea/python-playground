@@ -73,6 +73,7 @@ class Canvas(QWidget):
         self.brush_tool = True  # Brush is the default tool
         self.selection_mode = False
         self.shape_tool = False
+        self.fill_tool = False  # Add fill tool property
         self.shape_type = None  # 'circle' or 'rectangle'
         self.selection_start = QPoint()
         self.selection_end = QPoint()
@@ -118,6 +119,14 @@ class Canvas(QWidget):
                 self.drawing = True
                 self.selection_start = QPoint(event.pos() / self.scale_factor)
                 self.selection_end = self.selection_start
+            elif self.fill_tool:
+                # Get the color at the clicked position
+                pos = event.pos() / self.scale_factor
+                target_color = self.image.pixelColor(int(pos.x()), int(pos.y()))
+                # Perform flood fill
+                self.flood_fill(pos.x(), pos.y(), target_color, self.foreground_color)
+                self.save_to_history()
+                self.update()
     
     def mouseMoveEvent(self, event):
         if event.buttons() & Qt.LeftButton:
@@ -211,6 +220,48 @@ class Canvas(QWidget):
         self.scale_factor = scale
         self.setMinimumSize(self.scale_factor * self.image.size())
         self.update()
+
+    def flood_fill(self, x, y, target_color, replacement_color):
+        """Flood fill algorithm to fill an enclosed area"""
+        # Convert coordinates to account for scale factor
+        x = int(x / self.scale_factor)
+        y = int(y / self.scale_factor)
+        
+        # Get image dimensions
+        width = self.image.width()
+        height = self.image.height()
+        
+        # Check if coordinates are within bounds
+        if x < 0 or x >= width or y < 0 or y >= height:
+            return
+            
+        # Get the color at the target position
+        pixel_color = self.image.pixelColor(x, y)
+        if pixel_color == replacement_color:
+            return
+            
+        # Create a stack for the flood fill
+        stack = [(x, y)]
+        
+        while stack:
+            current_x, current_y = stack.pop()
+            
+            # Check if current pixel matches target color
+            if self.image.pixelColor(current_x, current_y) != target_color:
+                continue
+                
+            # Set the current pixel to replacement color
+            self.image.setPixelColor(current_x, current_y, replacement_color)
+            
+            # Check neighboring pixels
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                new_x, new_y = current_x + dx, current_y + dy
+                
+                # Check bounds
+                if 0 <= new_x < width and 0 <= new_y < height:
+                    # Check if pixel matches target color
+                    if self.image.pixelColor(new_x, new_y) == target_color:
+                        stack.append((new_x, new_y))
 
 class DrawingApp(QMainWindow):
     def __init__(self):
@@ -331,6 +382,12 @@ class DrawingApp(QMainWindow):
         self.rectangle_action.setCheckable(True)
         self.rectangle_action.triggered.connect(lambda: self.toggle_shape_tool('rectangle'))
         toolbar.addAction(self.rectangle_action)
+        
+        # Fill tool toggle
+        self.fill_action = QAction('Fill Tool', self)
+        self.fill_action.setCheckable(True)
+        self.fill_action.triggered.connect(self.toggle_fill_tool)
+        toolbar.addAction(self.fill_action)
         
         # Foreground color picker action
         fg_color_action = QAction('Foreground Color', self)
@@ -474,6 +531,29 @@ class DrawingApp(QMainWindow):
             self.canvas.brush_tool = True
             self.canvas.shape_tool = False
             self.canvas.shape_type = None
+            self.canvas.update()
+
+    def toggle_fill_tool(self, checked):
+        if checked:
+            # Deselect all other tools
+            self.brush_action.setChecked(False)
+            self.selection_action.setChecked(False)
+            self.circle_action.setChecked(False)
+            self.rectangle_action.setChecked(False)
+            
+            # Set fill tool properties
+            self.canvas.brush_tool = False
+            self.canvas.selection_mode = False
+            self.canvas.shape_tool = False
+            self.canvas.fill_tool = True
+            self.canvas.shape_type = None
+            self.canvas.has_selection = False
+            self.canvas.update()
+        else:
+            # If fill tool is unchecked, switch back to brush
+            self.brush_action.setChecked(True)
+            self.canvas.brush_tool = True
+            self.canvas.fill_tool = False
             self.canvas.update()
 
 if __name__ == '__main__':
