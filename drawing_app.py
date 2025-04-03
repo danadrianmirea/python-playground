@@ -17,6 +17,9 @@ class Canvas(QWidget):
         # Add drawing properties
         self.current_color = Qt.black
         self.brush_size = 3
+        # Add image history
+        self.image_history = [self.image.copy()]
+        self.current_history_index = 0
     
     def paintEvent(self, event):
         canvas_painter = QPainter(self)
@@ -40,10 +43,32 @@ class Canvas(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.drawing = False
+            # Save the new state to history
+            self.save_to_history()
+    
+    def save_to_history(self):
+        # Remove any states after current position
+        self.image_history = self.image_history[:self.current_history_index + 1]
+        # Add new state
+        self.image_history.append(self.image.copy())
+        self.current_history_index = len(self.image_history) - 1
+    
+    def undo(self):
+        if self.current_history_index > 0:
+            self.current_history_index -= 1
+            self.image = self.image_history[self.current_history_index].copy()
+            self.update()
+    
+    def redo(self):
+        if self.current_history_index < len(self.image_history) - 1:
+            self.current_history_index += 1
+            self.image = self.image_history[self.current_history_index].copy()
+            self.update()
     
     def setImage(self, image):
         self.image = image
         self.setMinimumSize(self.scale_factor * self.image.size())
+        self.save_to_history()  # Save the new image to history
         self.update()
     
     def setScaleFactor(self, scale):
@@ -104,6 +129,21 @@ class DrawingApp(QMainWindow):
         exit_action.setShortcut('Ctrl+Q')
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)    
+        
+        # Edit menu
+        edit_menu = menu_bar.addMenu('Edit')
+        
+        # Undo action
+        undo_action = QAction('Undo', self)
+        undo_action.setShortcut('Ctrl+Z')
+        undo_action.triggered.connect(self.canvas.undo)
+        edit_menu.addAction(undo_action)
+        
+        # Redo action
+        redo_action = QAction('Redo', self)
+        redo_action.setShortcut('Ctrl+Y')
+        redo_action.triggered.connect(self.canvas.redo)
+        edit_menu.addAction(redo_action)
         
         # View menu
         view_menu = menu_bar.addMenu('View')
