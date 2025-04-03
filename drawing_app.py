@@ -51,7 +51,7 @@ class Canvas(QWidget):
                 self.has_selection = True
                 # Set focus when making a selection
                 self.setFocus()
-            else:
+            elif self.brush_tool:
                 self.drawing = True
                 self.last_point = QPoint(event.pos() / self.scale_factor)
     
