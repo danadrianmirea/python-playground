@@ -435,9 +435,10 @@ class Solitaire:
             if target_pile in self.tableau_piles:
                 if DEBUG:
                     print("Checking tableau move for King")
-                if self.can_move_to_tableau(card, target_pile):
+                # Kings can only be placed on empty tableau piles
+                if not target_pile:
                     if DEBUG:
-                        print("Valid tableau move for King")
+                        print("Valid tableau move for King (empty pile)")
                     # Move the cards
                     target_pile.extend(cards_to_move)
                     source_pile[start_index:end_index] = []
@@ -449,6 +450,10 @@ class Solitaire:
                     if DEBUG:
                         print("Move successful")
                     return True
+                else:
+                    if DEBUG:
+                        print("Invalid tableau move for King (non-empty pile)")
+                    return False
             # If not a valid tableau move, check foundation
             elif target_pile in self.foundation_piles:
                 if DEBUG:

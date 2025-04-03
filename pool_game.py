@@ -114,7 +114,9 @@ class Ball:
         
         # Draw the number
         font = pygame.font.Font(None, int(24 * SCALE_FACTOR))
-        text = font.render(str(self.number), True, WHITE if self.color == BLACK else BLACK)
+        # Convert color to tuple if it's a list for proper comparison
+        color = tuple(self.color) if isinstance(self.color, list) else self.color
+        text = font.render(str(self.number), True, WHITE if color == BLACK else BLACK)
         text_rect = text.get_rect(center=(x, y))
         screen.blit(text, text_rect)
         
@@ -425,6 +427,9 @@ class PoolGame:
                 # Skip the cue ball (white ball) as we'll load it separately
                 if ball_data['color'] == WHITE:
                     continue
+                # Ensure 8-ball has number 8 by comparing color values
+                if ball_data['color'] == [0, 0, 0]:  # Black color as list from JSON
+                    ball_data['number'] = 8
                 ball = Ball(self.space, ball_data['position'][0], ball_data['position'][1],
                           ball_data['color'], ball_data['number'], ball_data['is_striped'])
                 ball.body.velocity = ball_data['velocity']
