@@ -337,7 +337,7 @@ class DrawingApp(QMainWindow):
         
         # Set up window
         self.setGeometry(100, 100, 800, 600)
-        self.setWindowTitle('Simple Drawing App')
+        self.setWindowTitle('Paint')
         
         # Create menu and toolbar
         self.create_menu()
