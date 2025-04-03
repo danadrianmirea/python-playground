@@ -1,7 +1,8 @@
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QFileDialog, 
-                             QMenu, QMessageBox, QScrollArea, QWidget)
-from PyQt5.QtGui import QPainter, QPen, QImage, QTransform
+                             QMenu, QMessageBox, QScrollArea, QWidget, QToolBar,
+                             QColorDialog, QSpinBox, QLabel)
+from PyQt5.QtGui import QPainter, QPen, QImage, QTransform, QColor, QIcon
 from PyQt5.QtCore import Qt, QPoint, QSize
 
 class Canvas(QWidget):
@@ -13,6 +14,9 @@ class Canvas(QWidget):
         self.last_point = QPoint()
         self.scale_factor = 1.0
         self.setMinimumSize(800, 600)
+        # Add drawing properties
+        self.current_color = Qt.black
+        self.brush_size = 3
     
     def paintEvent(self, event):
         canvas_painter = QPainter(self)
@@ -28,7 +32,7 @@ class Canvas(QWidget):
         if (event.buttons() & Qt.LeftButton) and self.drawing:
             current_point = QPoint(event.pos() / self.scale_factor)
             painter = QPainter(self.image)
-            painter.setPen(QPen(Qt.black, 3, Qt.SolidLine))
+            painter.setPen(QPen(self.current_color, self.brush_size, Qt.SolidLine))
             painter.drawLine(self.last_point, current_point)
             self.last_point = current_point
             self.update()
@@ -66,8 +70,9 @@ class DrawingApp(QMainWindow):
         self.setGeometry(100, 100, 800, 600)
         self.setWindowTitle('Simple Drawing App')
         
-        # Create menu
+        # Create menu and toolbar
         self.create_menu()
+        self.create_toolbar()
         
         self.show()
     
@@ -121,6 +126,26 @@ class DrawingApp(QMainWindow):
         reset_zoom_action.triggered.connect(self.reset_zoom)
         view_menu.addAction(reset_zoom_action)
     
+    def create_toolbar(self):
+        # Create toolbar
+        toolbar = QToolBar()
+        self.addToolBar(toolbar)
+        
+        # Color picker action
+        color_action = QAction('Color', self)
+        color_action.triggered.connect(self.choose_color)
+        toolbar.addAction(color_action)
+        
+        # Brush size selector
+        brush_label = QLabel('Brush Size:', self)
+        toolbar.addWidget(brush_label)
+        
+        self.brush_size_spinbox = QSpinBox(self)
+        self.brush_size_spinbox.setRange(1, 50)
+        self.brush_size_spinbox.setValue(3)
+        self.brush_size_spinbox.valueChanged.connect(self.change_brush_size)
+        toolbar.addWidget(self.brush_size_spinbox)
+    
     def new_canvas(self):
         new_image = QImage(800, 600, QImage.Format_RGB32)
         new_image.fill(Qt.white)
@@ -162,6 +187,14 @@ class DrawingApp(QMainWindow):
         scale = max(0.1, min(scale, 5.0))
         
         self.canvas.setScaleFactor(scale)
+    
+    def choose_color(self):
+        color = QColorDialog.getColor(self.canvas.current_color, self)
+        if color.isValid():
+            self.canvas.current_color = color
+    
+    def change_brush_size(self, size):
+        self.canvas.brush_size = size
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
