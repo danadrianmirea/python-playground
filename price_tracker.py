@@ -10,6 +10,8 @@ import json
 import os
 from urllib.parse import urlparse
 
+TIME_BETWEEN_CHECKS = 100
+
 class PriceTracker:
     def __init__(self):
         self.headers = {
@@ -17,6 +19,7 @@ class PriceTracker:
         }
         self.products_file = 'products.json'
         self.price_history_file = 'price_history.csv'
+        self.timeout = 100  # Timeout constant in seconds
         self.load_products()
         self.setup_price_history()
 
@@ -25,6 +28,13 @@ class PriceTracker:
         if os.path.exists(self.products_file):
             with open(self.products_file, 'r') as f:
                 self.products = json.load(f)
+                # Add name field to existing products if missing
+                for product in self.products:
+                    if 'name' not in product:
+                        parsed_url = urlparse(product['url'])
+                        path_parts = parsed_url.path.strip('/').split('/')
+                        product['name'] = path_parts[-1].replace('-', ' ').title() if path_parts else "Unknown Product"
+                self.save_products()  # Save the updated products with names
         else:
             self.products = []
             self.save_products()
@@ -41,21 +51,28 @@ class PriceTracker:
             df.to_csv(self.price_history_file, index=False)
         self.price_history = pd.read_csv(self.price_history_file)
 
-    def add_product(self, url, target_price):
+    def add_product(self, url, target_price, timeout=100):
         """Add a new product to track"""
         # Validate URL
         if not self.is_valid_url(url):
             print("Error: Invalid URL format")
             return False
 
+        # Extract product name from URL
+        parsed_url = urlparse(url)
+        path_parts = parsed_url.path.strip('/').split('/')
+        product_name = path_parts[-1].replace('-', ' ').title() if path_parts else "Unknown Product"
+
         product = {
             'url': url,
             'target_price': float(target_price),
-            'store': self.detect_store(url)
+            'store': self.detect_store(url),
+            'timeout': timeout,
+            'name': product_name
         }
         self.products.append(product)
         self.save_products()
-        print(f"Added product from {product['store']} to tracking list")
+        print(f"Added product '{product_name}' from {product['store']} to tracking list")
         return True
 
     def is_valid_url(self, url):
@@ -77,33 +94,41 @@ class PriceTracker:
             raise ValueError(f"Unsupported store: {domain}")
 
     def get_amazon_price(self, url):
-        """Extract price from Amazon product page"""
+        """Extract price and name from Amazon product page"""
         try:
             response = requests.get(url, headers=self.headers)
             soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Extract product name
+            name_element = soup.select_one('#productTitle')
+            product_name = name_element.text.strip() if name_element else None
             
             # Try different price selectors
             price_element = soup.select_one('.a-price-whole')
             if price_element:
                 price = float(price_element.text.replace(',', ''))
-                return price
+                return price, product_name
             
             # Alternative price selector
             price_element = soup.select_one('#priceblock_ourprice')
             if price_element:
                 price = float(price_element.text.replace('$', '').replace(',', ''))
-                return price
+                return price, product_name
             
-            return None
+            return None, product_name
         except Exception as e:
             print(f"Error getting Amazon price: {str(e)}")
-            return None
+            return None, None
 
     def get_emag_price(self, url):
-        """Extract price from eMAG product page"""
+        """Extract price and name from eMAG product page"""
         try:
             response = requests.get(url, headers=self.headers)
             soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # Extract product name
+            name_element = soup.select_one('.page-title')
+            product_name = name_element.text.strip() if name_element else None
             
             # Try different price selectors for eMAG
             price_element = soup.select_one('.product-new-price')
@@ -111,36 +136,41 @@ class PriceTracker:
                 # eMAG prices are in format "1.234,56 Lei"
                 price_text = price_element.text.strip().replace('Lei', '').replace('.', '').replace(',', '.')
                 price = float(price_text)
-                return price
+                return price, product_name
             
             # Alternative price selector
             price_element = soup.select_one('.price')
             if price_element:
                 price_text = price_element.text.strip().replace('Lei', '').replace('.', '').replace(',', '.')
                 price = float(price_text)
-                return price
+                return price, product_name
             
-            return None
+            return None, product_name
         except Exception as e:
             print(f"Error getting eMAG price: {str(e)}")
-            return None
+            return None, None
 
     def get_product_price(self, product):
-        """Get price based on store type"""
+        """Get price and name based on store type"""
         if product['store'] == 'amazon':
             return self.get_amazon_price(product['url'])
         elif product['store'] == 'emag':
             return self.get_emag_price(product['url'])
         else:
             print(f"Unsupported store: {product['store']}")
-            return None
+            return None, None
 
     def check_prices(self):
         """Check prices for all tracked products"""
         for product in self.products:
-            current_price = self.get_product_price(product)
+            current_price, website_name = self.get_product_price(product)
             
             if current_price:
+                # Update product name if we got a better one from the website
+                if website_name:
+                    product['name'] = website_name
+                    self.save_products()
+                
                 # Record price in history
                 new_row = {
                     'product_name': product['name'],
@@ -153,9 +183,13 @@ class PriceTracker:
 
                 # Check if price is below target
                 if current_price <= product['target_price']:
-                    self.send_price_alert(product, current_price)
+                    #self.send_price_alert(product, current_price)
+                    print(f"Price has changed for {product['name']} to {current_price}")
                 
                 print(f"{product['name']}: Current price: ${current_price:.2f}")
+            
+            # Sleep for the product's timeout before checking the next product
+            time.sleep(product['timeout'])
 
     def send_price_alert(self, product, current_price):
         """Send email alert when price drops below target"""
@@ -192,23 +226,14 @@ def main():
     
     # Example usage
     if not tracker.products:
-        # Example Amazon product
-        tracker.add_product(
-            "https://www.amazon.com/example-product",
-            100.0
-        )
-        
-        # Example eMAG product
-        tracker.add_product(
-            "https://www.emag.ro/example-product",
-            500.0
-        )
+        #tracker.add_product("https://www.amazon.com/example-product")        
+        tracker.add_product("https://www.emag.ro/placa-video-nvidia-geforce-gtx-1050ti-4gb-gddr5-128bit-nvidiagtx1050ti/pd/DNJX06YBM/", 3)
     
     while True:
         print("\nChecking prices...")
         tracker.check_prices()
-        print("\nWaiting for 1 hour before next check...")
-        time.sleep(3600)  # Check every hour
+        print(f"\nWaiting for {TIME_BETWEEN_CHECKS} seconds before next check...")
+        time.sleep(TIME_BETWEEN_CHECKS)
 
 if __name__ == "__main__":
     main() 
