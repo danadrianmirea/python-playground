@@ -3,8 +3,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QFileDialog,
                              QMenu, QMessageBox, QScrollArea, QWidget, QToolBar,
                              QColorDialog, QSpinBox, QLabel, QDialog, QPushButton,
                              QGridLayout, QVBoxLayout)
-from PyQt5.QtGui import QPainter, QPen, QImage, QTransform, QColor, QIcon
-from PyQt5.QtCore import Qt, QPoint, QSize, QRect
+from PyQt5.QtGui import QPainter, QPen, QImage, QTransform, QColor, QIcon, QPainterPath
+from PyQt5.QtCore import Qt, QPoint, QSize, QRect, QPointF
 
 class ColorPickerDialog(QDialog):
     def __init__(self, current_color, parent=None):
@@ -88,6 +88,11 @@ class Canvas(QWidget):
         # Add image history
         self.image_history = [self.image.copy()]
         self.current_history_index = 0
+        # Add brush smoothing properties
+        self.points = []  # Store points for smoothing
+        self.smoothing_factor = 0.5  # Adjust this value to control smoothing (0.0 to 1.0)
+        self.brush_pressure = 1.0  # Simulated brush pressure (0.0 to 1.0)
+        self.brush_pressure_change = 0.05  # How quickly pressure changes
     
     def paintEvent(self, event):
         canvas_painter = QPainter(self)
@@ -186,9 +191,27 @@ class Canvas(QWidget):
                 self.update()
             elif self.brush_tool and self.drawing:
                 current_point = pos
-                painter = QPainter(self.image)
-                painter.setPen(QPen(self.foreground_color, self.brush_size, Qt.SolidLine))
-                painter.drawLine(self.last_point, current_point)
+                
+                # Add point to the list for smoothing
+                self.points.append(QPointF(current_point))
+                
+                # Limit the number of points to prevent memory issues
+                if len(self.points) > 10:
+                    self.points.pop(0)
+                
+                # Simulate pressure changes based on speed
+                if len(self.points) >= 2:
+                    # Calculate distance between current and last point
+                    distance = (self.points[-1] - self.points[-2]).manhattanLength()
+                    # Adjust pressure based on speed (faster = lower pressure)
+                    if distance > 10:
+                        self.brush_pressure = max(0.3, self.brush_pressure - self.brush_pressure_change)
+                    else:
+                        self.brush_pressure = min(1.0, self.brush_pressure + self.brush_pressure_change)
+                
+                # Draw with smoothing
+                self.draw_smooth_line()
+                
                 self.last_point = current_point
                 self.update()
             elif self.shape_tool and self.drawing:
@@ -211,6 +234,10 @@ class Canvas(QWidget):
                 self.update()
             elif self.brush_tool:
                 self.drawing = False
+                # Clear points when done drawing
+                self.points = []
+                # Reset brush pressure
+                self.brush_pressure = 1.0
                 self.save_to_history()
             elif self.shape_tool:
                 self.drawing = False
@@ -229,6 +256,42 @@ class Canvas(QWidget):
         
         painter.end()
         self.update()
+    
+    def draw_smooth_line(self):
+        if len(self.points) < 2:
+            return
+            
+        painter = QPainter(self.image)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Create a path for smooth drawing
+        path = QPainterPath()
+        path.moveTo(self.points[0])
+        
+        # Use cubic Bezier curves for smooth lines
+        for i in range(1, len(self.points) - 1):
+            # Calculate control points for the Bezier curve
+            p0 = self.points[i-1]
+            p1 = self.points[i]
+            p2 = self.points[i+1]
+            
+            # Calculate the control point
+            control_point = p1 + (p2 - p0) * self.smoothing_factor
+            
+            # Add the curve to the path
+            path.quadTo(p1, control_point)
+        
+        # Add the last point
+        if len(self.points) > 1:
+            path.lineTo(self.points[-1])
+        
+        # Set the pen with pressure sensitivity
+        adjusted_brush_size = self.brush_size * self.brush_pressure
+        painter.setPen(QPen(self.foreground_color, adjusted_brush_size, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        
+        # Draw the path
+        painter.drawPath(path)
+        painter.end()
     
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Delete and self.has_selection:
