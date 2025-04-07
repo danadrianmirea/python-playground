@@ -21,7 +21,13 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize Firestore client
-db = firestore.Client()
+try:
+    db = firestore.Client()
+    logger.info("Firestore client initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize Firestore client: {str(e)}")
+    # We'll still set db to None so we can check later
+    db = None
 
 # Define command handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -116,6 +122,12 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            await update.message.reply_text("Database connection error. Please try again later.")
+            return
+            
         # Check if the message is in quotes
         full_text = " ".join(context.args)
         quoted_message = None
@@ -195,6 +207,14 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """List all active reminders for the user."""
     try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            await update.message.reply_text("Database connection error. Please try again later.")
+            return
+            
+        logger.info(f"Fetching reminders for user {update.effective_user.id}")
+        
         # Query reminders from Firestore
         reminders = db.collection('reminders')\
             .where('user_id', '==', update.effective_user.id)\
@@ -213,6 +233,8 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📝 {data['message']}\n"
             )
         
+        logger.info(f"Found {len(reminder_list)} reminders for user {update.effective_user.id}")
+        
         if reminder_list:
             message = "Your active reminders:\n\n" + "\n".join(reminder_list)
         else:
@@ -221,8 +243,10 @@ async def list_reminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(message)
 
     except Exception as e:
-        logger.error(f"Error listing reminders: {str(e)}")
-        await update.message.reply_text("Sorry, something went wrong while fetching your reminders.")
+        error_message = f"Error listing reminders: {str(e)}"
+        logger.error(error_message)
+        # Send a more detailed error message to help with debugging
+        await update.message.reply_text(f"Error fetching reminders: {str(e)}")
 
 async def delete_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Delete a reminder by its ID."""
@@ -232,6 +256,12 @@ async def delete_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     reminder_id = context.args[0]
     try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            await update.message.reply_text("Database connection error. Please try again later.")
+            return
+            
         # Get the reminder and verify ownership
         reminder_ref = db.collection('reminders').document(reminder_id)
         reminder = reminder_ref.get()
@@ -247,10 +277,10 @@ async def delete_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Delete the reminder
         reminder_ref.delete()
         await update.message.reply_text("✅ Reminder deleted successfully!")
-
+        
     except Exception as e:
         logger.error(f"Error deleting reminder: {str(e)}")
-        await update.message.reply_text("Sorry, something went wrong while deleting the reminder.")
+        await update.message.reply_text(f"Error deleting reminder: {str(e)}")
 
 async def handle_update(update_dict: dict) -> None:
     """Handle a single update from Telegram."""
