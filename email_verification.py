@@ -7,11 +7,28 @@ def is_valid_format(email):
     pattern = r'^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$'
     return re.match(pattern, email) is not None
 
-# Step 2: Check if it's a Hotmail address
-def is_hotmail(email):
-    hotmail_domains = ['hotmail.com', 'outlook.com', 'live.com', 'msn.com']
+# Step 2: Check if it's a supported email domain
+def is_supported_domain(email):
+    supported_domains = [
+        # Microsoft domains
+        'hotmail.com', 'outlook.com', 'live.com', 'msn.com',
+        # Google domains
+        'gmail.com',
+        # Yahoo domains
+        'yahoo.com', 'yahoo.co.uk', 'yahoo.co.jp', 'yahoo.fr', 'yahoo.de',
+        # AOL domains
+        'aol.com',
+        # ProtonMail domains
+        'protonmail.com', 'protonmail.ch',
+        # Zoho domains
+        'zoho.com',
+        # Yandex domains
+        'yandex.com', 'yandex.ru',
+        # iCloud domains
+        'icloud.com', 'me.com', 'mac.com'
+    ]
     domain = email.split('@')[-1].lower()
-    return domain in hotmail_domains
+    return domain in supported_domains
 
 # Step 3: Check MX records
 def has_mx_records(domain):
@@ -46,8 +63,8 @@ def smtp_check(email):
 def verify_email(email, use_smtp=False):
     if not is_valid_format(email):
         return "Invalid email format"
-    if not is_hotmail(email):
-        return "Not a Hotmail/Outlook email"
+    if not is_supported_domain(email):
+        return "Not a supported email domain"
     if not has_mx_records(email.split('@')[1]):
         return "Domain does not accept emails"
     if use_smtp:
@@ -62,8 +79,14 @@ if __name__ == "__main__":
     test_emails = [
         "test.user@hotmail.com",
         "invalid.email@",
-        "someone@gmail.com",  # Non-hotmail address
-        "test.person@outlook.com"
+        "someone@gmail.com",
+        "test.person@outlook.com",
+        "user@yahoo.com",
+        "name@aol.com",
+        "user@protonmail.com",
+        "test@zoho.com",
+        "user@yandex.com",
+        "name@icloud.com"
     ]
     
     print("Testing multiple email addresses:")
