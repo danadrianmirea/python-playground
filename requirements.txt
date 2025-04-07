@@ -6,4 +6,5 @@ noise==1.2.2
 box2d==2.4.1
 requests==2.31.0
 beautifulsoup4==4.12.2
-pandas==2.1.0 
+pandas==2.1.0
+python-telegram-bot==20.7 
