@@ -62,9 +62,16 @@ async def handle_update(update_dict: dict) -> None:
     application.add_handler(CommandHandler("time", time_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
 
-    # Process the update
-    update = Update.de_json(update_dict, application.bot)
-    await application.process_update(update)
+    # Initialize the application
+    await application.initialize()
+    
+    try:
+        # Process the update
+        update = Update.de_json(update_dict, application.bot)
+        await application.process_update(update)
+    finally:
+        # Clean up
+        await application.shutdown()
 
 @functions_framework.http
 def telegram_webhook(request: Request):
