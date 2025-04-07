@@ -36,7 +36,7 @@ Available commands:
 /help - Show this help message
 /echo <text> - Echo back your text
 /time - Show the current time in UTC+0 and Bucharest time
-/remind <time> <message> - Set a reminder (e.g., '/remind 5' (minutes), '/remind 30s (seconds), '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
+/remind <time> <message> - Set a reminder (e.g., '/remind 5' (minutes), '/remind 30s' (seconds), '/remind 1h' (hours), '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
 /reminders - List all your active reminders
 /delreminder <id> - Delete a reminder by its ID
     """
@@ -106,6 +106,7 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Examples:\n"
             "- /remind 5 (minutes)\n"
             "- /remind 30s (seconds)\n"
+            "- /remind 1h (hours)\n"
             "- /remind 2h30m dinner\n"
             "- /remind tomorrow 14:00 team meeting\n"
             "- /remind 5m check oven"
