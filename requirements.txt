@@ -8,4 +8,6 @@ beautifulsoup4==4.12.2
 pandas==2.1.0
 python-telegram-bot==20.7
 functions-framework==3.*
-pytz==2025.2 
+pytz==2025.2
+google-cloud-firestore==2.15.0
+python-dateutil==2.8.2 
