@@ -27,6 +27,8 @@ db = firestore.Client()
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /start is issued."""
     await update.message.reply_text('Test/development bot made by AdrianM. Use /help for a list of commands.')
+    # Also display the help message
+    await help_command(update, context)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Send a message when the command /help is issued."""
