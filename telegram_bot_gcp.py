@@ -102,7 +102,7 @@ def parse_time(time_str: str) -> datetime.datetime:
 
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set a reminder."""
-    if not context.args or len(context.args) < 2:
+    if not context.args:
         await update.message.reply_text(
             "Please provide both time and message.\n"
             "Examples:\n"
@@ -116,15 +116,55 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Try to parse first two arguments as time
-        time_str = " ".join(context.args[:2])
-        try:
-            reminder_time = parse_time(time_str)
-            message = " ".join(context.args[2:])
-        except ValueError:
-            # If that fails, try just the first argument
-            reminder_time = parse_time(context.args[0])
-            message = " ".join(context.args[1:])
+        # Check if the message is in quotes
+        full_text = " ".join(context.args)
+        quoted_message = None
+        
+        # Look for quoted text
+        if '"' in full_text:
+            # Find the first and last quote
+            first_quote = full_text.find('"')
+            last_quote = full_text.rfind('"')
+            
+            if first_quote != last_quote:  # We have a complete quote
+                # Extract the time part (before the first quote)
+                time_part = full_text[:first_quote].strip()
+                # Extract the message (between quotes)
+                quoted_message = full_text[first_quote+1:last_quote]
+                
+                # Parse the time
+                reminder_time = parse_time(time_part)
+                message = quoted_message
+            else:
+                # Only one quote found, treat as normal
+                if len(context.args) == 1:
+                    reminder_time = parse_time(context.args[0])
+                    message = ""
+                else:
+                    # Try to parse first two arguments as time
+                    time_str = " ".join(context.args[:2])
+                    try:
+                        reminder_time = parse_time(time_str)
+                        message = " ".join(context.args[2:])
+                    except ValueError:
+                        # If that fails, try just the first argument
+                        reminder_time = parse_time(context.args[0])
+                        message = " ".join(context.args[1:])
+        else:
+            # No quotes, process as before
+            if len(context.args) == 1:
+                reminder_time = parse_time(context.args[0])
+                message = ""
+            else:
+                # Try to parse first two arguments as time
+                time_str = " ".join(context.args[:2])
+                try:
+                    reminder_time = parse_time(time_str)
+                    message = " ".join(context.args[2:])
+                except ValueError:
+                    # If that fails, try just the first argument
+                    reminder_time = parse_time(context.args[0])
+                    message = " ".join(context.args[1:])
 
         # Store reminder in Firestore
         reminder_ref = db.collection('reminders').document()
