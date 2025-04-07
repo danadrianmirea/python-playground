@@ -36,7 +36,7 @@ Available commands:
 /help - Show this help message
 /echo <text> - Echo back your text
 /time - Show the current time in UTC+0 and Bucharest time
-/remind <time> <message> - Set a reminder (e.g., '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
+/remind <time> <message> - Set a reminder (e.g., '/remind 5' (minutes), '/remind 30s (seconds), '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
 /reminders - List all your active reminders
 /delreminder <id> - Delete a reminder by its ID
     """
@@ -59,14 +59,22 @@ def parse_time(time_str: str) -> datetime.datetime:
     """Parse time string into datetime object."""
     now = datetime.datetime.now(pytz.UTC)
     
-    # Try to parse as relative time (e.g., "2h30m")
-    relative_pattern = re.compile(r'((?P<hours>\d+)h)?((?P<minutes>\d+)m)?')
+    # Try to parse as a plain number (assume minutes)
+    try:
+        minutes = int(time_str)
+        return now + datetime.timedelta(minutes=minutes)
+    except ValueError:
+        pass
+    
+    # Try to parse as relative time (e.g., "2h30m" or "30s")
+    relative_pattern = re.compile(r'((?P<hours>\d+)h)?((?P<minutes>\d+)m)?((?P<seconds>\d+)s)?')
     match = relative_pattern.match(time_str)
     
-    if match and (match.group('hours') or match.group('minutes')):
+    if match and (match.group('hours') or match.group('minutes') or match.group('seconds')):
         hours = int(match.group('hours') or 0)
         minutes = int(match.group('minutes') or 0)
-        return now + datetime.timedelta(hours=hours, minutes=minutes)
+        seconds = int(match.group('seconds') or 0)
+        return now + datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
     
     # Try to parse as absolute time
     try:
@@ -88,7 +96,7 @@ def parse_time(time_str: str) -> datetime.datetime:
         
         return parsed_time
     except ValueError:
-        raise ValueError("Could not parse time. Please use format like '2h30m' or 'tomorrow 14:00'")
+        raise ValueError("Could not parse time. Please use format like '5' (minutes), '30s' (seconds), '2h30m' or 'tomorrow 14:00'")
 
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set a reminder."""
@@ -96,6 +104,8 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "Please provide both time and message.\n"
             "Examples:\n"
+            "- /remind 5 (minutes)\n"
+            "- /remind 30s (seconds)\n"
             "- /remind 2h30m dinner\n"
             "- /remind tomorrow 14:00 team meeting\n"
             "- /remind 5m check oven"
