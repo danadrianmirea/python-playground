@@ -44,7 +44,7 @@ Available commands:
 /help - Show this help message
 /echo <text> - Echo back your text
 /time - Show the current time in UTC+0 and Bucharest time
-/remind <time> <message> - Set a reminder (e.g., '/remind 5' (minutes), '/remind 30s' (seconds), '/remind 1h' (hours), '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
+/remind <time> <message> - Set a reminder (e.g., '/remind 5' (minutes), '/remind 1h' (hours), '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
 /reminders - List all your active reminders
 /delreminder <id> - Delete a reminder by its ID
     """
@@ -74,15 +74,14 @@ def parse_time(time_str: str) -> datetime.datetime:
     except ValueError:
         pass
     
-    # Try to parse as relative time (e.g., "2h30m" or "30s")
-    relative_pattern = re.compile(r'((?P<hours>\d+)h)?((?P<minutes>\d+)m)?((?P<seconds>\d+)s)?')
+    # Try to parse as relative time (e.g., "2h30m")
+    relative_pattern = re.compile(r'((?P<hours>\d+)h)?((?P<minutes>\d+)m)?')
     match = relative_pattern.match(time_str)
     
-    if match and (match.group('hours') or match.group('minutes') or match.group('seconds')):
+    if match and (match.group('hours') or match.group('minutes')):
         hours = int(match.group('hours') or 0)
         minutes = int(match.group('minutes') or 0)
-        seconds = int(match.group('seconds') or 0)
-        return now + datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+        return now + datetime.timedelta(hours=hours, minutes=minutes)
     
     # Try to parse as absolute time
     try:
@@ -104,7 +103,7 @@ def parse_time(time_str: str) -> datetime.datetime:
         
         return parsed_time
     except ValueError:
-        raise ValueError("Could not parse time. Please use format like '5' (minutes), '30s' (seconds), '2h30m' or 'tomorrow 14:00'")
+        raise ValueError("Could not parse time. Please use format like '5' (minutes), '2h30m' or 'tomorrow 14:00'")
 
 async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Set a reminder."""
@@ -113,7 +112,6 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Please provide both time and message.\n"
             "Examples:\n"
             "- /remind 5 (minutes)\n"
-            "- /remind 30s (seconds)\n"
             "- /remind 1h (hours)\n"
             "- /remind 2h30m dinner\n"
             "- /remind tomorrow 14:00 team meeting\n"
@@ -331,4 +329,74 @@ def telegram_webhook(request: Request):
     # Process the update asynchronously
     import asyncio
     asyncio.run(handle_update(update_dict))
-    return "OK", 200 
+    return "OK", 200
+
+@functions_framework.cloud_event
+def check_reminders(cloud_event):
+    """Cloud Function that runs on a schedule to check for expired reminders."""
+    logger.info("Checking for expired reminders")
+    
+    try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            return
+            
+        # Get current time
+        now = datetime.datetime.now(pytz.UTC)
+        
+        # Query for reminders that have expired (time <= now)
+        expired_reminders = db.collection('reminders')\
+            .where('time', '<=', now)\
+            .stream()
+        
+        # Process each expired reminder
+        for reminder in expired_reminders:
+            data = reminder.to_dict()
+            user_id = data.get('user_id')
+            chat_id = data.get('chat_id')
+            message = data.get('message', '')
+            
+            if not user_id or not chat_id:
+                logger.error(f"Reminder {reminder.id} missing user_id or chat_id")
+                continue
+                
+            # Send notification to user and only delete if successful
+            if send_reminder_notification(user_id, chat_id, message, reminder.id):
+                reminder.reference.delete()
+                logger.info(f"Deleted expired reminder {reminder.id}")
+            else:
+                logger.error(f"Failed to send notification for reminder {reminder.id}, will retry next time")
+            
+    except Exception as e:
+        logger.error(f"Error checking reminders: {str(e)}")
+
+def send_reminder_notification(user_id, chat_id, message, reminder_id):
+    """Send a notification to a user about an expired reminder.
+    Returns True if notification was sent successfully, False otherwise."""
+    try:
+        # Get the bot token
+        token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        if not token:
+            logger.error("TELEGRAM_BOT_TOKEN environment variable is not set")
+            return False
+            
+        # Create a simple bot instance
+        from telegram import Bot
+        bot = Bot(token=token)
+        
+        # Send the notification
+        notification_text = f"⏰ REMINDER!\n\n"
+        if message:
+            notification_text += f"📝 {message}\n\n"
+        notification_text += f"🆔 ID: {reminder_id}"
+        
+        # Use asyncio to send the message
+        import asyncio
+        asyncio.run(bot.send_message(chat_id=chat_id, text=notification_text))
+        logger.info(f"Sent reminder notification to user {user_id}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error sending reminder notification: {str(e)}")
+        return False 
