@@ -50,6 +50,10 @@ Available commands:
 /delreminder <id> - Delete a reminder by its ID
 /joke - Get a random joke
 /meme - Get a random meme
+/note <title> <content> - Save a new note
+/notes - List all your saved notes
+/getnote <id> - Retrieve a specific note by ID
+/delnote <id> - Delete a specific note by ID
     """
     await update.message.reply_text(help_text)
 
@@ -320,6 +324,166 @@ async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error fetching meme: {str(e)}")
         await update.message.reply_text("Sorry, I couldn't fetch a meme right now. Try again later!")
 
+# Note-taking system functions
+async def save_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save a new note."""
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text(
+            "Please provide both a title and content for your note.\n"
+            "Example: /note Shopping List Buy milk, eggs, and bread"
+        )
+        return
+
+    try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            await update.message.reply_text("Database connection error. Please try again later.")
+            return
+            
+        # Extract title and content
+        title = context.args[0]
+        content = " ".join(context.args[1:])
+        
+        # Store note in Firestore
+        note_ref = db.collection('notes').document()
+        note = {
+            'user_id': update.effective_user.id,
+            'chat_id': update.effective_chat.id,
+            'title': title,
+            'content': content,
+            'created_at': datetime.datetime.now(pytz.UTC)
+        }
+        note_ref.set(note)
+
+        # Format confirmation message
+        await update.message.reply_text(
+            f"✅ Note saved!\n"
+            f"📝 Title: {title}\n"
+            f"🆔 ID: {note_ref.id}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error saving note: {str(e)}")
+        await update.message.reply_text("Sorry, something went wrong while saving the note.")
+
+async def list_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """List all notes for the user."""
+    try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            await update.message.reply_text("Database connection error. Please try again later.")
+            return
+            
+        logger.info(f"Fetching notes for user {update.effective_user.id}")
+        
+        # Query notes from Firestore
+        notes = db.collection('notes')\
+            .where('user_id', '==', update.effective_user.id)\
+            .order_by('created_at', direction=firestore.Query.DESCENDING)\
+            .stream()
+        
+        # Format notes list
+        note_list = []
+        for note in notes:
+            data = note.to_dict()
+            created_at = data['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+            note_list.append(
+                f"🆔 {note.id}\n"
+                f"📝 {data['title']}\n"
+                f"⏰ {created_at}\n"
+            )
+        
+        logger.info(f"Found {len(note_list)} notes for user {update.effective_user.id}")
+        
+        if note_list:
+            message = "Your saved notes:\n\n" + "\n".join(note_list)
+        else:
+            message = "You have no saved notes."
+        
+        await update.message.reply_text(message)
+
+    except Exception as e:
+        error_message = f"Error listing notes: {str(e)}"
+        logger.error(error_message)
+        await update.message.reply_text(f"Error fetching notes: {str(e)}")
+
+async def get_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Retrieve a specific note by ID."""
+    if not context.args:
+        await update.message.reply_text("Please provide the note ID to retrieve.")
+        return
+
+    note_id = context.args[0]
+    try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            await update.message.reply_text("Database connection error. Please try again later.")
+            return
+            
+        # Get the note and verify ownership
+        note_ref = db.collection('notes').document(note_id)
+        note = note_ref.get()
+        
+        if not note.exists:
+            await update.message.reply_text("❌ Note not found.")
+            return
+        
+        note_data = note.to_dict()
+        if note_data['user_id'] != update.effective_user.id:
+            await update.message.reply_text("❌ You can only access your own notes.")
+            return
+        
+        # Format and send the note
+        created_at = note_data['created_at'].strftime('%Y-%m-%d %H:%M:%S')
+        message = (
+            f"📝 {note_data['title']}\n\n"
+            f"{note_data['content']}\n\n"
+            f"⏰ Created: {created_at}"
+        )
+        
+        await update.message.reply_text(message)
+        
+    except Exception as e:
+        logger.error(f"Error retrieving note: {str(e)}")
+        await update.message.reply_text(f"Error retrieving note: {str(e)}")
+
+async def delete_note(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Delete a specific note by ID."""
+    if not context.args:
+        await update.message.reply_text("Please provide the note ID to delete.")
+        return
+
+    note_id = context.args[0]
+    try:
+        # Check if Firestore client is initialized
+        if db is None:
+            logger.error("Firestore client is not initialized")
+            await update.message.reply_text("Database connection error. Please try again later.")
+            return
+            
+        # Get the note and verify ownership
+        note_ref = db.collection('notes').document(note_id)
+        note = note_ref.get()
+        
+        if not note.exists:
+            await update.message.reply_text("❌ Note not found.")
+            return
+        
+        if note.to_dict()['user_id'] != update.effective_user.id:
+            await update.message.reply_text("❌ You can only delete your own notes.")
+            return
+        
+        # Delete the note
+        note_ref.delete()
+        await update.message.reply_text("✅ Note deleted successfully!")
+        
+    except Exception as e:
+        logger.error(f"Error deleting note: {str(e)}")
+        await update.message.reply_text(f"Error deleting note: {str(e)}")
+
 async def handle_update(update_dict: dict) -> None:
     """Handle a single update from Telegram."""
     token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -339,6 +503,10 @@ async def handle_update(update_dict: dict) -> None:
     application.add_handler(CommandHandler("delreminder", delete_reminder))
     application.add_handler(CommandHandler("joke", joke_command))
     application.add_handler(CommandHandler("meme", meme_command))
+    application.add_handler(CommandHandler("note", save_note))
+    application.add_handler(CommandHandler("notes", list_notes))
+    application.add_handler(CommandHandler("getnote", get_note))
+    application.add_handler(CommandHandler("delnote", delete_note))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, invalid_command))
 
     # Initialize the application
