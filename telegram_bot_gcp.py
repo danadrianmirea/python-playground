@@ -392,7 +392,9 @@ async def list_notes(update: Update, context: ContextTypes.DEFAULT_TYPE):
             note_list.append(
                 f"🆔 {note.id}\n"
                 f"📝 {data['title']}\n"
+                f"📄 {data['content']}\n"
                 f"⏰ {created_at}\n"
+                f"-------------------\n"
             )
         
         logger.info(f"Found {len(note_list)} notes for user {update.effective_user.id}")
