@@ -4,7 +4,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import datetime
 import pytz
-import functions_framework
+import functions_framework # type: ignore
 from flask import Request
 import json
 from google.cloud import firestore
