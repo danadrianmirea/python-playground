@@ -10,4 +10,6 @@ python-telegram-bot==20.6
 functions-framework==3.4.0
 pytz==2023.3
 google-cloud-firestore==2.11.1
-python-dateutil==2.8.2 
+python-dateutil==2.8.2
+flask==2.3.3
+python-dotenv==1.0.0 
