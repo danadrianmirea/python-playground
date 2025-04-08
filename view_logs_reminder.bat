@@ -1,0 +1,1 @@
+gcloud functions logs read check_reminders --project="telegram-bot-project-456120" --region=us-central1 --limit=50

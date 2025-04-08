@@ -1,0 +1,2 @@
+gcloud pubsub topics create check-reminders --project="telegram-bot-project-456120"
+gcloud scheduler jobs create pubsub check-reminders-job --schedule="* * * * *" --topic="projects/telegram-bot-project-456120/topics/check-reminders" --message-body="Check reminders" --location="us-central1" --project="telegram-bot-project-456120"
