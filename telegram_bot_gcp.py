@@ -42,7 +42,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 Available commands:
 /start - Start the bot
 /help - Show this help message
-/echo <text> - Echo back your text
 /time - Show the current time in UTC+0 and Bucharest time
 /remind <time> <message> - Set a reminder (e.g., '/remind 5' (minutes), '/remind 1h' (hours), '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
 /reminders - List all your active reminders
@@ -50,9 +49,9 @@ Available commands:
     """
     await update.message.reply_text(help_text)
 
-async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Echo the user message."""
-    await update.message.reply_text(update.message.text)
+async def invalid_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle invalid commands by prefixing the message with 'Invalid command: '."""
+    await update.message.reply_text(f"Invalid command: {update.message.text}")
 
 async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show the current time in UTC+0 and Bucharest time."""
@@ -85,7 +84,11 @@ def parse_time(time_str: str) -> datetime.datetime:
     
     # Try to parse as absolute time
     try:
-        parsed_time = parser.parse(time_str, fuzzy=True)
+        # Split the string to handle cases where a message might be included
+        parts = time_str.split()
+        time_part = parts[0]  # Only use the first part for time parsing
+        
+        parsed_time = parser.parse(time_part, fuzzy=True)
         if parsed_time.tzinfo is None:
             parsed_time = parsed_time.replace(tzinfo=pytz.UTC)
         
@@ -151,30 +154,18 @@ async def remind(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reminder_time = parse_time(context.args[0])
                     message = ""
                 else:
-                    # Try to parse first two arguments as time
-                    time_str = " ".join(context.args[:2])
-                    try:
-                        reminder_time = parse_time(time_str)
-                        message = " ".join(context.args[2:])
-                    except ValueError:
-                        # If that fails, try just the first argument
-                        reminder_time = parse_time(context.args[0])
-                        message = " ".join(context.args[1:])
+                    # Try to parse first argument as time
+                    reminder_time = parse_time(context.args[0])
+                    message = " ".join(context.args[1:])
         else:
             # No quotes, process as before
             if len(context.args) == 1:
                 reminder_time = parse_time(context.args[0])
                 message = ""
             else:
-                # Try to parse first two arguments as time
-                time_str = " ".join(context.args[:2])
-                try:
-                    reminder_time = parse_time(time_str)
-                    message = " ".join(context.args[2:])
-                except ValueError:
-                    # If that fails, try just the first argument
-                    reminder_time = parse_time(context.args[0])
-                    message = " ".join(context.args[1:])
+                # Try to parse first argument as time
+                reminder_time = parse_time(context.args[0])
+                message = " ".join(context.args[1:])
 
         # Store reminder in Firestore
         reminder_ref = db.collection('reminders').document()
@@ -293,12 +284,11 @@ async def handle_update(update_dict: dict) -> None:
     # Add command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("echo", echo))
     application.add_handler(CommandHandler("time", time_command))
     application.add_handler(CommandHandler("remind", remind))
     application.add_handler(CommandHandler("reminders", list_reminders))
     application.add_handler(CommandHandler("delreminder", delete_reminder))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, invalid_command))
 
     # Initialize the application
     await application.initialize()
