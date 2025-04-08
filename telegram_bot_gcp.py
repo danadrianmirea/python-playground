@@ -11,6 +11,8 @@ from google.cloud import firestore
 import re
 from dateutil import parser
 from dateutil.relativedelta import relativedelta
+import requests
+import random
 
 # Enable logging
 logging.basicConfig(
@@ -46,6 +48,8 @@ Available commands:
 /remind <time> <message> - Set a reminder (e.g., '/remind 5' (minutes), '/remind 1h' (hours), '/remind 2h30m dinner' or '/remind tomorrow 14:00 meeting')
 /reminders - List all your active reminders
 /delreminder <id> - Delete a reminder by its ID
+/joke - Get a random joke
+/meme - Get a random meme
     """
     await update.message.reply_text(help_text)
 
@@ -271,6 +275,51 @@ async def delete_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error deleting reminder: {str(e)}")
         await update.message.reply_text(f"Error deleting reminder: {str(e)}")
 
+async def joke_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a random joke when the command /joke is issued."""
+    try:
+        # Using the JokeAPI to get a random joke
+        response = requests.get("https://v2.jokeapi.dev/joke/Any?safe-mode")
+        if response.status_code == 200:
+            joke_data = response.json()
+            
+            if joke_data["type"] == "single":
+                joke_text = joke_data["joke"]
+            else:
+                joke_text = f"{joke_data['setup']}\n\n{joke_data['delivery']}"
+                
+            await update.message.reply_text(joke_text)
+        else:
+            # Fallback jokes in case the API fails
+            fallback_jokes = [
+                "Why don't scientists trust atoms? Because they make up everything!",
+                "What do you call a fake noodle? An impasta!",
+                "Why did the scarecrow win an award? Because he was outstanding in his field!",
+                "What do you call a bear with no teeth? A gummy bear!",
+                "Why don't skeletons fight each other? They don't have the guts!"
+            ]
+            await update.message.reply_text(random.choice(fallback_jokes))
+    except Exception as e:
+        logger.error(f"Error fetching joke: {str(e)}")
+        await update.message.reply_text("Sorry, I couldn't fetch a joke right now. Try again later!")
+
+async def meme_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a random meme when the command /meme is issued."""
+    try:
+        # Using the Meme API to get a random meme
+        response = requests.get("https://meme-api.com/gimme")
+        if response.status_code == 200:
+            meme_data = response.json()
+            meme_url = meme_data["url"]
+            
+            # Send the meme image
+            await update.message.reply_photo(photo=meme_url, caption=f"Title: {meme_data['title']}")
+        else:
+            await update.message.reply_text("Sorry, I couldn't fetch a meme right now. Try again later!")
+    except Exception as e:
+        logger.error(f"Error fetching meme: {str(e)}")
+        await update.message.reply_text("Sorry, I couldn't fetch a meme right now. Try again later!")
+
 async def handle_update(update_dict: dict) -> None:
     """Handle a single update from Telegram."""
     token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -288,6 +337,8 @@ async def handle_update(update_dict: dict) -> None:
     application.add_handler(CommandHandler("remind", remind))
     application.add_handler(CommandHandler("reminders", list_reminders))
     application.add_handler(CommandHandler("delreminder", delete_reminder))
+    application.add_handler(CommandHandler("joke", joke_command))
+    application.add_handler(CommandHandler("meme", meme_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, invalid_command))
 
     # Initialize the application
