@@ -1,0 +1,1 @@
+https://api.telegram.org/botPUT_TOKEN_HERE/setWebhook?url=https://us-central1-telegram-bot-project-456120.cloudfunctions.net/telegram_webhook
