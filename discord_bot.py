@@ -6,6 +6,7 @@ import datetime
 import pytz
 import requests
 import random
+from flask import Flask, render_template_string
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,6 +19,59 @@ intents = discord.Intents.default()
 intents.message_content = True  # Enable message content intent
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# Create a Flask app
+app = Flask(__name__)
+
+# HTML template for the web page
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Discord Bot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #7289DA;
+        }
+        .commands {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .command {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Discord Bot by Adrian Mirea</h1>
+    <p>This is a Discord bot running on Render. The bot is active and responding to commands in Discord.</p>
+    
+    <h2>Available Commands:</h2>
+    <div class="commands">
+        <div class="command"><strong>!ping</strong> - Bot responds with Pong!</div>
+        <div class="command"><strong>!echo &lt;message&gt;</strong> - Bot repeats your message</div>
+        <div class="command"><strong>!time</strong> - Show the current time in UTC+0 and Bucharest time</div>
+        <div class="command"><strong>!joke</strong> - Get a random joke</div>
+        <div class="command"><strong>!meme</strong> - Get a random meme</div>
+    </div>
+    
+    <p>Last updated: {{ last_updated }}</p>
+</body>
+</html>
+"""
+
+@app.route('/')
+def home():
+    """Serve a simple web page with bot information."""
+    return render_template_string(HTML_TEMPLATE, last_updated=datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+
 @bot.event
 async def on_ready():
     """Event that runs when the bot is ready."""
@@ -25,7 +79,7 @@ async def on_ready():
     print(f'Bot is in {len(bot.guilds)} guilds')
     print('Bot is ready to use! Available commands:')
     print('  !ping - Bot responds with Pong!')
-    print('  !echo <message> - Bot repeats your message')
+    print('  !echo <message> - Bot repeats your message') 
     print('  !time - Show the current time in UTC+0 and Bucharest time')
     print('  !joke - Get a random joke')
     print('  !meme - Get a random meme')
@@ -109,7 +163,7 @@ async def on_message(message):
     # Process commands
     await bot.process_commands(message)
 
-# Run the bot
+# Run the bot and Flask app
 if __name__ == '__main__':
     if TOKEN:
         try:
@@ -120,6 +174,17 @@ if __name__ == '__main__':
             print("  !time - Show the current time in UTC+0 and Bucharest time")
             print("  !joke - Get a random joke")
             print("  !meme - Get a random meme")
+            
+            # Get the port from environment variable (Render sets this)
+            port = int(os.environ.get('PORT', 10000))
+            
+            # Start the Flask app in a separate thread
+            import threading
+            flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port))
+            flask_thread.daemon = True  # This ensures the Flask thread will exit when the main thread exits
+            flask_thread.start()
+            
+            # Run the Discord bot
             bot.run(TOKEN)
         except discord.errors.LoginFailure:
             print("Error: Invalid token. Please check your .env file and make sure the token is correct.")
