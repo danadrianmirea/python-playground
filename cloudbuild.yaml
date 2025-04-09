@@ -1,0 +1,31 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/discord-bot', '.']
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/discord-bot']
+  
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'discord-bot'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/discord-bot'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--set-env-vars'
+      - 'DISCORD_TOKEN=${_DISCORD_TOKEN}'
+
+images:
+  - 'gcr.io/$PROJECT_ID/discord-bot'
+
+substitutions:
+  _DISCORD_TOKEN: your-discord-token  # Default value, should be overridden 
