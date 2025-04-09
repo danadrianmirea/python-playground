@@ -67,6 +67,12 @@ $result = gcloud run deploy discord-bot `
     --region us-central1 `
     --allow-unauthenticated `
     --project $PROJECT_ID `
+    --memory 512Mi `
+    --cpu 1 `
+    --min-instances 1 `
+    --max-instances 10 `
+    --concurrency 80 `
+    --timeout 300 `
     --set-env-vars "DISCORD_TOKEN=$DISCORD_TOKEN"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Error: Failed to deploy to Cloud Run"
