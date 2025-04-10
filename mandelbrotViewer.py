@@ -2125,7 +2125,7 @@ try:
                         draw_mandelbrot()
         
         # Limit the frame rate
-        clock.tick(30)
+        clock.tick(60)
         
         # Check if we need to update due to resolution scaling
         if not is_moving and render_scale < 1.0:
