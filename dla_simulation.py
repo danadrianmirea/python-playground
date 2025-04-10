@@ -30,6 +30,9 @@ view_offset_y = 0
 is_panning = False
 last_mouse_pos = None
 
+# Square size for particles and walkers
+SQUARE_SIZE = 2  # Size of squares in pixels
+
 # Print debug information
 if DEBUG:
     print(f"Window initialized with dimensions: {WIDTH}x{HEIGHT}")
@@ -40,18 +43,14 @@ WHITE = (255, 255, 255)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
-
-# Particle properties
-PARTICLE_RADIUS = 1
-SEED_RADIUS = 1
-WALKER_RADIUS = 1
+YELLOW = (255, 255, 0)  # Added yellow color for walkers
 
 # DLA parameters
 MAX_PARTICLES = 50000
 STICKING_PROBABILITY = 1.0  # Probability of sticking when in contact
 WALKER_SPEED = 1  # Pixels per step
 NUM_WALKERS = 2000  # Number of walkers to simulate simultaneously
-ATTRACTION_STRENGTH = 0.0  # Strength of the attraction force (0.0 to 1.0)
+ATTRACTION_STRENGTH = 1  # Strength of the attraction force (0.0 to 1.0)
 EDGE_GENERATION = True  # Whether to generate walkers at the edges of the screen
 
 # Initialize the grid to track occupied positions
@@ -171,19 +170,22 @@ def draw_dla():
     global walkers, view_offset_x, view_offset_y, view_zoom
     screen.fill(BLACK)
     
+    # Calculate the scaled square size based on zoom
+    scaled_size = max(1, int(SQUARE_SIZE * view_zoom))
+    
     # Draw all particles
     for x, y in particles:
         # Convert from grid coordinates to world coordinates (relative to center)
         world_x = x - WIDTH/2
         world_y = y - HEIGHT/2
         screen_x, screen_y = world_to_screen(world_x, world_y)
-        radius = max(1, int(PARTICLE_RADIUS * view_zoom))  # Ensure minimum radius of 1
-        pygame.draw.circle(screen, WHITE, (screen_x, screen_y), radius)
+        # Draw a square
+        pygame.draw.rect(screen, GREEN, (screen_x - scaled_size//2, screen_y - scaled_size//2, scaled_size, scaled_size))
     
     # Draw the seed particle
     screen_x, screen_y = world_to_screen(0, 0)  # Seed is at world origin
-    radius = max(1, int(SEED_RADIUS * view_zoom))  # Ensure minimum radius of 1
-    pygame.draw.circle(screen, RED, (screen_x, screen_y), radius)
+    # Draw a square for the seed
+    pygame.draw.rect(screen, RED, (screen_x - scaled_size//2, screen_y - scaled_size//2, scaled_size, scaled_size))
     
     # Draw all walkers
     for walker in walkers:
@@ -191,8 +193,8 @@ def draw_dla():
         world_x = walker[0] - WIDTH/2
         world_y = walker[1] - HEIGHT/2
         screen_x, screen_y = world_to_screen(world_x, world_y)
-        radius = max(1, int(WALKER_RADIUS * view_zoom))  # Ensure minimum radius of 1
-        pygame.draw.circle(screen, GREEN, (screen_x, screen_y), radius)
+        # Draw a square for each walker
+        pygame.draw.rect(screen, YELLOW, (screen_x - scaled_size//2, screen_y - scaled_size//2, scaled_size, scaled_size))
     
     # Draw crosshair in the center of the screen
     crosshair_size = 10  # Size of the crosshair in pixels
