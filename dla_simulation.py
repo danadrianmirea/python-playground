@@ -25,8 +25,8 @@ MIN_ZOOM = 0.1
 MAX_ZOOM = 10.0
 view_zoom = 1.0
 # Initialize view offset to center on the seed particle
-view_offset_x = WIDTH // 2
-view_offset_y = HEIGHT // 2
+view_offset_x = 0
+view_offset_y = 0
 is_panning = False
 last_mouse_pos = None
 
@@ -42,16 +42,17 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 
 # Particle properties
-PARTICLE_RADIUS = 2
-SEED_RADIUS = 3
-WALKER_RADIUS = 2
+PARTICLE_RADIUS = 1
+SEED_RADIUS = 1
+WALKER_RADIUS = 1
 
 # DLA parameters
-MAX_PARTICLES = 5000
+MAX_PARTICLES = 50000
 STICKING_PROBABILITY = 1.0  # Probability of sticking when in contact
-WALKER_SPEED = 2  # Pixels per step
-NUM_WALKERS = 1000  # Number of walkers to simulate simultaneously
-ATTRACTION_STRENGTH = 0.6  # Strength of the attraction force (0.0 to 1.0)
+WALKER_SPEED = 1  # Pixels per step
+NUM_WALKERS = 2000  # Number of walkers to simulate simultaneously
+ATTRACTION_STRENGTH = 0.0  # Strength of the attraction force (0.0 to 1.0)
+EDGE_GENERATION = True  # Whether to generate walkers at the edges of the screen
 
 # Initialize the grid to track occupied positions
 grid = np.zeros((WIDTH, HEIGHT), dtype=bool)
@@ -67,8 +68,25 @@ if DEBUG:
 
 # Function to generate a random walker at a random position on the screen
 def generate_walker():
-    x = random.randint(0, WIDTH - 1)
-    y = random.randint(0, HEIGHT - 1)
+    if EDGE_GENERATION:
+        # Choose a random edge (0: top, 1: right, 2: bottom, 3: left)
+        edge = random.randint(0, 3)
+        if edge == 0:  # Top edge
+            x = random.randint(0, WIDTH - 1)
+            y = 0
+        elif edge == 1:  # Right edge
+            x = WIDTH - 1
+            y = random.randint(0, HEIGHT - 1)
+        elif edge == 2:  # Bottom edge
+            x = random.randint(0, WIDTH - 1)
+            y = HEIGHT - 1
+        else:  # Left edge
+            x = 0
+            y = random.randint(0, HEIGHT - 1)
+    else:
+        # Original random position generation
+        x = random.randint(0, WIDTH - 1)
+        y = random.randint(0, HEIGHT - 1)
     
     if DEBUG:
         print(f"Generated new walker at position ({x}, {y})")
@@ -136,14 +154,16 @@ def move_walkers(walker_positions):
 
 # Function to convert world coordinates to screen coordinates
 def world_to_screen(x, y):
-    screen_x = (x - view_offset_x) * view_zoom + WIDTH/2
-    screen_y = (y - view_offset_y) * view_zoom + HEIGHT/2
+    # Convert from world coordinates (seed at 0,0) to screen coordinates
+    screen_x = x * view_zoom + WIDTH/2 - view_offset_x * view_zoom
+    screen_y = y * view_zoom + HEIGHT/2 - view_offset_y * view_zoom
     return int(screen_x), int(screen_y)
 
 # Function to convert screen coordinates to world coordinates
 def screen_to_world(screen_x, screen_y):
-    world_x = (screen_x - WIDTH/2) / view_zoom + view_offset_x
-    world_y = (screen_y - HEIGHT/2) / view_zoom + view_offset_y
+    # Convert from screen coordinates to world coordinates (seed at 0,0)
+    world_x = (screen_x - WIDTH/2 + view_offset_x * view_zoom) / view_zoom
+    world_y = (screen_y - HEIGHT/2 + view_offset_y * view_zoom) / view_zoom
     return world_x, world_y
 
 # Function to draw the DLA structure
@@ -151,59 +171,45 @@ def draw_dla():
     global walkers, view_offset_x, view_offset_y, view_zoom
     screen.fill(BLACK)
     
-    # Draw a grid to help visualize the coordinate system
-    grid_spacing = 50 * view_zoom
-    start_x = int((-WIDTH/2 - view_offset_x * view_zoom) / grid_spacing) * grid_spacing
-    start_y = int((-HEIGHT/2 - view_offset_y * view_zoom) / grid_spacing) * grid_spacing
-    end_x = int((WIDTH/2 - view_offset_x * view_zoom) / grid_spacing) * grid_spacing
-    end_y = int((HEIGHT/2 - view_offset_y * view_zoom) / grid_spacing) * grid_spacing
-    
-    # Draw vertical grid lines
-    x = start_x
-    while x <= end_x:
-        screen_x1, screen_y1 = world_to_screen(x/view_zoom, start_y/view_zoom)
-        screen_x2, screen_y2 = world_to_screen(x/view_zoom, end_y/view_zoom)
-        pygame.draw.line(screen, (30, 30, 30), (screen_x1, screen_y1), (screen_x2, screen_y2))
-        x += grid_spacing
-    
-    # Draw horizontal grid lines
-    y = start_y
-    while y <= end_y:
-        screen_x1, screen_y1 = world_to_screen(start_x/view_zoom, y/view_zoom)
-        screen_x2, screen_y2 = world_to_screen(end_x/view_zoom, y/view_zoom)
-        pygame.draw.line(screen, (30, 30, 30), (screen_x1, screen_y1), (screen_x2, screen_y2))
-        y += grid_spacing
-    
     # Draw all particles
     for x, y in particles:
-        screen_x, screen_y = world_to_screen(x, y)
-        radius = int(PARTICLE_RADIUS * view_zoom)
+        # Convert from grid coordinates to world coordinates (relative to center)
+        world_x = x - WIDTH/2
+        world_y = y - HEIGHT/2
+        screen_x, screen_y = world_to_screen(world_x, world_y)
+        radius = max(1, int(PARTICLE_RADIUS * view_zoom))  # Ensure minimum radius of 1
         pygame.draw.circle(screen, WHITE, (screen_x, screen_y), radius)
     
     # Draw the seed particle
-    screen_x, screen_y = world_to_screen(seed_x, seed_y)
-    radius = int(SEED_RADIUS * view_zoom)
+    screen_x, screen_y = world_to_screen(0, 0)  # Seed is at world origin
+    radius = max(1, int(SEED_RADIUS * view_zoom))  # Ensure minimum radius of 1
     pygame.draw.circle(screen, RED, (screen_x, screen_y), radius)
     
     # Draw all walkers
     for walker in walkers:
-        screen_x, screen_y = world_to_screen(walker[0], walker[1])
-        radius = int(WALKER_RADIUS * view_zoom)
+        # Convert from grid coordinates to world coordinates (relative to center)
+        world_x = walker[0] - WIDTH/2
+        world_y = walker[1] - HEIGHT/2
+        screen_x, screen_y = world_to_screen(world_x, world_y)
+        radius = max(1, int(WALKER_RADIUS * view_zoom))  # Ensure minimum radius of 1
         pygame.draw.circle(screen, GREEN, (screen_x, screen_y), radius)
+    
+    # Draw crosshair in the center of the screen
+    crosshair_size = 10  # Size of the crosshair in pixels
+    center_x, center_y = WIDTH // 2, HEIGHT // 2
+    # Horizontal line
+    pygame.draw.line(screen, (100, 100, 100), 
+                    (center_x - crosshair_size, center_y), 
+                    (center_x + crosshair_size, center_y), 1)
+    # Vertical line
+    pygame.draw.line(screen, (100, 100, 100), 
+                    (center_x, center_y - crosshair_size), 
+                    (center_x, center_y + crosshair_size), 1)
     
     # Add debug text to show counts and zoom level
     font = pygame.font.SysFont(None, 24)
     text = font.render(f"Particles: {len(particles)} Walkers: {len(walkers)} Zoom: {view_zoom:.2f}x", True, GREEN)
     screen.blit(text, (10, 10))
-    
-    # Draw center crosshair
-    screen_x1, screen_y1 = world_to_screen(0, -HEIGHT/2)
-    screen_x2, screen_y2 = world_to_screen(0, HEIGHT/2)
-    screen_x3, screen_y3 = world_to_screen(-WIDTH/2, 0)
-    screen_x4, screen_y4 = world_to_screen(WIDTH/2, 0)
-    pygame.draw.line(screen, (100, 100, 100), (screen_x1, screen_y1), (screen_x2, screen_y2), 1)
-    pygame.draw.line(screen, (100, 100, 100), (screen_x3, screen_y3), (screen_x4, screen_y4), 1)
-    
     pygame.display.flip()
 
 def run_simulation():
@@ -234,19 +240,27 @@ def run_simulation():
                     is_panning = True
                     last_mouse_pos = event.pos
                 elif event.button == 4:  # Mouse wheel up
-                    # Zoom in at mouse position
-                    mouse_x, mouse_y = screen_to_world(*event.pos)
+                    # Zoom in at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
                     view_zoom = min(view_zoom * ZOOM_FACTOR, MAX_ZOOM)
-                    new_mouse_x, new_mouse_y = screen_to_world(*event.pos)
-                    view_offset_x += (new_mouse_x - mouse_x)
-                    view_offset_y += (new_mouse_y - mouse_y)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
                 elif event.button == 5:  # Mouse wheel down
-                    # Zoom out at mouse position
-                    mouse_x, mouse_y = screen_to_world(*event.pos)
+                    # Zoom out at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
                     view_zoom = max(view_zoom / ZOOM_FACTOR, MIN_ZOOM)
-                    new_mouse_x, new_mouse_y = screen_to_world(*event.pos)
-                    view_offset_x += (new_mouse_x - mouse_x)
-                    view_offset_y += (new_mouse_y - mouse_y)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:  # Left click release
                     is_panning = False
@@ -304,17 +318,27 @@ def run_simulation():
                     is_panning = True
                     last_mouse_pos = event.pos
                 elif event.button == 4:  # Mouse wheel up
-                    mouse_x, mouse_y = screen_to_world(*event.pos)
+                    # Zoom in at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
                     view_zoom = min(view_zoom * ZOOM_FACTOR, MAX_ZOOM)
-                    new_mouse_x, new_mouse_y = screen_to_world(*event.pos)
-                    view_offset_x += (new_mouse_x - mouse_x)
-                    view_offset_y += (new_mouse_y - mouse_y)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
                 elif event.button == 5:  # Mouse wheel down
-                    mouse_x, mouse_y = screen_to_world(*event.pos)
+                    # Zoom out at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
                     view_zoom = max(view_zoom / ZOOM_FACTOR, MIN_ZOOM)
-                    new_mouse_x, new_mouse_y = screen_to_world(*event.pos)
-                    view_offset_x += (new_mouse_x - mouse_x)
-                    view_offset_y += (new_mouse_y - mouse_y)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:  # Left click release
                     is_panning = False
