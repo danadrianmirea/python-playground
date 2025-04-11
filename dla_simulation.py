@@ -16,7 +16,7 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Diffusion-Limited Aggregation")
 
 # Debug flag
-DEBUG = False
+DEBUG = True
 
 # Performance settings
 DRAW_FREQUENCY = 1  # Only draw every N frames
@@ -90,9 +90,7 @@ def generate_walker():
         # Original random position generation
         x = random.randint(0, WIDTH - 1)
         y = random.randint(0, HEIGHT - 1)
-    
-    if DEBUG:
-        print(f"Generated new walker at position ({x}, {y})")
+
     return np.array([x, y])
 
 # Function to check if walkers are in contact with any existing particle
@@ -175,13 +173,14 @@ def screen_to_world(screen_x, screen_y):
 # Function to save the current simulation state
 def save_simulation():
     # Create a dictionary with the current simulation state
+    # Convert all NumPy types to Python native types
     state = {
-        "particles": particles,
-        "walkers": walkers.tolist(),
-        "grid": grid.tolist(),
-        "view_zoom": view_zoom,
-        "view_offset_x": view_offset_x,
-        "view_offset_y": view_offset_y,
+        "particles": [(int(x), int(y)) for x, y in particles],  # Convert to Python ints
+        "walkers": [[int(x), int(y)] for x, y in walkers],  # Convert to Python ints
+        "grid": grid.tolist(),  # Convert NumPy array to list
+        "view_zoom": float(view_zoom),  # Convert to Python float
+        "view_offset_x": float(view_offset_x),  # Convert to Python float
+        "view_offset_y": float(view_offset_y),  # Convert to Python float
         "particle_count": len(particles)
     }
     
@@ -204,7 +203,11 @@ def save_simulation():
             if event.type == pygame.QUIT:
                 return False
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if input_box.collidepoint(event.pos):
+                # Check if save button is clicked
+                save_button = pygame.Rect(WIDTH//2 - 50, HEIGHT//2 + 50, 100, 30)
+                if save_button.collidepoint(event.pos):
+                    done = True
+                elif input_box.collidepoint(event.pos):
                     active = not active
                 else:
                     active = False
@@ -240,9 +243,14 @@ def save_simulation():
     try:
         with open(text, 'w') as f:
             json.dump(state, f)
+        if DEBUG:
+            print(f"Simulation saved to {text}")
+            print(f"Saved state: {len(particles)} particles, zoom: {view_zoom:.2f}x")
         return True
     except Exception as e:
-        print(f"Error saving simulation: {e}")
+        print(f"Error saving simulation: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 # Function to load a simulation state
@@ -266,7 +274,11 @@ def load_simulation():
             if event.type == pygame.QUIT:
                 return False
             if event.type == pygame.MOUSEBUTTONDOWN:
-                if input_box.collidepoint(event.pos):
+                # Check if load button is clicked
+                load_button = pygame.Rect(WIDTH//2 - 50, HEIGHT//2 + 50, 100, 30)
+                if load_button.collidepoint(event.pos):
+                    done = True
+                elif input_box.collidepoint(event.pos):
                     active = not active
                 else:
                     active = False
@@ -300,8 +312,19 @@ def load_simulation():
     
     # Load the file
     try:
+        if not os.path.exists(text):
+            print(f"Error: File '{text}' does not exist")
+            return False
+            
         with open(text, 'r') as f:
             state = json.load(f)
+        
+        # Validate the loaded state
+        required_keys = ["particles", "walkers", "grid", "view_zoom", "view_offset_x", "view_offset_y"]
+        missing_keys = [key for key in required_keys if key not in state]
+        if missing_keys:
+            print(f"Error: Loaded file is missing required keys: {missing_keys}")
+            return False
         
         # Update the simulation state
         global particles, walkers, grid, view_zoom, view_offset_x, view_offset_y
@@ -311,46 +334,103 @@ def load_simulation():
         view_zoom = state["view_zoom"]
         view_offset_x = state["view_offset_x"]
         view_offset_y = state["view_offset_y"]
+        if DEBUG:
+            print(f"Simulation loaded from {text}")
+            print(f"Loaded state: {len(particles)} particles, zoom: {view_zoom:.2f}x")
         return True
+    except json.JSONDecodeError as e:
+        print(f"Error: Invalid JSON format in file '{text}': {str(e)}")
+        return False
     except Exception as e:
-        print(f"Error loading simulation: {e}")
+        print(f"Error loading simulation: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return False
 
 # Function to quit the application
 def quit_application():
     """Properly quit the pygame application"""
+    global running
+    running = False
     pygame.quit()
     sys.exit()
 
-# Function to draw the menu bar
-def draw_menu():
-    # Draw menu bar background
-    menu_height = 30
-    pygame.draw.rect(screen, (50, 50, 50), (0, 0, WIDTH, menu_height))
+# Menu state
+menu_open = False
+
+class MenuItem:
+    def __init__(self, text, action):
+        self.text = text
+        self.action = action
+        self.rect = None
+        self.hover = False
+
+# Menu items
+menu_items = [
+    MenuItem("Save", lambda: save_simulation()),
+    MenuItem("Load", lambda: load_simulation()),
+    MenuItem("Quit", lambda: quit_application())
+]
+
+def draw_menu(screen):
+    global menu_open
+    MENU_HEIGHT = 30  # Fixed menu height as a constant
     
-    # Draw menu items
-    font = pygame.font.SysFont(None, 24)
-    file_text = font.render("File", True, WHITE)
-    screen.blit(file_text, (10, 5))
+    # Draw menu bar
+    pygame.draw.rect(screen, (50, 50, 50), (0, 0, WIDTH, MENU_HEIGHT))
+    pygame.draw.rect(screen, (100, 100, 100), (10, 5, 60, 20))
+    font = pygame.font.Font(None, 24)
+    text = font.render("Menu", True, WHITE)
+    screen.blit(text, (15, 8))
     
-    # Draw menu items if menu is open
     if menu_open:
-        menu_items = ["Save", "Load", "Quit"]
-        for i, item in enumerate(menu_items):
-            item_text = font.render(item, True, WHITE)
-            item_rect = pygame.Rect(10, menu_height + 5 + i * 25, 100, 25)
-            pygame.draw.rect(screen, (70, 70, 70), item_rect)
-            screen.blit(item_text, (15, menu_height + 5 + i * 25))
+        # Draw menu items
+        y = 35
+        for item in menu_items:
+            # Draw item background
+            color = (70, 70, 70) if item.hover else (50, 50, 50)
+            item.rect = pygame.draw.rect(screen, color, (10, y, 100, 25))
+            # Draw item text
+            text = font.render(item.text, True, WHITE)
+            screen.blit(text, (15, y + 5))
+            y += 30
     
-    return menu_height
+    return MENU_HEIGHT  # Return the constant menu height
+
+def handle_menu_click(pos):
+    global menu_open
+    # Check if menu button is clicked
+    if 10 <= pos[0] <= 70 and 5 <= pos[1] <= 25:
+        menu_open = not menu_open
+        if DEBUG:
+            print(f"Menu {'opened' if menu_open else 'closed'}")
+        return True
+    
+    # If menu is open, check for item clicks
+    if menu_open:
+        for item in menu_items:
+            if item.rect and item.rect.collidepoint(pos):
+                if DEBUG:
+                    print(f"Menu item '{item.text}' clicked")
+                item.action()
+                menu_open = False
+                return True
+        
+        # If clicked outside menu items, close menu
+        menu_open = False
+        if DEBUG:
+            print("Menu closed (clicked outside)")
+        return True
+    
+    return False
 
 # Function to draw the DLA structure
 def draw_dla():
     global walkers, view_offset_x, view_offset_y, view_zoom, menu_open
     screen.fill(BLACK)
     
-    # Draw menu bar
-    menu_height = draw_menu()
+    # Draw menu bar and get menu height
+    menu_height = draw_menu(screen)
     
     # Calculate the scaled square size based on zoom
     scaled_size = max(1, int(SQUARE_SIZE * view_zoom))
@@ -390,20 +470,23 @@ def draw_dla():
                     (center_x, center_y - crosshair_size), 
                     (center_x, center_y + crosshair_size), 1)
     
-    # Add debug text to show counts and zoom level
+    # Add debug text to show counts and zoom level - moved to right side
     font = pygame.font.SysFont(None, 24)
     text = font.render(f"Particles: {len(particles)} Walkers: {len(walkers)} Zoom: {view_zoom:.2f}x", True, GREEN)
-    screen.blit(text, (10, menu_height + 10))
+    # Position text on the right side with a small margin
+    text_x = WIDTH - text.get_width() - 10
+    screen.blit(text, (text_x, menu_height + 10))
     
-    # Display message if max particles reached
+    # Display message if max particles reached - also moved to right side
     if 'max_particles_reached' in globals() and max_particles_reached:
         max_text = font.render(f"Maximum particles ({MAX_PARTICLES}) reached!", True, RED)
-        screen.blit(max_text, (WIDTH // 2 - max_text.get_width() // 2, menu_height + 10))
+        max_text_x = WIDTH - max_text.get_width() - 10
+        screen.blit(max_text, (max_text_x, menu_height + 40))
     
     pygame.display.flip()
 
 def run_simulation():
-    global particles, walkers, view_zoom, view_offset_x, view_offset_y, is_panning, last_mouse_pos, menu_open
+    global particles, walkers, view_zoom, view_offset_x, view_offset_y, is_panning, last_mouse_pos, menu_open, running
     
     if DEBUG:
         print("Starting simulation...")
@@ -424,55 +507,35 @@ def run_simulation():
                 if event.key == pygame.K_ESCAPE:
                     quit_application()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                # Check if menu is clicked
-                if event.pos[1] < 30:  # Menu bar height
-                    if event.pos[0] < 50:  # File menu area
-                        menu_open = not menu_open
-                    elif menu_open:
-                        # Check if menu items are clicked
-                        menu_height = 30
-                        menu_items = ["Save", "Load", "Quit"]
-                        for i, item in enumerate(menu_items):
-                            item_rect = pygame.Rect(10, menu_height + 5 + i * 25, 100, 25)
-                            if item_rect.collidepoint(event.pos):
-                                if item == "Save":
-                                    save_simulation()
-                                    menu_open = False
-                                elif item == "Load":
-                                    load_simulation()
-                                    menu_open = False
-                                elif item == "Quit":
-                                    quit_application()
-                else:
-                    # Close menu if clicking outside of it
-                    if menu_open:
-                        menu_open = False
-                    
-                    if event.button == 1:  # Left click
-                        is_panning = True
-                        last_mouse_pos = event.pos
-                    elif event.button == 4:  # Mouse wheel up
-                        # Zoom in at crosshair position (center of view)
-                        center_x, center_y = WIDTH // 2, HEIGHT // 2
-                        center_world_x, center_world_y = screen_to_world(center_x, center_y)
-                        old_zoom = view_zoom
-                        view_zoom = min(view_zoom * ZOOM_FACTOR, MAX_ZOOM)
-                        # Calculate new center position after zoom
-                        new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
-                        # Adjust offset to keep center position fixed
-                        view_offset_x += (new_center_world_x - center_world_x)
-                        view_offset_y += (new_center_world_y - center_world_y)
-                    elif event.button == 5:  # Mouse wheel down
-                        # Zoom out at crosshair position (center of view)
-                        center_x, center_y = WIDTH // 2, HEIGHT // 2
-                        center_world_x, center_world_y = screen_to_world(center_x, center_y)
-                        old_zoom = view_zoom
-                        view_zoom = max(view_zoom / ZOOM_FACTOR, MIN_ZOOM)
-                        # Calculate new center position after zoom
-                        new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
-                        # Adjust offset to keep center position fixed
-                        view_offset_x += (new_center_world_x - center_world_x)
-                        view_offset_y += (new_center_world_y - center_world_y)
+                if event.button == 1:  # Left click
+                    if handle_menu_click(event.pos):
+                        if not running:  # If quit was called, exit the loop
+                            return
+                        continue
+                    is_panning = True
+                    last_mouse_pos = event.pos
+                elif event.button == 4:  # Mouse wheel up
+                    # Zoom in at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
+                    view_zoom = min(view_zoom * ZOOM_FACTOR, MAX_ZOOM)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
+                elif event.button == 5:  # Mouse wheel down
+                    # Zoom out at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
+                    view_zoom = max(view_zoom / ZOOM_FACTOR, MIN_ZOOM)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:  # Left click release
                     is_panning = False
@@ -503,8 +566,6 @@ def run_simulation():
                         grid[x, y] = True
                         particles.append((x, y))
                         particle_count += 1
-                        if DEBUG:
-                            print(f"Particle added at ({x}, {y}). Total particles: {particle_count}")
                         
                         # Replace this walker with a new one
                         walkers[idx] = generate_walker()
@@ -541,55 +602,33 @@ def run_simulation():
                 if event.key == pygame.K_ESCAPE:
                     quit_application()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                # Check if menu is clicked
-                if event.pos[1] < 30:  # Menu bar height
-                    if event.pos[0] < 50:  # File menu area
-                        menu_open = not menu_open
-                    elif menu_open:
-                        # Check if menu items are clicked
-                        menu_height = 30
-                        menu_items = ["Save", "Load", "Quit"]
-                        for i, item in enumerate(menu_items):
-                            item_rect = pygame.Rect(10, menu_height + 5 + i * 25, 100, 25)
-                            if item_rect.collidepoint(event.pos):
-                                if item == "Save":
-                                    save_simulation()
-                                    menu_open = False
-                                elif item == "Load":
-                                    load_simulation()
-                                    menu_open = False
-                                elif item == "Quit":
-                                    quit_application()
-                else:
-                    # Close menu if clicking outside of it
-                    if menu_open:
-                        menu_open = False
-                    
-                    if event.button == 1:  # Left click
-                        is_panning = True
-                        last_mouse_pos = event.pos
-                    elif event.button == 4:  # Mouse wheel up
-                        # Zoom in at crosshair position (center of view)
-                        center_x, center_y = WIDTH // 2, HEIGHT // 2
-                        center_world_x, center_world_y = screen_to_world(center_x, center_y)
-                        old_zoom = view_zoom
-                        view_zoom = min(view_zoom * ZOOM_FACTOR, MAX_ZOOM)
-                        # Calculate new center position after zoom
-                        new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
-                        # Adjust offset to keep center position fixed
-                        view_offset_x += (new_center_world_x - center_world_x)
-                        view_offset_y += (new_center_world_y - center_world_y)
-                    elif event.button == 5:  # Mouse wheel down
-                        # Zoom out at crosshair position (center of view)
-                        center_x, center_y = WIDTH // 2, HEIGHT // 2
-                        center_world_x, center_world_y = screen_to_world(center_x, center_y)
-                        old_zoom = view_zoom
-                        view_zoom = max(view_zoom / ZOOM_FACTOR, MIN_ZOOM)
-                        # Calculate new center position after zoom
-                        new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
-                        # Adjust offset to keep center position fixed
-                        view_offset_x += (new_center_world_x - center_world_x)
-                        view_offset_y += (new_center_world_y - center_world_y)
+                if event.button == 1:  # Left click
+                    if handle_menu_click(event.pos):
+                        continue
+                    is_panning = True
+                    last_mouse_pos = event.pos
+                elif event.button == 4:  # Mouse wheel up
+                    # Zoom in at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
+                    view_zoom = min(view_zoom * ZOOM_FACTOR, MAX_ZOOM)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
+                elif event.button == 5:  # Mouse wheel down
+                    # Zoom out at crosshair position (center of view)
+                    center_x, center_y = WIDTH // 2, HEIGHT // 2
+                    center_world_x, center_world_y = screen_to_world(center_x, center_y)
+                    old_zoom = view_zoom
+                    view_zoom = max(view_zoom / ZOOM_FACTOR, MIN_ZOOM)
+                    # Calculate new center position after zoom
+                    new_center_world_x, new_center_world_y = screen_to_world(center_x, center_y)
+                    # Adjust offset to keep center position fixed
+                    view_offset_x += (new_center_world_x - center_world_x)
+                    view_offset_y += (new_center_world_y - center_world_y)
             elif event.type == pygame.MOUSEBUTTONUP:
                 if event.button == 1:  # Left click release
                     is_panning = False
