@@ -24,15 +24,15 @@ DARK_BLUE = (0, 0, 139)
 GRAY = (128, 128, 128)
 
 # Simulation settings
-SIMULATION_SPEED = 1.2  # Base speed multiplier for the simulation
+SIMULATION_SPEED = 1.5  # Base speed multiplier for the simulation
 
 # View settings (similar to DLA)
 ZOOM_FACTOR = 1.2
 MIN_ZOOM = 0.1
 MAX_ZOOM = 10.0
-view_zoom = 1.0
-view_offset_x = 0
-view_offset_y = 0
+view_zoom = 0.83
+view_offset_x = 227
+view_offset_y = 65
 is_panning = False
 last_mouse_pos = None
 
@@ -110,10 +110,37 @@ def draw_solar_system():
     uranus.draw(screen)
     neptune.draw(screen)
     
-    # Draw debug info
-    font = pygame.font.SysFont(None, 24)
-    text = font.render(f"Zoom: {view_zoom:.2f}x", True, WHITE)
-    screen.blit(text, (10, 10))
+    # Create font for UI text
+    font = pygame.font.SysFont('Arial', 16)
+    
+    # Draw view information
+    view_info = [
+        f"Zoom: {view_zoom:.2f}x",
+        f"View Offset X: {view_offset_x:.1f}",
+        f"View Offset Y: {view_offset_y:.1f}"
+    ]
+    
+    # Draw controls information
+    controls_info = [
+        "Controls:",
+        "Left Click + Drag: Pan View",
+        "Mouse Wheel: Zoom In/Out",
+        "ESC: Quit"
+    ]
+    
+    # Draw view information
+    y_offset = 10
+    for info in view_info:
+        text = font.render(info, True, WHITE)
+        screen.blit(text, (10, y_offset))
+        y_offset += 20
+    
+    # Draw controls information
+    y_offset = 10
+    for info in controls_info:
+        text = font.render(info, True, WHITE)
+        screen.blit(text, (WIDTH - 200, y_offset))
+        y_offset += 20
     
     pygame.display.flip()
 
