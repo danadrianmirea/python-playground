@@ -1,5 +1,6 @@
 .vscode/settings.json
 *.nbc
 *.nbi
+*.json
 .env
 token.txt
