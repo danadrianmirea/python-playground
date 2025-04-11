@@ -3,3 +3,4 @@
 *.nbi
 .env
 token.txt
+simulation.json
