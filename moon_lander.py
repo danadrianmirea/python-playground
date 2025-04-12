@@ -8,10 +8,14 @@ pygame.init()
 # Constants
 WIDTH, HEIGHT = 800, 600
 FPS = 60
-GRAVITY = 0.2
-THRUST = 0.3
+GRAVITY = 0.01
+THRUST = 0.2
 ROTATION_SPEED = 3
-FUEL_CONSUMPTION = 0.5
+FUEL_CONSUMPTION = 0.2
+LEVEL = 1  # Initial level
+LIVES = 3  # Initial lives
+
+INPUT_DELAY = 300
 
 # Colors
 BLACK = (0, 0, 0)
@@ -38,8 +42,11 @@ class Lander:
         self.crashed = False
         self.width = 20
         self.height = 30
+        self.landing_pad_x = random.randint(100, WIDTH - 100)  # Random landing pad position
+        self.landing_time = 0  # Time when landing occurred
 
     def update(self, thrusting, rotating_left, rotating_right):
+        global LIVES
         if not self.landed and not self.crashed:
             # Apply gravity
             self.velocity_y += GRAVITY
@@ -62,10 +69,20 @@ class Lander:
 
             # Check for landing or crash
             if self.y + self.height >= HEIGHT - 50:  # Landing platform height
-                if abs(self.velocity_x) < 2 and abs(self.velocity_y) < 2 and abs(self.angle) < 5:
-                    self.landed = True
+                # Check if we're over the landing pad
+                if (self.landing_pad_x - 50 <= self.x + self.width//2 <= self.landing_pad_x + 50 and 
+                    abs(self.velocity_x) < 2 and abs(self.velocity_y) < 2):
+                    # Normalize angle to be between -180 and 180 degrees
+                    normalized_angle = (self.angle + 180) % 360 - 180
+                    if abs(normalized_angle) < 15:
+                        self.landed = True
+                        self.landing_time = pygame.time.get_ticks()  # Record landing time
+                    else:
+                        self.crashed = True
+                        LIVES -= 1
                 else:
                     self.crashed = True
+                    LIVES -= 1
 
             # Screen boundaries
             self.x = max(0, min(WIDTH - self.width, self.x))
@@ -106,35 +123,58 @@ class Lander:
             ]
             pygame.draw.polygon(screen, RED, flame_points)
 
-def draw_terrain(screen):
+def draw_terrain(screen, lander):
     # Simple terrain with a landing platform
     pygame.draw.rect(screen, GRAY, (0, HEIGHT - 50, WIDTH, 50))
-    pygame.draw.rect(screen, GREEN, (WIDTH//2 - 50, HEIGHT - 50, 100, 5))
+    pygame.draw.rect(screen, GREEN, (lander.landing_pad_x - 50, HEIGHT - 50, 100, 5))
 
 def draw_hud(screen, lander):
     font = pygame.font.SysFont(None, 24)
     
+    # Level
+    level_text = font.render(f"Level: {LEVEL}", True, WHITE)
+    screen.blit(level_text, (10, 10))
+    
+    # Lives
+    lives_text = font.render(f"Lives: {LIVES}", True, WHITE)
+    screen.blit(lives_text, (10, 40))
+    
     # Fuel gauge
     fuel_text = font.render(f"Fuel: {lander.fuel:.1f}", True, WHITE)
-    screen.blit(fuel_text, (10, 10))
+    screen.blit(fuel_text, (10, 70))
     
     # Velocity
     velocity_text = font.render(f"Velocity X: {lander.velocity_x:.1f} Y: {lander.velocity_y:.1f}", True, WHITE)
-    screen.blit(velocity_text, (10, 40))
+    screen.blit(velocity_text, (10, 100))
     
     # Angle
     angle_text = font.render(f"Angle: {lander.angle:.1f}°", True, WHITE)
-    screen.blit(angle_text, (10, 70))
+    screen.blit(angle_text, (10, 130))
+    
+    # Gravity
+    gravity_text = font.render(f"Gravity: {GRAVITY:.3f}", True, WHITE)
+    screen.blit(gravity_text, (10, 160))
     
     # Game state
     if lander.landed:
         success_text = font.render("LANDING SUCCESSFUL!", True, GREEN)
         screen.blit(success_text, (WIDTH//2 - 100, HEIGHT//2))
+        retry_text = font.render("Press any key for next level", True, WHITE)
+        screen.blit(retry_text, (WIDTH//2 - 100, HEIGHT//2 + 30))
     elif lander.crashed:
-        crash_text = font.render("CRASHED!", True, RED)
-        screen.blit(crash_text, (WIDTH//2 - 50, HEIGHT//2))
+        if LIVES > 0:
+            crash_text = font.render("CRASHED!", True, RED)
+            screen.blit(crash_text, (WIDTH//2 - 50, HEIGHT//2))
+            retry_text = font.render("Press any key to try again", True, WHITE)
+        else:
+            game_over_text = font.render("GAME OVER", True, RED)
+            screen.blit(game_over_text, (WIDTH//2 - 50, HEIGHT//2))
+            retry_text = font.render("Press any key to play again", True, WHITE)
+            screen.blit(retry_text, (WIDTH//2 - 100, HEIGHT//2 + 30))
+        screen.blit(retry_text, (WIDTH//2 - 100, HEIGHT//2 + 30))
 
 def main():
+    global GRAVITY, LEVEL, LIVES  # Make GRAVITY, LEVEL, and LIVES modifiable
     lander = Lander()
     running = True
 
@@ -144,21 +184,37 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:  # Reset game
+                if LIVES <= 0:
+                    # Reset everything for a new game
+                    GRAVITY = 0.01
+                    LEVEL = 1
+                    LIVES = 3
+                    lander = Lander()
+                elif (lander.crashed or lander.landed) and pygame.time.get_ticks() - lander.landing_time > INPUT_DELAY:
+                    if lander.landed:
+                        GRAVITY += 0.01  # Increase gravity for next level
+                        LEVEL += 1  # Increase level
                     lander = Lander()
 
         # Get key states
         keys = pygame.key.get_pressed()
-        thrusting = keys[pygame.K_UP] or keys[pygame.K_w]  # Up arrow or W
-        rotating_left = keys[pygame.K_LEFT] or keys[pygame.K_a]  # Left arrow or A
-        rotating_right = keys[pygame.K_RIGHT] or keys[pygame.K_d]  # Right arrow or D
+        # Ignore thrust and rotation inputs for 0.3 second after landing or if game over
+        if (not lander.landed or pygame.time.get_ticks() - lander.landing_time > INPUT_DELAY) and LIVES > 0:
+            thrusting = keys[pygame.K_UP] or keys[pygame.K_w]  # Up arrow or W
+            rotating_left = keys[pygame.K_RIGHT] or keys[pygame.K_d]  # Right arrow or D
+            rotating_right = keys[pygame.K_LEFT] or keys[pygame.K_a]  # Left arrow or A
+        else:
+            thrusting = False
+            rotating_left = False
+            rotating_right = False
 
         # Update game state
-        lander.update(thrusting, rotating_left, rotating_right)
+        if LIVES > 0:  # Only update if not game over
+            lander.update(thrusting, rotating_left, rotating_right)
 
         # Draw everything
         screen.fill(BLACK)
-        draw_terrain(screen)
+        draw_terrain(screen, lander)
         lander.draw(screen)
         draw_hud(screen, lander)
 
