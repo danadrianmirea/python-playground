@@ -11,6 +11,8 @@ from selenium.common.exceptions import *
 from typing import List
 import tkinter as tk
 from tkinter import messagebox
+from cryptography.fernet import Fernet
+import base64
 
 def prRed(prt):
     print(f"\033[91m{prt}\033[00m")
@@ -21,9 +23,65 @@ def prGreen(prt):
 def prYellow(prt):
     print(f"\033[93m{prt}\033[00m")
 
+def get_encryption_key():
+    # Use a fixed key derived from the machine's hostname
+    hostname = os.getenv('COMPUTERNAME', 'default')
+    key = hashlib.sha256(hostname.encode()).digest()
+    return base64.urlsafe_b64encode(key)
+
+def encrypt_file(filename):
+    key = get_encryption_key()
+    f = Fernet(key)
+    
+    # Read the original file
+    with open(filename, 'rb') as file:
+        data = file.read()
+    
+    # Encrypt the data
+    encrypted_data = f.encrypt(data)
+    
+    # Write the encrypted data
+    with open(filename + '.encrypted', 'wb') as file:
+        file.write(encrypted_data)
+    
+    # Remove the original file
+    os.remove(filename)
+    prGreen(f"Created encrypted file: {filename}.encrypted")
+
+def decrypt_file(filename):
+    key = get_encryption_key()
+    f = Fernet(key)
+    
+    try:
+        # Read the encrypted file
+        with open(filename, 'rb') as file:
+            encrypted_data = file.read()
+        
+        # Decrypt the data
+        decrypted_data = f.decrypt(encrypted_data)
+        
+        # Parse the decrypted data
+        settings = {}
+        for line in decrypted_data.decode().split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#'):
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    settings[key.strip()] = value.strip()
+        return settings
+    except Exception as e:
+        prRed(f"Error decrypting file: {str(e)}")
+        return {}
+
 def read_settings(filename, required=False):
     settings = {}
     try:
+        # Check for encrypted version first
+        encrypted_file = filename + '.encrypted'
+        if os.path.exists(encrypted_file):
+            return decrypt_file(encrypted_file)
+            
+        # If no encrypted version, read normal file
         with open(filename, 'r') as f:
             for line in f:
                 line = line.strip()
@@ -31,6 +89,11 @@ def read_settings(filename, required=False):
                     if '=' in line:
                         key, value = line.split('=', 1)
                         settings[key.strip()] = value.strip()
+                        
+        # If this is password.txt, encrypt it
+        if filename == 'password.txt' and settings:
+            encrypt_file(filename)
+            
     except FileNotFoundError:
         if required:
             prRed(f"Error: {filename} file not found!")
