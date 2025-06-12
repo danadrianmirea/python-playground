@@ -1,0 +1,28 @@
+# Search Configuration
+linkedin_job_link=https://www.linkedin.com/jobs/search/?currentJobId=4231527769&f_TPR=r604800&f_WT=2%2C3&geoId=90010080&keywords=developer%20OR%20software%20OR%20engineer%20OR%20programmer%20OR%20coder%20OR%20%22software%20developer%22%20OR%20%22software%20engineer%22%20OR%20%22full%20stack%22%20OR%20%22backend%22%20OR%20%22frontend%22%20OR%20%22web%20developer%22%20OR%20%22application%20developer%22%20OR%20%22system%20developer%22%20OR%20%22software%20architect%22%20OR%20%22devops%22%20OR%20%22embedded%22%20OR%20%22game%20developer%22&origin=JOB_SEARCH_PAGE_JOB_FILTER&refresh=true&sortBy=R&spellCorrectionEnabled=true
+
+# Search Parameters
+start_at_index=0
+jobs_per_page=50
+bot_min_speed=0.3
+bot_max_speed=3
+
+# Browser Settings
+headless=False
+chrome_profile_path=
+
+# Search Filters - Set to 1 and update the apropiate list below to activate the blacklist
+check_title=0
+check_description=1
+check_bad_description=0
+check_blacklist_companies=0
+check_blacklist_titles=0
+check_blacklist_description=0
+
+# Keywords and Blacklists
+good_titles=c++
+good_descriptions=c++
+bad_descriptions=java
+blacklist_companies=luxoft
+blacklist_titles=manager,lead,architect,design,devops,devsecops,security,cyber,crypto
+blacklist_description=devops,devsecops,cyber,crypto,principal,associate
