@@ -31,11 +31,10 @@ def move_mouse(dx, dy):
 
 try:
     while True:
-        move_mouse(-10, 0)   # move left
-        time.sleep(10)
-
-        move_mouse(10, 0)    # move right
-        time.sleep(10)
+        move_mouse(-1, 0)   # move left
+        time.sleep(0.05)
+        move_mouse(1, 0)    # move right
+        time.sleep(45)
 
 except KeyboardInterrupt:
     print("Stopped.")
