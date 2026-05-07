@@ -123,3 +123,6 @@ Thumbs.db
 *.json
 .env
 token.txt
+
+.claude/
+.deepseek/
