@@ -1,8 +1,10 @@
 import pygame
+import pygame.sndarray
 import random
 import sys
 import math
 import time
+import numpy as np
 
 # Initialize Pygame
 pygame.init()
@@ -45,12 +47,11 @@ def generate_tone(frequency, duration=0.3, volume=0.5):
     """Generate a sine wave tone and return a pygame Sound object."""
     sample_rate = 22050
     n_samples = int(sample_rate * duration)
-    # Create stereo array (2 channels)
-    samples = []
-    for t in range(n_samples):
-        val = int(volume * 32767 * math.sin(2 * math.pi * frequency * t / sample_rate))
-        samples.append([val, val])  # left and right channels
-    buf = pygame.sndarray.make_sound(pygame.sndarray.array(samples))
+    # Create stereo array (2 channels) as int16
+    t = np.arange(n_samples, dtype=np.float64)
+    samples = (volume * 32767 * np.sin(2 * np.pi * frequency * t / sample_rate)).astype(np.int16)
+    stereo = np.column_stack((samples, samples))
+    buf = pygame.sndarray.make_sound(stereo)
     return buf
 
 # Create sounds for each color
