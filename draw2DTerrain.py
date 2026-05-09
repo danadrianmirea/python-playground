@@ -14,6 +14,7 @@ FPS = 60
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 SKY_BLUE = (135, 206, 235)
+WATER_BLUE = (0, 0, 255)
 
 # Screen setup
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -78,7 +79,7 @@ def generate_terrain_heights():
 
 def draw_water(surface):
     water_level = baseHeight - int(maxTerrainHeight * waterLevelPct)
-    water_color = pygame.Color(0, 0, 255)
+    water_color = WATER_BLUE
     pygame.draw.rect(surface, water_color, (0, water_level, WIDTH, HEIGHT - water_level))
 
 
@@ -103,7 +104,7 @@ def get_terrain_color(height):
     SEABED = (0, 0, 0)          # Dark greenish-brown (deep underwater)
     SAND = (34, 139, 34)        # (beach/waterline)
     GRASS = (34, 139, 34)       # Forest green
-    HILL = (139, 119, 80)       # Brown
+    HILL = (189, 183, 107)      # Yellowish khaki
     SNOW = (255, 255, 255)      # White
 
 
