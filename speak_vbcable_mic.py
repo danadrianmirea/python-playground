@@ -65,8 +65,11 @@ async def load_voices():
         key = str(i)
         short_name = voice['ShortName']
         gender = voice['Gender']
-        # Build a concise display name: "Gender (ShortName)" e.g. "Female (en-US-JennyNeural)"
-        display_name = f"{gender} ({short_name})"
+        locale = voice['Locale']
+        # Build a tagged display name: e.g. "[ENG][FEMALE] en-US-JennyNeural" or "[ROM][MALE] ro-RO-EmilNeural"
+        lang_tag = "ROM" if locale.startswith('ro-') else "ENG"
+        gender_tag = gender.upper()
+        display_name = f"[{lang_tag}][{gender_tag}] {short_name}"
         VOICES[key] = {
             "name": display_name,
             "voice": short_name,
