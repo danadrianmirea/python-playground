@@ -101,7 +101,7 @@ def print_usage():
 
 def main():
     if len(sys.argv) == 1:
-        print_usage()
+        display_context_months(1)
     elif len(sys.argv) == 2:
         arg = sys.argv[1]
         if arg in ("-h", "--help"):
