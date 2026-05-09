@@ -21,12 +21,15 @@ pygame.display.set_caption("2D Terrain Generator")
 clock = pygame.time.Clock()
 
 # Terrain configuration
-maxTerrainHeight = 300
+maxTerrainHeight = 600
 minTerrainHeight = 0
 waterLevel = 100
+hillsLevel = 250
+mountainLevel = 450
 numberOfSegments = 50
 roughness = 1.0
 baseHeight = HEIGHT
+
 
 
 
@@ -78,34 +81,63 @@ def draw_water(surface):
     pygame.draw.rect(surface, water_color, (0, water_level, WIDTH, HEIGHT - water_level))
 
 
+def lerp_color(c1, c2, t):
+    """Linearly interpolate between two colors."""
+    return (
+        int(c1[0] + (c2[0] - c1[0]) * t),
+        int(c1[1] + (c2[1] - c1[1]) * t),
+        int(c1[2] + (c2[2] - c1[2]) * t),
+    )
+
+
+def get_terrain_color(height):
+    """Get terrain color based on height with smooth interpolation between zones."""
+    # Zone colors
+    SAND = (238, 214, 175)      # Sandy yellow (below water)
+    GRASS = (34, 139, 34)       # Forest green
+    HILL = (139, 119, 80)       # Brown
+    SNOW = (255, 255, 255)      # White
+
+    if height <= waterLevel:
+        # Below water: interpolate between SAND and waterLevel
+        t = height / waterLevel if waterLevel > 0 else 0
+        return lerp_color(SAND, GRASS, t)
+    elif height <= hillsLevel:
+        # Water level to hills: interpolate GRASS -> HILL
+        t = (height - waterLevel) / (hillsLevel - waterLevel)
+        return lerp_color(GRASS, HILL, t)
+    elif height <= mountainLevel:
+        # Hills to mountain: interpolate HILL -> SNOW
+        t = (height - hillsLevel) / (mountainLevel - hillsLevel)
+        return lerp_color(HILL, SNOW, t)
+    else:
+        # Above mountain: pure snow
+        return SNOW
+
+
 def draw_terrain(surface, heights):
-    """Draw the terrain as a filled polygon at the bottom of the screen."""
+    """Draw the terrain with height-based coloring varying per pixel column."""
     segment_width = WIDTH / (numberOfSegments - 1)
 
-    # Build polygon points: along the terrain top edge, then down to bottom-right, across to bottom-left
-    points = []
-    for i in range(numberOfSegments):
-        x = i * segment_width
-        y = int(heights[i])
-        points.append((x, y))
+    # Draw each pixel column from the terrain surface down to the bottom
+    for x in range(WIDTH):
+        # Find which segment this x falls into
+        seg_index = int(x / segment_width)
+        seg_index = min(seg_index, numberOfSegments - 2)
 
+        # Interpolate the terrain Y at this exact x position
+        x1 = seg_index * segment_width
+        x2 = (seg_index + 1) * segment_width
+        t = (x - x1) / (x2 - x1) if x2 > x1 else 0
+        terrain_y = int(heights[seg_index] + (heights[seg_index + 1] - heights[seg_index]) * t)
 
-    # Close the polygon at the bottom of the screen
-    points.append((WIDTH, HEIGHT))
-    points.append((0, HEIGHT))
+        # Draw vertical line from terrain surface down to bottom, varying color by height
+        for y in range(terrain_y, HEIGHT):
+            # Convert screen Y to actual height value
+            height_val = baseHeight - y
+            color = get_terrain_color(height_val)
+            surface.set_at((x, y), color)
 
-    # Draw filled terrain
-    terrain_color = (34, 139, 34)  # Forest green
-    pygame.draw.polygon(surface, terrain_color, points)
-
-    # Draw the top edge line (the terrain surface)
-    edge_color = (0, 80, 0)  # Dark green
-    for i in range(numberOfSegments - 1):
-        x1 = i * segment_width
-        y1 = int(heights[i])
-        x2 = (i + 1) * segment_width
-        y2 = int(heights[i + 1])
-        pygame.draw.line(surface, edge_color, (x1, y1), (x2, y2), 2)
 
 
 
