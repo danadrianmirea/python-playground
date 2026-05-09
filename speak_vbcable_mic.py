@@ -4,18 +4,22 @@ speak_gtts_mic.py - Text-to-Speech with virtual microphone output
 This script converts text to speech and plays it through a virtual audio cable,
 allowing you to simulate a human speaking in any app (Teams calls, recordings, etc.).
 
+Now uses edge-tts (Microsoft Edge TTS) which supports both male and female voices.
+
 Requirements:
 1. Install VB-Cable Virtual Audio Cable from https://vb-audio.com/Cable/
 2. Set "CABLE Input" as your default playback device in Windows Sound settings
    OR set it as the recording device in your target app (Teams, etc.)
-3. pip install gtts sounddevice soundfile numpy
+3. pip install edge-tts sounddevice soundfile numpy
 
 Usage:
 - Run the script, type text and press Enter to speak it
+- Type 'v' and press Enter to change voice (male/female)
 - Type 'q' and press Enter to quit
 """
 
-from gtts import gTTS
+import edge_tts
+import asyncio
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
@@ -32,6 +36,20 @@ CABLE_DEVICE_NAMES = [
     "Virtual Audio",      # Generic
     "Stereo Mix",         # Windows Stereo Mix (may work as loopback)
 ]
+
+# Available English voices (male and female)
+# Full list: edge-tts --list-voices
+VOICES = {
+    "1": {"name": "Female (Jenny)", "voice": "en-US-JennyNeural"},
+    "2": {"name": "Male (Guy)",     "voice": "en-US-GuyNeural"},
+    "3": {"name": "Female (Aria)",  "voice": "en-US-AriaNeural"},
+    "4": {"name": "Male (David)",   "voice": "en-US-DavidNeural"},
+    "5": {"name": "Female (Jane)",  "voice": "en-US-JaneNeural"},
+    "6": {"name": "Male (Steffan)", "voice": "en-US-SteffanNeural"},
+}
+
+current_voice_key = "2"  # Default to male (Guy)
+
 
 def find_virtual_cable_device():
     """Find a virtual audio cable device for output."""
@@ -59,6 +77,7 @@ def find_virtual_cable_device():
     
     return None
 
+
 def play_audio(file_path, device=None):
     """Play an audio file through the specified device(s).
     
@@ -79,8 +98,7 @@ def play_audio(file_path, device=None):
         
         print(f"  Playing through: {cable_name} (virtual mic) + {default_name} (speakers)")
         
-        # Play on both devices simultaneously using OutputStream
-        # We need to create two output streams
+        # Play on both devices simultaneously using threads
         import threading
         
         def play_on_device(dev):
@@ -100,9 +118,42 @@ def play_audio(file_path, device=None):
         sd.play(data, samplerate)
         sd.wait()
 
+
+async def generate_speech(text, voice):
+    """Generate TTS audio using edge-tts and save to a temp file."""
+    tts = edge_tts.Communicate(text=text, voice=voice)
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as f:
+        tmp_path = f.name
+    
+    await tts.save(tmp_path)
+    return tmp_path
+
+
+def show_voice_menu():
+    """Display available voices and let the user pick one."""
+    global current_voice_key
+    
+    print("\n  Available voices:")
+    for key, info in VOICES.items():
+        marker = " <-- current" if key == current_voice_key else ""
+        print(f"    [{key}] {info['name']}{marker}")
+    
+    choice = input("  Select voice (1-6): ").strip()
+    if choice in VOICES:
+        current_voice_key = choice
+        print(f"  Voice set to: {VOICES[choice]['name']}")
+    else:
+        print(f"  Invalid choice, keeping current voice: {VOICES[current_voice_key]['name']}")
+    print()
+
+
 def main():
-    print("=== TTS Virtual Microphone ===")
+    global current_voice_key
+    
+    print("=== TTS Virtual Microphone (edge-tts) ===")
     print("Type text and press Enter to speak it through the virtual mic.")
+    print("Type 'v' and press Enter to change voice.")
     print("Type 'q' and press Enter to quit.\n")
     
     # Find virtual cable device
@@ -111,6 +162,8 @@ def main():
     if cable_device is None:
         print("  Continuing with default audio output (speakers).")
         print("  Install VB-Cable for virtual microphone functionality.\n")
+    
+    print(f"  Current voice: {VOICES[current_voice_key]['name']}\n")
     
     while True:
         try:
@@ -123,19 +176,20 @@ def main():
             print("Exiting.")
             break
         
+        if text.strip().lower() == 'v':
+            show_voice_menu()
+            continue
+        
         if not text.strip():
             continue
         
-        print(f"  Generating speech...")
+        voice = VOICES[current_voice_key]['voice']
+        voice_name = VOICES[current_voice_key]['name']
+        print(f"  Generating speech ({voice_name})...")
         
         try:
-            # Generate TTS audio
-            tts = gTTS(text=text, lang='en', slow=False)
-            
-            # Save to a temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as f:
-                tmp_path = f.name
-                tts.save(tmp_path)
+            # Generate TTS audio using edge-tts (async)
+            tmp_path = asyncio.run(generate_speech(text, voice))
             
             if cable_device is None:
                 print(f"  Playing through speakers...")
@@ -153,6 +207,7 @@ def main():
             
         except Exception as e:
             print(f"  Error: {e}\n")
+
 
 if __name__ == "__main__":
     main()
