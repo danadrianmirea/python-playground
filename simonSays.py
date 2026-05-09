@@ -180,6 +180,25 @@ def draw_text_centered(screen, text, font, color, y_offset=0):
     text_rect = text_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + y_offset))
     screen.blit(text_surf, text_rect)
 
+def draw_text_with_border(screen, text, font, color, y_offset=0, border_color=WHITE, bg_color=(0, 0, 0, 200), padding=10):
+    """Draw text centered on screen with a bordered rectangular background."""
+    text_surf = font.render(text, True, color)
+    text_rect = text_surf.get_rect(center=(WIDTH // 2, HEIGHT // 2 + y_offset))
+    
+    # Create background rect with padding
+    bg_rect = text_rect.inflate(padding * 2, padding * 2)
+    
+    # Draw semi-transparent background
+    bg_surf = pygame.Surface((bg_rect.width, bg_rect.height), pygame.SRCALPHA)
+    bg_surf.fill(bg_color)
+    screen.blit(bg_surf, bg_rect)
+    
+    # Draw border
+    pygame.draw.rect(screen, border_color, bg_rect, 2, border_radius=4)
+    
+    # Draw text
+    screen.blit(text_surf, text_rect)
+
 def flash_color(color_name, duration=0.3):
     """Flash a color and play its sound."""
     draw_simon(screen, lit_color=color_name)
@@ -234,7 +253,7 @@ def show_game_over(score):
     ]
     
     for font, text, color, y_offset in texts:
-        draw_text_centered(screen, text, font, color, y_offset)
+        draw_text_with_border(screen, text, font, color, y_offset)
     
     pygame.display.flip()
 
@@ -258,7 +277,7 @@ def show_start_screen():
     ]
     
     for font, text, color, y_offset in texts:
-        draw_text_centered(screen, text, font, color, y_offset)
+        draw_text_with_border(screen, text, font, color, y_offset)
     
     pygame.display.flip()
 
@@ -272,6 +291,7 @@ def main():
     show_timer = 0
     current_show_index = 0
     pause_until = 0
+    pause_message = ""
     
     running = True
     while running:
@@ -324,6 +344,7 @@ def main():
                             
                             score = len(sequence)
                             sequence.append(random.choice(COLORS))
+                            pause_message = "Well done!"
                             game_state = "pause"
                             pause_until = pygame.time.get_ticks() + 1000
                             current_show_index = 0
@@ -340,6 +361,7 @@ def main():
                             draw_simon(screen)
                             pygame.display.flip()
                             time.sleep(0.1)
+                        pause_message = "Game over!"
                         game_state = "pause"
                         pause_until = pygame.time.get_ticks() + 1000
         
@@ -378,30 +400,34 @@ def main():
                 pygame.display.flip()
         
         elif game_state == "input":
-            # Show the Simon board with a subtle "Your turn" indicator
+            # Show the Simon board with a "Your turn" indicator
             draw_simon(screen)
-            text = font_small.render(f"Your turn! ({input_index + 1}/{len(sequence)})", True, GRAY)
-            text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT - 50))
-            screen.blit(text, text_rect)
+            draw_text_with_border(screen, f"Your turn! ({input_index + 1}/{len(sequence)})", font_small, GRAY, y_offset=HEIGHT // 2 - 50, border_color=GRAY)
             pygame.display.flip()
         
         elif game_state == "pause":
             # Show the board and wait for the pause to end
             draw_simon(screen)
-            # Show a brief indicator
+            # Show the pause message centered on screen
             if pause_until > now:
-                remaining = (pause_until - now) // 1000 + 1
-                text = font_small.render(f"Wait...", True, GRAY)
-                text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT - 50))
-                screen.blit(text, text_rect)
+                # Draw a semi-transparent overlay
+                overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 120))
+                screen.blit(overlay, (0, 0))
+                # Show the message with bordered background
+                msg_color = GREEN if pause_message == "Well done!" else RED
+                draw_text_with_border(screen, pause_message, font_large, msg_color, y_offset=0, border_color=msg_color)
             pygame.display.flip()
             if now >= pause_until:
-                # Pause over - transition to next state
-                if sequence:
+                if pause_message == "Game over!":
+                    # Reset the game back to start screen
+                    sequence = []
+                    score = 0
+                    game_state = "start"
+                else:
+                    # Continue to next round
                     game_state = "showing"
                     show_timer = now
-                else:
-                    game_state = "game_over"
         
         elif game_state == "start":
             show_start_screen()
