@@ -334,7 +334,7 @@ def main():
                         # Restart
                         game_state = "start"
             
-            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input" and not win_lose_state and now >= input_blocked_until and now >= input_flash_start + INPUT_DELAY:
+            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input" and not win_lose_state and now >= input_blocked_until and (input_flash_start == 0 or now >= input_flash_start + INPUT_DELAY):
                 color = get_clicked_color(event.pos)
                 if color:
                     input_blocked_until = now + INPUT_DELAY
@@ -418,7 +418,7 @@ def main():
             score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
             draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
             # Show "Your turn" indicator at the bottom
-            draw_text_with_border(screen, f"Your turn! ({input_index + 1}/{len(sequence)})", font_small, GRAY, y_offset=HEIGHT // 2 - 50, border_color=GRAY)
+            draw_text_with_border(screen, f"Your turn!", font_small, GRAY, y_offset=HEIGHT // 2 - 50, border_color=GRAY)
             pygame.display.flip()
         
         # Handle win/lose delay and flash animations (non-blocking) - these take priority
@@ -444,13 +444,16 @@ def main():
             elapsed = now - win_lose_timer
             
             if win_lose_flash_index < 3:
+                score_text = f"Sequence Length: {len(sequence)}   Correct: {len(sequence)} / {len(sequence)}"
                 if elapsed < flash_duration:
                     draw_simon(screen, lit_color='all')
                     draw_text_with_border(screen, "Well done!", font_large, GREEN, y_offset=0, border_color=GREEN)
+                    draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
                     pygame.display.flip()
                 elif elapsed < total_flash_time:
                     draw_simon(screen)
                     draw_text_with_border(screen, "Well done!", font_large, GREEN, y_offset=0, border_color=GREEN)
+                    draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
                     pygame.display.flip()
                 else:
                     # Move to next flash
