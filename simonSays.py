@@ -352,7 +352,7 @@ def main():
                             win_lose_timer = now
                             win_lose_flash_index = 0
                             score = len(sequence)
-                            sequence.append(random.choice(COLORS))
+                            # Don't append new color yet - defer to after pause
                             # Keep input_flash_color set so the quadrant stays lit during the delay
                     else:
                         # Wrong! Start lose delay (non-blocking)
@@ -433,7 +433,7 @@ def main():
             else:
                 # Still in delay - show the board with the last clicked quadrant lit
                 draw_simon(screen, lit_color=input_flash_color)
-                score_text = f"Sequence Length: {len(sequence)}   Correct: {len(sequence) - 1} / {len(sequence)}"
+                score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
                 draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
                 pygame.display.flip()
         
@@ -510,7 +510,10 @@ def main():
             # Show the board and wait for the pause to end
             draw_simon(screen)
             # Show score/progress at the top
-            score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
+            if pause_message == "Well done!":
+                score_text = f"Sequence Length: {len(sequence)}   Correct: {len(sequence)} / {len(sequence)}"
+            else:
+                score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
             draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
             # Show the pause message centered on screen
             if pause_until > now:
@@ -529,7 +532,8 @@ def main():
                     score = 0
                     game_state = "start"
                 else:
-                    # Continue to next round
+                    # Continue to next round - append new color now
+                    sequence.append(random.choice(COLORS))
                     game_state = "showing"
                     show_timer = now
         
