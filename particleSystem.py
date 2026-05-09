@@ -51,16 +51,32 @@ class Particle:
         # Size based on type
         if self.particle_type == 'fire':
             self.size = random.uniform(2, 6)
-            self.color = (random.randint(200, 255), random.randint(100, 200), 0)
+            # Fire: warm gradient from yellow to red
+            r = random.randint(220, 255)
+            g = random.randint(80, 200)
+            b = random.randint(0, 50)
+            self.color = (r, g, b)
         elif self.particle_type == 'smoke':
             self.size = random.uniform(4, 10)
-            self.color = (random.randint(50, 100), random.randint(50, 100), random.randint(50, 100))
+            # Smoke: subtle purple-blue-gray tones
+            base = random.randint(60, 140)
+            self.color = (
+                random.randint(base - 20, base + 20),
+                random.randint(base - 30, base),
+                random.randint(base + 10, base + 60)
+            )
         elif self.particle_type == 'energy':
             self.size = random.uniform(1, 4)
-            self.color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
+            # Energy: bright neon colors with high saturation
+            hue = random.uniform(0, 360)
+            self.color = self._hsv_to_rgb(hue, 0.9, 1.0)
         else:
             self.size = random.uniform(2, 5)
-            self.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            # Normal: vibrant random colors with good saturation
+            hue = random.uniform(0, 360)
+            saturation = random.uniform(0.6, 1.0)
+            value = random.uniform(0.7, 1.0)
+            self.color = self._hsv_to_rgb(hue, saturation, value)
         
         # Life (for fading particles)
         self.life = 1.0
@@ -68,6 +84,33 @@ class Particle:
         
         # Mass (affects how forces affect it)
         self.mass = self.size * 0.5
+        
+        # Color shift rate (for animated colors)
+        self.color_shift = random.uniform(-2, 2)
+        self.hue = random.uniform(0, 360)
+    
+    @staticmethod
+    def _hsv_to_rgb(h, s, v):
+        """Convert HSV to RGB. h in [0,360], s,v in [0,1]."""
+        h = h % 360
+        c = v * s
+        x = c * (1 - abs((h / 60) % 2 - 1))
+        m = v - c
+        
+        if h < 60:
+            r, g, b = c, x, 0
+        elif h < 120:
+            r, g, b = x, c, 0
+        elif h < 180:
+            r, g, b = 0, c, x
+        elif h < 240:
+            r, g, b = 0, x, c
+        elif h < 300:
+            r, g, b = x, 0, c
+        else:
+            r, g, b = c, 0, x
+        
+        return (int((r + m) * 255), int((g + m) * 255), int((b + m) * 255))
     
     def apply_force(self, force_x, force_y):
         """Apply force to particle (F = ma, so a = F/m)."""
@@ -107,6 +150,11 @@ class Particle:
         
         # Decay life
         self.life -= self.decay
+        
+        # Animate color - shift hue over time for a rainbow effect
+        if self.particle_type in ('energy', 'normal'):
+            self.hue = (self.hue + self.color_shift) % 360
+            self.color = self._hsv_to_rgb(self.hue, 0.9, 0.8 + 0.2 * self.life)
     
     def draw(self, surface):
         """Draw particle on surface."""
@@ -125,7 +173,20 @@ class Particle:
         # Add glow effect for some particles
         if self.particle_type == 'energy':
             glow_size = int(self.size * 2)
-            pygame.draw.circle(surface, (255, 255, 255), (int(self.pos[0]), int(self.pos[1])), glow_size, 1)
+            glow_alpha = int(100 * self.life)
+            glow_color = (self.color[0], self.color[1], self.color[2], glow_alpha)
+            glow_surf = pygame.Surface((int(self.size * 4), int(self.size * 4)), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surf, glow_color, (int(self.size * 2), int(self.size * 2)), glow_size)
+            surface.blit(glow_surf, (int(self.pos[0] - self.size * 2), int(self.pos[1] - self.size * 2)))
+        
+        # Add a bright core for fire particles
+        if self.particle_type == 'fire' and self.life > 0.5:
+            core_size = max(1, int(self.size * 0.4))
+            core_alpha = int(200 * self.life)
+            core_color = (255, 255, 200, core_alpha)
+            core_surf = pygame.Surface((int(core_size * 2), int(core_size * 2)), pygame.SRCALPHA)
+            pygame.draw.circle(core_surf, core_color, (core_size, core_size), core_size)
+            surface.blit(core_surf, (int(self.pos[0] - core_size), int(self.pos[1] - core_size)))
     
     def fade(self, amount):
         """Reduce life by amount."""
