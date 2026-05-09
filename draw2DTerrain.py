@@ -120,28 +120,57 @@ def get_terrain_color(height):
         # Above mountain: pure snow
         return SNOW
     
+
 def draw_terrain(surface, heights):
-    """Draw the terrain with height-based coloring varying per pixel column."""
+    """Draw the terrain with height-based coloring using horizontal strips.
+    
+    Draws horizontal lines from bottom to top, but only where the terrain
+    surface is above the current y position. This avoids drawing over the sky.
+    """
     segment_width = WIDTH / (numberOfSegments - 1)
 
-    # Draw each pixel column from the terrain surface down to the bottom
+    # Precompute the terrain surface Y for every x pixel
+    terrain_surface_y = []
     for x in range(WIDTH):
-        # Find which segment this x falls into
         seg_index = int(x / segment_width)
         seg_index = min(seg_index, numberOfSegments - 2)
-
-        # Interpolate the terrain Y at this exact x position
         x1 = seg_index * segment_width
         x2 = (seg_index + 1) * segment_width
         t = (x - x1) / (x2 - x1) if x2 > x1 else 0
-        terrain_y = int(heights[seg_index] + (heights[seg_index + 1] - heights[seg_index]) * t)
+        terrain_surface_y.append(int(heights[seg_index] + (heights[seg_index + 1] - heights[seg_index]) * t))
 
-        # Draw vertical line from terrain surface down to bottom, varying color by height
-        for y in range(terrain_y, HEIGHT):
-            # Convert screen Y to actual height value
+    # Find the minimum and maximum surface y for quick checks
+    min_surface_y = min(terrain_surface_y)
+    max_surface_y = max(terrain_surface_y)
+
+    # Draw horizontal lines from bottom to top
+    for y in range(HEIGHT - 1, -1, -1):
+        # Quick check: if y is below the lowest surface point, terrain exists everywhere
+        if y >= max_surface_y:
             height_val = baseHeight - y
             color = get_terrain_color(height_val)
-            surface.set_at((x, y), color)
+            pygame.draw.line(surface, color, (0, y), (WIDTH, y))
+        elif y >= min_surface_y:
+            # y is in the surface range - find x-ranges where terrain exists
+            height_val = baseHeight - y
+            color = get_terrain_color(height_val)
+
+            x_start = None
+            x_end = None
+            for x in range(WIDTH):
+                if terrain_surface_y[x] <= y:
+                    if x_start is None:
+                        x_start = x
+                    x_end = x
+                elif x_start is not None:
+                    pygame.draw.line(surface, color, (x_start, y), (x_end, y))
+                    x_start = None
+                    x_end = None
+
+            if x_start is not None:
+                pygame.draw.line(surface, color, (x_start, y), (x_end, y))
+        # else: y is above the highest surface point, no terrain here - skip
+
 
 def draw_sky(surface):
     """Draw a gradient sky background."""
