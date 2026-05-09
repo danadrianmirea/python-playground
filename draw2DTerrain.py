@@ -24,12 +24,13 @@ clock = pygame.time.Clock()
 # Terrain configuration
 maxTerrainHeight = 600
 minTerrainHeight = 0
-waterLevelPct = 0.3       
-hillsLevelPct = 0.6
-mountainLevelPct = 0.9
+mountainLevel = 500
+waterLevelPct = 0.2      # % of mountainLevel
+hillsLevelPct = 0.8       # % of mountainLevel
 numberOfSegments = 50
 roughness = 1.0
 baseHeight = HEIGHT
+
 
 def generate_terrain_heights():
     """Generate terrain using a random walk, then apply erosion smoothing."""
@@ -67,9 +68,10 @@ def generate_terrain_heights():
     return screen_heights
 
 def draw_water(surface):
-    water_level = baseHeight - int(maxTerrainHeight * waterLevelPct)
+    water_level = baseHeight - int(mountainLevel * waterLevelPct)
     water_color = WATER_BLUE
     pygame.draw.rect(surface, water_color, (0, water_level, WIDTH, HEIGHT - water_level))
+
 
 def lerp_color(c1, c2, t):
     """Linearly interpolate between two colors."""
@@ -82,10 +84,10 @@ def lerp_color(c1, c2, t):
 
 def get_terrain_color(height):
     """Get terrain color based on height with smooth interpolation between zones."""
-    # Compute actual level values from percentages of maxTerrainHeight
-    water_level = maxTerrainHeight * waterLevelPct
-    hills_level = maxTerrainHeight * hillsLevelPct
-    mountain_level = maxTerrainHeight * mountainLevelPct
+    # Compute actual level values from percentages of mountainLevel
+    water_level = mountainLevel * waterLevelPct
+    hills_level = mountainLevel * hillsLevelPct
+
 
     # Zone colors
     SEABED = (0, 0, 0)          # Dark greenish-brown (deep underwater)
@@ -112,9 +114,10 @@ def get_terrain_color(height):
         t = (height - beach_top) / (hills_level - beach_top)
         return lerp_color(GRASS, HILL, t)
 
-    elif height <= mountain_level:
+    elif height <= mountainLevel:
         # Hills to mountain: interpolate HILL -> SNOW
-        t = (height - hills_level) / (mountain_level - hills_level)
+        t = (height - hills_level) / (mountainLevel - hills_level)
+
         return lerp_color(HILL, SNOW, t)
     else:
         # Above mountain: pure snow
@@ -196,7 +199,7 @@ def draw_ui(surface, fps, render_time_ms):
     ]
 
     for i, text in enumerate(instructions):
-        surface.blit(small_font.render(text, True, (200, 200, 200)), (10, 35 + i * 18))
+        surface.blit(small_font.render(text, True, (255, 255, 255)), (10, 35 + i * 18))
 
     # Performance stats (top-right)
     perf_text = f"FPS: {fps:.0f}  |  Render: {render_time_ms:.1f}ms"
@@ -231,7 +234,8 @@ def main():
                 elif event.key == pygame.K_r:
                     heights = generate_terrain_heights()
                 elif event.key == pygame.K_UP:
-                    maxTerrainHeight = min(500, maxTerrainHeight + 20)
+                    maxTerrainHeight = min(800, maxTerrainHeight + 20)
+
                     heights = generate_terrain_heights()
                 elif event.key == pygame.K_DOWN:
                     maxTerrainHeight = max(50, maxTerrainHeight - 20)
