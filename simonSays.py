@@ -43,7 +43,7 @@ font_medium = pygame.font.SysFont("Arial", 32)
 font_small = pygame.font.SysFont("Arial", 24)
 
 # Sound generation using pygame's synth
-def generate_tone(frequency, duration=0.3, volume=0.3):
+def generate_tone(frequency, duration=0.3, volume=0.2):
     """Generate a sine wave tone and return a pygame Sound object."""
     sample_rate = 44100
     n_samples = int(sample_rate * duration)
@@ -381,6 +381,9 @@ def main():
                 if elapsed < color_duration:
                     # Show lit
                     draw_simon(screen, lit_color=sequence[current_show_index])
+                    # Show score/progress at the top
+                    score_text = f"Sequence Length: {len(sequence)}   Correct: 0 / {len(sequence)}"
+                    draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
                     # Play sound once at start of this color's display
                     if elapsed < 50:  # First 50ms
                         SOUNDS[sequence[current_show_index]].play()
@@ -388,6 +391,9 @@ def main():
                 elif elapsed < color_show_time:
                     # Gap - show unlit
                     draw_simon(screen)
+                    # Show score/progress at the top
+                    score_text = f"Sequence Length: {len(sequence)}   Correct: 0 / {len(sequence)}"
+                    draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
                     pygame.display.flip()
                 else:
                     # Move to next color
@@ -398,17 +404,27 @@ def main():
                 game_state = "input"
                 input_index = 0
                 draw_simon(screen)
+                # Show score/progress at the top
+                score_text = f"Sequence Length: {len(sequence)}   Correct: 0 / {len(sequence)}"
+                draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
                 pygame.display.flip()
         
         elif game_state == "input":
             # Show the Simon board with a "Your turn" indicator
             draw_simon(screen)
+            # Show score/progress at the top
+            score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
+            draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
+            # Show "Your turn" indicator at the bottom
             draw_text_with_border(screen, f"Your turn! ({input_index + 1}/{len(sequence)})", font_small, GRAY, y_offset=HEIGHT // 2 - 50, border_color=GRAY)
             pygame.display.flip()
         
         elif game_state == "pause":
             # Show the board and wait for the pause to end
             draw_simon(screen)
+            # Show score/progress at the top
+            score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
+            draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
             # Show the pause message centered on screen
             if pause_until > now:
                 # Draw a semi-transparent overlay
