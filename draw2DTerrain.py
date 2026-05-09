@@ -31,10 +31,6 @@ numberOfSegments = 50
 roughness = 1.0
 baseHeight = HEIGHT
 
-
-
-
-
 def generate_terrain_heights():
     """Generate terrain using a random walk, then apply erosion smoothing."""
     heights = []
@@ -70,19 +66,10 @@ def generate_terrain_heights():
     screen_heights = [baseHeight - h for h in heights]
     return screen_heights
 
-
-
-
-
-
-
-
 def draw_water(surface):
     water_level = baseHeight - int(maxTerrainHeight * waterLevelPct)
     water_color = WATER_BLUE
     pygame.draw.rect(surface, water_color, (0, water_level, WIDTH, HEIGHT - water_level))
-
-
 
 def lerp_color(c1, c2, t):
     """Linearly interpolate between two colors."""
@@ -132,9 +119,7 @@ def get_terrain_color(height):
     else:
         # Above mountain: pure snow
         return SNOW
-
-
-
+    
 def draw_terrain(surface, heights):
     """Draw the terrain with height-based coloring varying per pixel column."""
     segment_width = WIDTH / (numberOfSegments - 1)
@@ -158,10 +143,6 @@ def draw_terrain(surface, heights):
             color = get_terrain_color(height_val)
             surface.set_at((x, y), color)
 
-
-
-
-
 def draw_sky(surface):
     """Draw a gradient sky background."""
     for y in range(HEIGHT):
@@ -170,7 +151,6 @@ def draw_sky(surface):
         g = int(SKY_BLUE[1] * (1 - t) + 220 * t)
         b = int(SKY_BLUE[2] * (1 - t) + 255 * t)
         pygame.draw.line(surface, (r, g, b), (0, y), (WIDTH, y))
-
 
 def draw_ui(surface):
     """Draw UI overlay."""
@@ -197,7 +177,6 @@ def draw_ui(surface):
 
     for i, text in enumerate(stats_lines):
         surface.blit(small_font.render(text, True, (200, 255, 200)), (10, HEIGHT - 60 + i * 18))
-
 
 def main():
     """Main game loop."""
@@ -233,14 +212,10 @@ def main():
         draw_water(screen)
         draw_terrain(screen, heights)
         draw_ui(screen)
-
-
         pygame.display.flip()
         clock.tick(FPS)
-
     pygame.quit()
     sys.exit()
-
 
 if __name__ == "__main__":
     main()
