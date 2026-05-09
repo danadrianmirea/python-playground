@@ -43,7 +43,7 @@ font_medium = pygame.font.SysFont("Arial", 32)
 font_small = pygame.font.SysFont("Arial", 24)
 
 # Sound generation using pygame's synth
-def generate_tone(frequency, duration=0.3, volume=0.2):
+def generate_tone(frequency, duration=0.3, volume=0.3):
     """Generate a sine wave tone and return a pygame Sound object."""
     sample_rate = 44100
     n_samples = int(sample_rate * duration)
