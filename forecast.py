@@ -88,6 +88,9 @@ def get_next_week_days() -> list[date]:
     return [next_monday + timedelta(days=i) for i in range(7)]
 
 
+IPINFO_URL = "https://ipinfo.io/json"
+
+
 def load_config_location() -> str:
     """Try to load a default location from the shared config file."""
     if CONFIG_PATH.exists():
@@ -97,6 +100,21 @@ def load_config_location() -> str:
         except (json.JSONDecodeError, KeyError):
             pass
     return ""
+
+
+async def detect_location_from_ip(session: aiohttp.ClientSession) -> Optional[str]:
+    """Detect the user's city from their IP address using ipinfo.io (free, no API key)."""
+    try:
+        async with session.get(IPINFO_URL, timeout=5) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            city = data.get("city", "")
+            if city:
+                return city
+    except Exception:
+        pass
+    return None
 
 
 async def geocode(session: aiohttp.ClientSession, city: str) -> Optional[tuple[float, float, str]]:
@@ -232,13 +250,20 @@ def print_week_calendar(
 # ---------------------------------------------------------------------------
 
 async def main_async(location: str) -> None:
-    # Resolve location
+    # Resolve location: CLI arg > config file > IP geolocation
     if not location:
         location = load_config_location()
     if not location:
-        print("Usage: python forecast.py [location]")
-        print("       (or set a default location with weather_cli.py config --location CITY)")
-        sys.exit(1)
+        async with aiohttp.ClientSession() as session:
+            detected = await detect_location_from_ip(session)
+            if detected:
+                location = detected
+                print(f"  [Auto-detected location: {location}]")
+                print()
+            else:
+                print("Usage: python forecast.py [location]")
+                print("       (or set a default location with weather_cli.py config --location CITY)")
+                sys.exit(1)
 
     async with aiohttp.ClientSession() as session:
         geo = await geocode(session, location)
