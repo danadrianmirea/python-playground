@@ -43,7 +43,7 @@ font_medium = pygame.font.SysFont("Arial", 32)
 font_small = pygame.font.SysFont("Arial", 24)
 
 # Sound generation using pygame's synth
-def generate_tone(frequency, duration=0.3, volume=0.5):
+def generate_tone(frequency, duration=0.3, volume=0.2):
     """Generate a sine wave tone and return a pygame Sound object."""
     sample_rate = 22050
     n_samples = int(sample_rate * duration)
@@ -53,6 +53,34 @@ def generate_tone(frequency, duration=0.3, volume=0.5):
     stereo = np.column_stack((samples, samples))
     buf = pygame.sndarray.make_sound(stereo)
     return buf
+
+def generate_chord(frequencies, duration=0.5, volume=0.15):
+    """Generate a pleasant chord from a list of frequencies."""
+    sample_rate = 22050
+    n_samples = int(sample_rate * duration)
+    t = np.arange(n_samples, dtype=np.float64)
+    # Mix multiple frequencies
+    wave = np.zeros(n_samples, dtype=np.float64)
+    for freq in frequencies:
+        wave += np.sin(2 * np.pi * freq * t / sample_rate)
+    wave /= len(frequencies)  # Normalize
+    samples = (volume * 32767 * wave).astype(np.int16)
+    stereo = np.column_stack((samples, samples))
+    return pygame.sndarray.make_sound(stereo)
+
+def generate_buzzer(frequency=100, duration=0.3, volume=0.3):
+    """Generate a harsh buzzer sound for losing."""
+    sample_rate = 22050
+    n_samples = int(sample_rate * duration)
+    t = np.arange(n_samples, dtype=np.float64)
+    # Square wave with some noise for harshness
+    wave = np.sign(np.sin(2 * np.pi * frequency * t / sample_rate))
+    # Add a bit of noise
+    noise = np.random.uniform(-0.3, 0.3, n_samples)
+    wave = wave * 0.7 + noise * 0.3
+    samples = (volume * 32767 * wave).astype(np.int16)
+    stereo = np.column_stack((samples, samples))
+    return pygame.sndarray.make_sound(stereo)
 
 # Create sounds for each color
 SOUND_RED = generate_tone(220, 0.3)    # Low A
@@ -66,6 +94,11 @@ SOUNDS = {
     'blue': SOUND_BLUE,
     'yellow': SOUND_YELLOW,
 }
+
+# Win sound: ascending major chord (C-E-G-C)
+SOUND_WIN = generate_chord([523, 659, 784, 1047], 0.6, 0.15)
+# Lose sound: low buzzer
+SOUND_LOSE = generate_buzzer(80, 0.5, 0.3)
 
 # Game state
 COLORS = ['red', 'green', 'blue', 'yellow']
@@ -130,7 +163,7 @@ def draw_simon(screen, lit_color=None):
     
     # Draw quadrants
     for color_name in COLORS:
-        draw_quadrant(screen, color_name, lit=(color_name == lit_color))
+        draw_quadrant(screen, color_name, lit=(lit_color == 'all' or color_name == lit_color))
     
     # Draw center circle
     pygame.draw.circle(screen, DARK_GRAY, CENTER, 60)
@@ -234,14 +267,16 @@ def main():
     sequence = []
     player_sequence = []
     score = 0
-    game_state = "start"  # start, showing, input, game_over
+    game_state = "start"  # start, showing, input, pause, game_over
     input_index = 0
     show_timer = 0
     current_show_index = 0
+    pause_until = 0
     
     running = True
     while running:
         clock.tick(FPS)
+        now = pygame.time.get_ticks()
         
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -276,30 +311,40 @@ def main():
                     if color == sequence[input_index]:
                         input_index += 1
                         if input_index >= len(sequence):
-                            # Sequence complete! Add new color
+                            # Sequence complete! Play win sound and pause
+                            SOUND_WIN.play()
+                            # Flash the whole board (all quadrants lit)
+                            for _ in range(3):
+                                draw_simon(screen, lit_color='all')
+                                pygame.display.flip()
+                                time.sleep(0.15)
+                                draw_simon(screen)
+                                pygame.display.flip()
+                                time.sleep(0.1)
+                            
                             score = len(sequence)
                             sequence.append(random.choice(COLORS))
-                            game_state = "showing"
+                            game_state = "pause"
+                            pause_until = pygame.time.get_ticks() + 1000
                             current_show_index = 0
                             input_index = 0
-                            show_timer = pygame.time.get_ticks()
+                            show_timer = 0
                     else:
-                        # Wrong!
-                        # Flash red X effect
+                        # Wrong! Play lose sound and pause
+                        SOUND_LOSE.play()
+                        # Flash the whole board red (all quadrants lit red)
                         for _ in range(3):
-                            screen.fill(BLACK)
+                            draw_simon(screen, lit_color='all')
+                            pygame.display.flip()
+                            time.sleep(0.15)
                             draw_simon(screen)
                             pygame.display.flip()
                             time.sleep(0.1)
-                            screen.fill((50, 0, 0))
-                            draw_simon(screen)
-                            pygame.display.flip()
-                            time.sleep(0.1)
-                        game_state = "game_over"
+                        game_state = "pause"
+                        pause_until = pygame.time.get_ticks() + 1000
         
         # Handle showing sequence
         if game_state == "showing":
-            now = pygame.time.get_ticks()
             if current_show_index < len(sequence):
                 if show_timer == 0:
                     show_timer = now
@@ -339,6 +384,24 @@ def main():
             text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT - 50))
             screen.blit(text, text_rect)
             pygame.display.flip()
+        
+        elif game_state == "pause":
+            # Show the board and wait for the pause to end
+            draw_simon(screen)
+            # Show a brief indicator
+            if pause_until > now:
+                remaining = (pause_until - now) // 1000 + 1
+                text = font_small.render(f"Wait...", True, GRAY)
+                text_rect = text.get_rect(center=(WIDTH // 2, HEIGHT - 50))
+                screen.blit(text, text_rect)
+            pygame.display.flip()
+            if now >= pause_until:
+                # Pause over - transition to next state
+                if sequence:
+                    game_state = "showing"
+                    show_timer = now
+                else:
+                    game_state = "game_over"
         
         elif game_state == "start":
             show_start_screen()
