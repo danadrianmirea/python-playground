@@ -101,7 +101,9 @@ SOUND_WIN = generate_chord([523, 659, 784, 1047], 0.6, 0.15)
 SOUND_LOSE = generate_buzzer(80, 0.5, 0.3)
 
 # Game state
-PAUSE_DURATION = 2000  # milliseconds
+WIN_LOSE_DELAY = 500    # milliseconds to wait before win/lose flash animation
+INPUT_DELAY = 300       # milliseconds to ignore input after a click (prevents double-clicks)
+PAUSE_DURATION = 1000   # milliseconds
 COLORS = ['red', 'green', 'blue', 'yellow']
 COLOR_MAP = {
     'red': (RED, RED_DIM),
@@ -200,13 +202,17 @@ def draw_text_with_border(screen, text, font, color, y_offset=0, border_color=WH
     # Draw text
     screen.blit(text_surf, text_rect)
 
-def flash_color(color_name, duration=0.3):
+def flash_color(color_name, duration=0.3, score_text=""):
     """Flash a color and play its sound."""
     draw_simon(screen, lit_color=color_name)
+    if score_text:
+        draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
     pygame.display.flip()
     SOUNDS[color_name].play()
     time.sleep(duration)
     draw_simon(screen)
+    if score_text:
+        draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
     pygame.display.flip()
     time.sleep(0.1)
 
@@ -293,6 +299,12 @@ def main():
     current_show_index = 0
     pause_until = 0
     pause_message = ""
+    input_blocked_until = 0
+    input_flash_color = None
+    input_flash_start = 0
+    win_lose_state = None  # None, "win_delay", "win_flash", "lose_delay", "lose_flash"
+    win_lose_timer = 0
+    win_lose_flash_index = 0
     
     running = True
     while running:
@@ -322,49 +334,32 @@ def main():
                         # Restart
                         game_state = "start"
             
-            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input":
+            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input" and now >= input_blocked_until:
                 color = get_clicked_color(event.pos)
                 if color:
-                    # Flash the clicked color
-                    flash_color(color, 0.15)
+                    input_blocked_until = now + INPUT_DELAY
+                    input_flash_color = color
+                    input_flash_start = now
+                    # Play the sound immediately
+                    SOUNDS[color].play()
                     
                     # Check if correct
                     if color == sequence[input_index]:
                         input_index += 1
                         if input_index >= len(sequence):
-                            # Sequence complete! Play win sound and pause
-                            SOUND_WIN.play()
-                            # Flash the whole board (all quadrants lit)
-                            for _ in range(3):
-                                draw_simon(screen, lit_color='all')
-                                pygame.display.flip()
-                                time.sleep(0.15)
-                                draw_simon(screen)
-                                pygame.display.flip()
-                                time.sleep(0.1)
-                            
+                            # Sequence complete! Start win delay (non-blocking)
+                            win_lose_state = "win_delay"
+                            win_lose_timer = now
+                            win_lose_flash_index = 0
                             score = len(sequence)
                             sequence.append(random.choice(COLORS))
-                            pause_message = "Well done!"
-                            game_state = "pause"
-                            pause_until = pygame.time.get_ticks() + PAUSE_DURATION
-                            current_show_index = 0
-                            input_index = 0
-                            show_timer = 0
+                            # Keep input_flash_color set so the quadrant stays lit during the delay
                     else:
-                        # Wrong! Play lose sound and pause
-                        SOUND_LOSE.play()
-                        # Flash the whole board red (all quadrants lit red)
-                        for _ in range(3):
-                            draw_simon(screen, lit_color='all')
-                            pygame.display.flip()
-                            time.sleep(0.15)
-                            draw_simon(screen)
-                            pygame.display.flip()
-                            time.sleep(0.1)
-                        pause_message = "Game over!"
-                        game_state = "pause"
-                        pause_until = pygame.time.get_ticks() + PAUSE_DURATION
+                        # Wrong! Start lose delay (non-blocking)
+                        win_lose_state = "lose_delay"
+                        win_lose_timer = now
+                        win_lose_flash_index = 0
+                        input_flash_color = None
         
         # Handle showing sequence
         if game_state == "showing":
@@ -409,15 +404,107 @@ def main():
                 draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
                 pygame.display.flip()
         
-        elif game_state == "input":
+        elif game_state == "input" and not win_lose_state:
+            # Determine if a quadrant should be lit (during input flash cooldown)
+            lit_color = None
+            if input_flash_color and now < input_flash_start + INPUT_DELAY:
+                lit_color = input_flash_color
+            else:
+                input_flash_color = None  # Flash expired
+            
             # Show the Simon board with a "Your turn" indicator
-            draw_simon(screen)
+            draw_simon(screen, lit_color=lit_color)
             # Show score/progress at the top
             score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
             draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
             # Show "Your turn" indicator at the bottom
             draw_text_with_border(screen, f"Your turn! ({input_index + 1}/{len(sequence)})", font_small, GRAY, y_offset=HEIGHT // 2 - 50, border_color=GRAY)
             pygame.display.flip()
+        
+        # Handle win/lose delay and flash animations (non-blocking) - these take priority
+        if win_lose_state == "win_delay":
+            if now >= win_lose_timer + WIN_LOSE_DELAY:
+                # Delay over, start flash animation
+                SOUND_WIN.play()
+                win_lose_state = "win_flash"
+                win_lose_timer = now
+                win_lose_flash_index = 0
+                input_flash_color = None
+            else:
+                # Still in delay - show the board with the last clicked quadrant lit
+                draw_simon(screen, lit_color=input_flash_color)
+                score_text = f"Sequence Length: {len(sequence)}   Correct: {len(sequence) - 1} / {len(sequence)}"
+                draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
+                pygame.display.flip()
+        
+        elif win_lose_state == "win_flash":
+            flash_duration = 150  # ms lit
+            gap_duration = 100    # ms dim
+            total_flash_time = flash_duration + gap_duration
+            elapsed = now - win_lose_timer
+            
+            if win_lose_flash_index < 3:
+                if elapsed < flash_duration:
+                    draw_simon(screen, lit_color='all')
+                    draw_text_with_border(screen, "Well done!", font_large, GREEN, y_offset=0, border_color=GREEN)
+                    pygame.display.flip()
+                elif elapsed < total_flash_time:
+                    draw_simon(screen)
+                    draw_text_with_border(screen, "Well done!", font_large, GREEN, y_offset=0, border_color=GREEN)
+                    pygame.display.flip()
+                else:
+                    # Move to next flash
+                    win_lose_flash_index += 1
+                    win_lose_timer = now
+            else:
+                # Flash animation complete
+                pause_message = "Well done!"
+                game_state = "pause"
+                pause_until = now + PAUSE_DURATION
+                current_show_index = 0
+                input_index = 0
+                show_timer = 0
+                win_lose_state = None
+        
+        elif win_lose_state == "lose_delay":
+            if now >= win_lose_timer + WIN_LOSE_DELAY:
+                # Delay over, start flash animation
+                SOUND_LOSE.play()
+                win_lose_state = "lose_flash"
+                win_lose_timer = now
+                win_lose_flash_index = 0
+            else:
+                # Still in delay - show the board dim
+                draw_simon(screen)
+                score_text = f"Sequence Length: {len(sequence)}   Correct: {input_index} / {len(sequence)}"
+                draw_text_with_border(screen, score_text, font_small, WHITE, y_offset=-HEIGHT // 2 + 40, border_color=WHITE)
+                pygame.display.flip()
+        
+        elif win_lose_state == "lose_flash":
+            flash_duration = 150  # ms lit
+            gap_duration = 100    # ms dim
+            total_flash_time = flash_duration + gap_duration
+            elapsed = now - win_lose_timer
+            
+            if win_lose_flash_index < 3:
+                if elapsed < flash_duration:
+                    draw_simon(screen, lit_color='all')
+                    draw_text_with_border(screen, "Game over!", font_large, RED, y_offset=0, border_color=RED)
+                    pygame.display.flip()
+                elif elapsed < total_flash_time:
+                    draw_simon(screen)
+                    draw_text_with_border(screen, "Game over!", font_large, RED, y_offset=0, border_color=RED)
+                    pygame.display.flip()
+                else:
+                    # Move to next flash
+                    win_lose_flash_index += 1
+                    win_lose_timer = now
+            else:
+                # Flash animation complete
+                pause_message = "Game over!"
+                game_state = "pause"
+                pause_until = now + PAUSE_DURATION
+                win_lose_state = None
         
         elif game_state == "pause":
             # Show the board and wait for the pause to end
