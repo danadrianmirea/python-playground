@@ -11,6 +11,7 @@ Requirements:
 2. Set "CABLE Input" as your default playback device in Windows Sound settings
    OR set it as the recording device in your target app (Teams, etc.)
 3. pip install edge-tts sounddevice soundfile numpy
+4. (Optional) pip install ro-diacritics — for Romanian diacritics restoration
 
 Usage:
 - Run the script, type text and press Enter to speak it
@@ -27,6 +28,23 @@ import numpy as np
 import tempfile
 import os
 import sys
+import re
+
+# Romanian diacritics restoration (lazy-loaded on first use)
+_ro_diacritics = None
+
+def _restore_ro_diacritics(text):
+    """Restore Romanian diacritics (ă, â, î, ș, ț) in text that lacks them."""
+    global _ro_diacritics
+    if _ro_diacritics is None:
+        try:
+            from ro_diacritics import restore_diacritics
+            _ro_diacritics = restore_diacritics
+        except ImportError:
+            _ro_diacritics = False
+    if _ro_diacritics:
+        return _ro_diacritics(text)
+    return text
 
 # Try to find a virtual cable device
 # Common virtual cable device names:
@@ -299,6 +317,13 @@ def main():
         else:
             voice = VOICES[current_voice_key]['voice']
             voice_name = VOICES[current_voice_key]['name']
+        
+        # If using a Romanian voice, restore diacritics for better TTS quality
+        if voice.startswith('ro-RO-'):
+            text_with_diacritics = _restore_ro_diacritics(text)
+            if text_with_diacritics != text:
+                print(f"  Restored diacritics: {text_with_diacritics}")
+                text = text_with_diacritics
         
         print(f"  Generating speech ({voice_name})...")
         
