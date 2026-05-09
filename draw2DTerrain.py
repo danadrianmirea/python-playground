@@ -152,7 +152,7 @@ def draw_sky(surface):
         b = int(SKY_BLUE[2] * (1 - t) + 255 * t)
         pygame.draw.line(surface, (r, g, b), (0, y), (WIDTH, y))
 
-def draw_ui(surface):
+def draw_ui(surface, fps, render_time_ms):
     """Draw UI overlay."""
     font = pygame.font.Font(None, 24)
     small_font = pygame.font.Font(None, 20)
@@ -169,6 +169,12 @@ def draw_ui(surface):
     for i, text in enumerate(instructions):
         surface.blit(small_font.render(text, True, (200, 200, 200)), (10, 35 + i * 18))
 
+    # Performance stats (top-right)
+    perf_text = f"FPS: {fps:.0f}  |  Render: {render_time_ms:.1f}ms"
+    perf_surf = small_font.render(perf_text, True, (255, 255, 100))
+    surface.blit(perf_surf, (WIDTH - perf_surf.get_width() - 10, 10))
+
+    # Terrain stats (bottom-left)
     stats_lines = [
         f"Max Height: {maxTerrainHeight}",
         f"Roughness: {roughness:.2f}",
@@ -177,6 +183,7 @@ def draw_ui(surface):
 
     for i, text in enumerate(stats_lines):
         surface.blit(small_font.render(text, True, (200, 255, 200)), (10, HEIGHT - 60 + i * 18))
+
 
 def main():
     """Main game loop."""
@@ -207,13 +214,23 @@ def main():
                     roughness = min(1.0, roughness + 0.1)
                     heights = generate_terrain_heights()
 
+        # Measure render time
+        render_start = pygame.time.get_ticks()
+
         # Draw
         draw_sky(screen)
         draw_water(screen)
         draw_terrain(screen, heights)
-        draw_ui(screen)
+
+        render_time = pygame.time.get_ticks() - render_start
+
+        # Get FPS from clock
+        fps = clock.get_fps()
+
+        draw_ui(screen, fps, render_time)
         pygame.display.flip()
         clock.tick(FPS)
+
     pygame.quit()
     sys.exit()
 
