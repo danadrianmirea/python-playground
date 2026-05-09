@@ -151,7 +151,7 @@ class MemoryPuzzle:
             self.cards.append(Card(value, x, y, card_size, card_size))
 
     def handle_menu_click(self, pos):
-        grid_sizes = [(4, 100), (6, 200), (8, 300)]
+        grid_sizes = [(2, 180), (4, 280), (6, 380)]
         for size, y_pos in grid_sizes:
             btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, y_pos, 200, 50)
             if btn_rect.collidepoint(pos):
@@ -213,7 +213,7 @@ class MemoryPuzzle:
         sub_rect = subtitle.get_rect(center=(WINDOW_WIDTH // 2, 100))
         self.screen.blit(subtitle, sub_rect)
 
-        grid_sizes = [(4, 180), (6, 280), (8, 380)]
+        grid_sizes = [(2, 180), (4, 280), (6, 380)]
         for size, y_pos in grid_sizes:
             btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, y_pos, 200, 50)
             mouse_pos = pygame.mouse.get_pos()
