@@ -23,16 +23,14 @@ clock = pygame.time.Clock()
 # Terrain configuration
 maxTerrainHeight = 300
 minTerrainHeight = 50
-
 numberOfSegments = 50
-
-roughness = 0.5
+roughness = 1.0
 baseHeight = HEIGHT - 100
 
 
 
 def generate_terrain_heights():
-    """Generate smooth terrain using a random walk with limited step changes."""
+    """Generate terrain using a random walk, then apply erosion smoothing."""
     heights = []
 
     # Start at a random height within the allowed range
@@ -49,10 +47,23 @@ def generate_terrain_heights():
         # Clamp to allowed range
         current_height = max(minTerrainHeight, min(maxTerrainHeight, current_height))
 
-        h = baseHeight - current_height
-        heights.append(h)
+        heights.append(current_height)
 
-    return heights
+    # Apply erosion: multiple passes of a smoothing kernel
+    # This simulates natural erosion by wearing down sharp peaks and filling valleys
+    erosion_passes = 3
+    for _ in range(erosion_passes):
+        eroded = heights[:]
+        for i in range(1, len(heights) - 1):
+            # Each point moves toward the average of its neighbors
+            # Sharp peaks get pulled down, sharp valleys get filled up
+            eroded[i] = heights[i] * 0.5 + (heights[i - 1] + heights[i + 1]) * 0.25
+        heights = eroded
+
+    # Convert heights to screen Y coordinates
+    screen_heights = [baseHeight - h for h in heights]
+    return screen_heights
+
 
 
 
