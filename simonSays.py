@@ -38,7 +38,7 @@ YELLOW_DIM = (100, 100, 20)
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Simon Says")
 clock = pygame.time.Clock()
-font_large = pygame.font.SysFont("Arial", 32, bold=True)
+font_large = pygame.font.SysFont("Arial", 48, bold=True)
 font_medium = pygame.font.SysFont("Arial", 32)
 font_small = pygame.font.SysFont("Arial", 24)
 
@@ -173,7 +173,7 @@ def draw_simon(screen, lit_color=None):
     pygame.draw.circle(screen, WHITE, CENTER, 60, 3)
     
     # Draw center text
-    text = font_large.render("SIMON", True, WHITE)
+    text = font_medium.render("SIMON", True, WHITE)
     text_rect = text.get_rect(center=CENTER)
     screen.blit(text, text_rect)
 
@@ -334,7 +334,7 @@ def main():
                         # Restart
                         game_state = "start"
             
-            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input" and now >= input_blocked_until:
+            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input" and not win_lose_state and now >= input_blocked_until:
                 color = get_clicked_color(event.pos)
                 if color:
                     input_blocked_until = now + INPUT_DELAY
