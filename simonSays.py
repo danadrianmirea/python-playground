@@ -334,7 +334,7 @@ def main():
                         # Restart
                         game_state = "start"
             
-            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input" and not win_lose_state and now >= input_blocked_until:
+            elif event.type == pygame.MOUSEBUTTONDOWN and game_state == "input" and not win_lose_state and now >= input_blocked_until and now >= input_flash_start + INPUT_DELAY:
                 color = get_clicked_color(event.pos)
                 if color:
                     input_blocked_until = now + INPUT_DELAY
