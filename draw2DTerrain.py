@@ -22,35 +22,41 @@ clock = pygame.time.Clock()
 
 # Terrain configuration
 maxTerrainHeight = 300
-numberOfSegments = 100
-roughness = 0.3
+minTerrainHeight = 50
+
+numberOfSegments = 50
+
+roughness = 0.5
 baseHeight = HEIGHT - 100
 
 
+
 def generate_terrain_heights():
-    """Generate terrain height values using sine waves and noise."""
+    """Generate smooth terrain using a random walk with limited step changes."""
     heights = []
 
-    # Random phase offsets so each R press gives different terrain
-    phase1 = random.uniform(0, 2 * math.pi)
-    phase2 = random.uniform(0, 2 * math.pi)
-    phase3 = random.uniform(0, 2 * math.pi)
+    # Start at a random height within the allowed range
+    current_height = random.uniform(minTerrainHeight, maxTerrainHeight)
 
     for i in range(numberOfSegments):
-        x = i * (WIDTH / (numberOfSegments - 1))
-        h = baseHeight
+        # Max step change per segment depends on roughness
+        # At roughness=0, max step is small (smooth). At roughness=1, max step is large (jagged)
+        max_step = maxTerrainHeight * (0.05 + roughness * 0.25)
 
-        # Multiple octaves of sine with random phase for natural variation
-        h -= math.sin(x * 0.003 + phase1) * maxTerrainHeight * 0.5
-        h -= math.sin(x * 0.008 + phase2) * maxTerrainHeight * 0.3
-        h -= math.sin(x * 0.02 + phase3) * maxTerrainHeight * 0.15
+        # Random walk: move up or down by a random amount, clamped by max_step
+        current_height += random.uniform(-max_step, max_step)
 
-        # Add random roughness
-        h -= random.uniform(-1, 1) * maxTerrainHeight * roughness * 0.2
+        # Clamp to allowed range
+        current_height = max(minTerrainHeight, min(maxTerrainHeight, current_height))
 
+        h = baseHeight - current_height
         heights.append(h)
 
     return heights
+
+
+
+
 
 
 
