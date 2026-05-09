@@ -456,6 +456,12 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    # Default to "forecast" when no subcommand is given
+    if args.command is None:
+        args.command = "forecast"
+        args.location = None
+        args.days = 7
+
     config = WeatherConfig.load()
 
     if args.command == "now":
