@@ -60,15 +60,45 @@ def find_virtual_cable_device():
     return None
 
 def play_audio(file_path, device=None):
-    """Play an audio file through the specified device."""
+    """Play an audio file through the specified device(s).
+    
+    If a virtual cable device is specified, plays through both
+    the virtual cable AND the default output device simultaneously,
+    so you can hear the speech through your speakers.
+    """
     data, samplerate = sf.read(file_path)
     
     if device is not None:
-        sd.play(data, samplerate, device=device)
+        # Play through both the virtual cable and the default output
+        default_device = sd.default.device[1]  # default output device
+        
+        # Get info about both devices
+        devices_info = sd.query_devices()
+        default_name = devices_info[default_device]['name'] if default_device is not None else "default"
+        cable_name = devices_info[device]['name']
+        
+        print(f"  Playing through: {cable_name} (virtual mic) + {default_name} (speakers)")
+        
+        # Play on both devices simultaneously using OutputStream
+        # We need to create two output streams
+        import threading
+        
+        def play_on_device(dev):
+            sd.play(data, samplerate, device=dev)
+            sd.wait()
+        
+        threads = []
+        for dev in [device, default_device]:
+            if dev is not None:
+                t = threading.Thread(target=play_on_device, args=(dev,))
+                t.start()
+                threads.append(t)
+        
+        for t in threads:
+            t.join()
     else:
         sd.play(data, samplerate)
-    
-    sd.wait()
+        sd.wait()
 
 def main():
     print("=== TTS Virtual Microphone ===")
@@ -107,7 +137,8 @@ def main():
                 tmp_path = f.name
                 tts.save(tmp_path)
             
-            print(f"  Playing through {'virtual cable' if cable_device is not None else 'speakers'}...")
+            if cable_device is None:
+                print(f"  Playing through speakers...")
             
             # Play the audio
             play_audio(tmp_path, device=cable_device)
