@@ -108,6 +108,28 @@ class WeatherConfig:
 
 
 # ---------------------------------------------------------------------------
+# IP geolocation
+# ---------------------------------------------------------------------------
+
+IPINFO_URL = "https://ipinfo.io/json"
+
+
+async def detect_location_from_ip(session: aiohttp.ClientSession) -> Optional[str]:
+    """Detect the user's city from their IP address using ipinfo.io (free, no API key)."""
+    try:
+        async with session.get(IPINFO_URL, timeout=5) as resp:
+            if resp.status != 200:
+                return None
+            data = await resp.json()
+            city = data.get("city", "")
+            if city:
+                return city
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
 # API helpers
 # ---------------------------------------------------------------------------
 
@@ -301,11 +323,17 @@ def show_forecast(city_display: str, data: dict, unit: str) -> None:
 async def cmd_now(args: argparse.Namespace, config: WeatherConfig) -> None:
     location = args.location or config.location
     if not location:
-        console.print(
-            "[red]No location provided.  Use [bold]weather now CITY[/] or set a default with "
-            "[bold]weather config --location CITY[/].[/]"
-        )
-        sys.exit(1)
+        async with aiohttp.ClientSession() as session:
+            detected = await detect_location_from_ip(session)
+            if detected:
+                location = detected
+                console.print(f"[dim]Auto-detected location: {location}[/]")
+            else:
+                console.print(
+                    "[red]No location provided.  Use [bold]weather now CITY[/] or set a default with "
+                    "[bold]weather config --location CITY[/].[/]"
+                )
+                sys.exit(1)
 
     unit = config.unit
 
@@ -327,11 +355,17 @@ async def cmd_now(args: argparse.Namespace, config: WeatherConfig) -> None:
 async def cmd_forecast(args: argparse.Namespace, config: WeatherConfig) -> None:
     location = args.location or config.location
     if not location:
-        console.print(
-            "[red]No location provided.  Use [bold]weather forecast CITY [DAYS][/] or set a default "
-            "with [bold]weather config --location CITY[/].[/]"
-        )
-        sys.exit(1)
+        async with aiohttp.ClientSession() as session:
+            detected = await detect_location_from_ip(session)
+            if detected:
+                location = detected
+                console.print(f"[dim]Auto-detected location: {location}[/]")
+            else:
+                console.print(
+                    "[red]No location provided.  Use [bold]weather forecast CITY [DAYS][/] or set a default "
+                    "with [bold]weather config --location CITY[/].[/]"
+                )
+                sys.exit(1)
 
     days = args.days
     if not 1 <= days <= 16:
