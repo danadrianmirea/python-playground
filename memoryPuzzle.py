@@ -210,10 +210,10 @@ class MemoryPuzzle:
         self.screen.blit(title, title_rect)
 
         subtitle = self.font_small.render("Select grid size:", True, GRAY)
-        sub_rect = subtitle.get_rect(center=(WINDOW_WIDTH // 2, 90))
+        sub_rect = subtitle.get_rect(center=(WINDOW_WIDTH // 2, 100))
         self.screen.blit(subtitle, sub_rect)
 
-        grid_sizes = [(4, 100), (6, 200), (8, 300)]
+        grid_sizes = [(4, 180), (6, 280), (8, 380)]
         for size, y_pos in grid_sizes:
             btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, y_pos, 200, 50)
             mouse_pos = pygame.mouse.get_pos()
