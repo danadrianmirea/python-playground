@@ -45,7 +45,7 @@ current_voice_key = None
 async def load_voices():
     """Fetch available voices from edge-tts and populate the VOICES dict.
     
-    Filters to English voices (en-* locale) for a manageable menu.
+    Includes English (en-*) and Romanian (ro-*) voices for a manageable menu.
     Returns the key of the first available voice, or None if no voices found.
     """
     global VOICES, current_voice_key
@@ -53,19 +53,18 @@ async def load_voices():
     print("  Loading available voices from edge-tts...")
     all_voices = await edge_tts.list_voices()
     
-    # Filter to English voices and build the VOICES dict
-    english_voices = [v for v in all_voices if v['Locale'].startswith('en-')]
+    # Filter to English and Romanian voices
+    filtered_voices = [v for v in all_voices if v['Locale'].startswith('en-') or v['Locale'].startswith('ro-')]
     
-    if not english_voices:
-        print("  No English voices found! Falling back to all available voices.")
-        english_voices = all_voices
+    if not filtered_voices:
+        print("  No English or Romanian voices found! Falling back to all available voices.")
+        filtered_voices = all_voices
     
     VOICES.clear()
-    for i, voice in enumerate(english_voices, 1):
+    for i, voice in enumerate(filtered_voices, 1):
         key = str(i)
         short_name = voice['ShortName']
         gender = voice['Gender']
-        friendly = voice['FriendlyName']
         # Build a concise display name: "Gender (ShortName)" e.g. "Female (en-US-JennyNeural)"
         display_name = f"{gender} ({short_name})"
         VOICES[key] = {
@@ -76,7 +75,7 @@ async def load_voices():
     # Set default to first voice
     if VOICES:
         current_voice_key = "1"
-        print(f"  Loaded {len(VOICES)} English voices.")
+        print(f"  Loaded {len(VOICES)} voices (English + Romanian).")
     else:
         print("  WARNING: No voices available from edge-tts!")
     
