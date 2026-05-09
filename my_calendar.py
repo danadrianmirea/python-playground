@@ -23,8 +23,15 @@ def display_current_year():
     print(cal.formatyear(now.year))
 
 
+def format_month_lines(year, month):
+    """Return the calendar for a given month as a list of lines."""
+    cal = calendar.TextCalendar()
+    lines = cal.formatmonth(year, month).splitlines()
+    return lines
+
+
 def display_context_months(offset):
-    """Display months around the current month with the given offset (±offset months)."""
+    """Display months around the current month, max 3 per row."""
     now = datetime.now()
     current_month = now.month
     current_year = now.year
@@ -44,22 +51,41 @@ def display_context_months(offset):
         end_month -= 12
         end_year += 1
 
-    cal = calendar.TextCalendar()
+    # Collect all months
+    months_data = []
+    year = start_year
+    month = start_month
+    while (year < end_year) or (year == end_year and month <= end_month):
+        months_data.append((year, month))
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
 
     print(f"\n{'=' * 28}")
     print(f"  Context: +/-{offset} month(s)")
     print(f"{'=' * 28}")
 
-    year = start_year
-    month = start_month
-    while (year < end_year) or (year == end_year and month <= end_month):
-        print(f"\n{calendar.month_name[month]} {year}")
-        print("-" * 28)
-        cal.prmonth(year, month)
-        month += 1
-        if month > 12:
-            month = 1
-            year += 1
+    # Display months in rows of 3
+    for i in range(0, len(months_data), 3):
+        row = months_data[i:i + 3]
+        # Get formatted lines for each month in the row
+        month_lines = [format_month_lines(y, m) for y, m in row]
+
+        # Determine max height for this row
+        max_lines = max(len(lines) for lines in month_lines)
+
+        # Pad each month's lines to the same height
+        for lines in month_lines:
+            while len(lines) < max_lines:
+                lines.append(" " * len(lines[0]) if lines else "")
+
+        # Print the row side by side
+        for line_idx in range(max_lines):
+            parts = []
+            for lines in month_lines:
+                parts.append(lines[line_idx])
+            print("   ".join(parts))
 
 
 def print_usage():
