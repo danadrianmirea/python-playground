@@ -38,14 +38,17 @@ CABLE_DEVICE_NAMES = [
 ]
 
 # Available English voices (male and female)
-# Full list: edge-tts --list-voices
+# Verified against edge-tts --list-voices
 VOICES = {
-    "1": {"name": "Female (Jenny)", "voice": "en-US-JennyNeural"},
-    "2": {"name": "Male (Guy)",     "voice": "en-US-GuyNeural"},
-    "3": {"name": "Female (Aria)",  "voice": "en-US-AriaNeural"},
-    "4": {"name": "Male (David)",   "voice": "en-US-DavidNeural"},
-    "5": {"name": "Female (Jane)",  "voice": "en-US-JaneNeural"},
-    "6": {"name": "Male (Steffan)", "voice": "en-US-SteffanNeural"},
+    "1": {"name": "Female (Jenny)",  "voice": "en-US-JennyNeural"},
+    "2": {"name": "Male (Guy)",      "voice": "en-US-GuyNeural"},
+    "3": {"name": "Female (Aria)",   "voice": "en-US-AriaNeural"},
+    "4": {"name": "Male (Brian)",    "voice": "en-US-BrianNeural"},
+    "5": {"name": "Female (Emma)",   "voice": "en-US-EmmaNeural"},
+    "6": {"name": "Male (Andrew)",   "voice": "en-US-AndrewNeural"},
+    "7": {"name": "Male (Steffan)",  "voice": "en-US-SteffanNeural"},
+    "8": {"name": "Male (Eric)",     "voice": "en-US-EricNeural"},
+    "9": {"name": "Male (Roger)",    "voice": "en-US-RogerNeural"},
 }
 
 current_voice_key = "2"  # Default to male (Guy)
@@ -119,15 +122,42 @@ def play_audio(file_path, device=None):
         sd.wait()
 
 
-async def generate_speech(text, voice):
-    """Generate TTS audio using edge-tts and save to a temp file."""
-    tts = edge_tts.Communicate(text=text, voice=voice)
+async def generate_speech(text, voice, retries=2):
+    """Generate TTS audio using edge-tts and save to a temp file.
     
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as f:
-        tmp_path = f.name
-    
-    await tts.save(tmp_path)
-    return tmp_path
+    Retries up to `retries` times if edge-tts fails to receive audio
+    (which can happen when switching voices).
+    """
+    for attempt in range(1, retries + 1):
+        try:
+            tts = edge_tts.Communicate(text=text, voice=voice)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as f:
+                tmp_path = f.name
+            
+            await tts.save(tmp_path)
+            return tmp_path
+        except Exception as e:
+            # Clean up temp file if it was created
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
+            
+            if attempt < retries:
+                print(f"  Retrying ({attempt}/{retries})...")
+                await asyncio.sleep(0.5)
+            else:
+                raise e
+
+
+async def test_voice(voice):
+    """Test if a voice works by generating a short phrase."""
+    try:
+        await generate_speech("test", voice, retries=1)
+        return True
+    except Exception:
+        return False
 
 
 def show_voice_menu():
@@ -139,10 +169,17 @@ def show_voice_menu():
         marker = " <-- current" if key == current_voice_key else ""
         print(f"    [{key}] {info['name']}{marker}")
     
-    choice = input("  Select voice (1-6): ").strip()
+    choice = input(f"  Select voice (1-{len(VOICES)}): ").strip()
     if choice in VOICES:
-        current_voice_key = choice
-        print(f"  Voice set to: {VOICES[choice]['name']}")
+        # Test the selected voice before switching
+        voice = VOICES[choice]['voice']
+        print(f"  Testing voice {VOICES[choice]['name']}...")
+        works = asyncio.run(test_voice(voice))
+        if works:
+            current_voice_key = choice
+            print(f"  Voice set to: {VOICES[choice]['name']}")
+        else:
+            print(f"  Voice '{VOICES[choice]['name']}' is not responding. Keeping current voice.")
     else:
         print(f"  Invalid choice, keeping current voice: {VOICES[current_voice_key]['name']}")
     print()
@@ -163,7 +200,22 @@ def main():
         print("  Continuing with default audio output (speakers).")
         print("  Install VB-Cable for virtual microphone functionality.\n")
     
-    print(f"  Current voice: {VOICES[current_voice_key]['name']}\n")
+    # Test the default voice on startup
+    default_voice = VOICES[current_voice_key]['voice']
+    print(f"  Testing default voice ({VOICES[current_voice_key]['name']})...")
+    works = asyncio.run(test_voice(default_voice))
+    if not works:
+        # Fall back to first working voice
+        print(f"  Default voice not responding, searching for working voice...")
+        for key, info in VOICES.items():
+            test_result = asyncio.run(test_voice(info['voice']))
+            if test_result:
+                current_voice_key = key
+                print(f"  Using voice: {info['name']}")
+                break
+    else:
+        print(f"  Voice OK: {VOICES[current_voice_key]['name']}")
+    print()
     
     while True:
         try:
