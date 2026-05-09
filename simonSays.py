@@ -101,6 +101,7 @@ SOUND_WIN = generate_chord([523, 659, 784, 1047], 0.6, 0.15)
 SOUND_LOSE = generate_buzzer(80, 0.5, 0.3)
 
 # Game state
+PAUSE_DURATION = 2000  # milliseconds
 COLORS = ['red', 'green', 'blue', 'yellow']
 COLOR_MAP = {
     'red': (RED, RED_DIM),
@@ -246,10 +247,10 @@ def show_game_over(score):
     screen.blit(overlay, (0, 0))
     
     texts = [
-        (font_large, "GAME OVER", WHITE, -60),
-        (font_medium, f"Score: {score}", WHITE, 0),
+        (font_large, "GAME OVER", WHITE, -120),
+        (font_medium, f"Score: {score}", WHITE, -40),
         (font_small, "Press SPACE to play again", GRAY, 50),
-        (font_small, "Press ESC to quit", GRAY, 90),
+        (font_small, "Press ESC to quit", GRAY, 120),
     ]
     
     for font, text, color, y_offset in texts:
@@ -269,11 +270,11 @@ def show_start_screen():
     screen.blit(overlay, (0, 0))
     
     texts = [
-        (font_large, "SIMON SAYS", WHITE, -80),
-        (font_small, "Watch the sequence, then repeat it!", GRAY, -20),
-        (font_small, "Click the colors in the correct order", GRAY, 10),
-        (font_medium, "Press SPACE to start", WHITE, 60),
-        (font_small, "Press ESC to quit", GRAY, 110),
+        (font_large, "SIMON SAYS", WHITE, -160),
+        (font_small, "Watch the sequence, then repeat it!", GRAY, -80),
+        (font_small, "Click the colors in the correct order", GRAY, 0),
+        (font_medium, "Press SPACE to start", WHITE, 80),
+        (font_small, "Press ESC to quit", GRAY, 150),
     ]
     
     for font, text, color, y_offset in texts:
@@ -346,7 +347,7 @@ def main():
                             sequence.append(random.choice(COLORS))
                             pause_message = "Well done!"
                             game_state = "pause"
-                            pause_until = pygame.time.get_ticks() + 1000
+                            pause_until = pygame.time.get_ticks() + PAUSE_DURATION
                             current_show_index = 0
                             input_index = 0
                             show_timer = 0
@@ -363,7 +364,7 @@ def main():
                             time.sleep(0.1)
                         pause_message = "Game over!"
                         game_state = "pause"
-                        pause_until = pygame.time.get_ticks() + 1000
+                        pause_until = pygame.time.get_ticks() + PAUSE_DURATION
         
         # Handle showing sequence
         if game_state == "showing":
