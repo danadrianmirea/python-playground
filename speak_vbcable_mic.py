@@ -15,6 +15,7 @@ Requirements:
 Usage:
 - Run the script, type text and press Enter to speak it
 - Type 'v' and press Enter to change voice (male/female)
+- Type '/v <number> <text>' to select a voice and speak in one go (e.g. '/v 10 Hello')
 - Type 'q' and press Enter to quit
 """
 
@@ -277,8 +278,28 @@ def main():
         if not text.strip():
             continue
         
-        voice = VOICES[current_voice_key]['voice']
-        voice_name = VOICES[current_voice_key]['name']
+        # Check for "/v <number> <text>" syntax to use a voice temporarily
+        # without changing the persistent voice selection
+        import re
+        match = re.match(r'^/v\s+(\d+)\s+(.*)', text.strip(), re.DOTALL)
+        if match:
+            voice_num = match.group(1)
+            speak_text = match.group(2).strip()
+            if voice_num in VOICES:
+                voice = VOICES[voice_num]['voice']
+                voice_name = VOICES[voice_num]['name']
+                print(f"  Using voice: {voice_name} (one-time)")
+            else:
+                print(f"  Voice number {voice_num} not found, using current voice.")
+                voice = VOICES[current_voice_key]['voice']
+                voice_name = VOICES[current_voice_key]['name']
+            if not speak_text:
+                continue
+            text = speak_text
+        else:
+            voice = VOICES[current_voice_key]['voice']
+            voice_name = VOICES[current_voice_key]['name']
+        
         print(f"  Generating speech ({voice_name})...")
         
         try:
