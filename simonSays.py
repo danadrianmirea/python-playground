@@ -38,7 +38,7 @@ YELLOW_DIM = (100, 100, 20)
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Simon Says")
 clock = pygame.time.Clock()
-font_large = pygame.font.SysFont("Arial", 48, bold=True)
+font_large = pygame.font.SysFont("Arial", 32, bold=True)
 font_medium = pygame.font.SysFont("Arial", 32)
 font_small = pygame.font.SysFont("Arial", 24)
 
