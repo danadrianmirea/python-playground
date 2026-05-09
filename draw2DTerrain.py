@@ -23,12 +23,13 @@ clock = pygame.time.Clock()
 # Terrain configuration
 maxTerrainHeight = 600
 minTerrainHeight = 0
-waterLevel = 100
-hillsLevel = 250
-mountainLevel = 450
+waterLevelPct = 0.3       
+hillsLevelPct = 0.6
+mountainLevelPct = 0.9
 numberOfSegments = 50
 roughness = 1.0
 baseHeight = HEIGHT
+
 
 
 
@@ -76,9 +77,10 @@ def generate_terrain_heights():
 
 
 def draw_water(surface):
-    water_level = baseHeight - waterLevel
-    water_color = SKY_BLUE;
+    water_level = baseHeight - int(maxTerrainHeight * waterLevelPct)
+    water_color = pygame.Color(0, 0, 255)
     pygame.draw.rect(surface, water_color, (0, water_level, WIDTH, HEIGHT - water_level))
+
 
 
 def lerp_color(c1, c2, t):
@@ -92,27 +94,44 @@ def lerp_color(c1, c2, t):
 
 def get_terrain_color(height):
     """Get terrain color based on height with smooth interpolation between zones."""
+    # Compute actual level values from percentages of maxTerrainHeight
+    water_level = maxTerrainHeight * waterLevelPct
+    hills_level = maxTerrainHeight * hillsLevelPct
+    mountain_level = maxTerrainHeight * mountainLevelPct
+
     # Zone colors
-    SAND = (238, 214, 175)      # Sandy yellow (below water)
+    SEABED = (0, 0, 0)          # Dark greenish-brown (deep underwater)
+    SAND = (34, 139, 34)        # (beach/waterline)
     GRASS = (34, 139, 34)       # Forest green
     HILL = (139, 119, 80)       # Brown
     SNOW = (255, 255, 255)      # White
 
-    if height <= waterLevel:
-        # Below water: interpolate between SAND and waterLevel
-        t = height / waterLevel if waterLevel > 0 else 0
+
+    if height <= water_level:
+        # Below water: interpolate from SEABED (deep) to SAND (near waterline)
+        t = height / water_level if water_level > 0 else 0
+        return lerp_color(SEABED, SAND, t)
+
+    # Above water: beach zone from waterline up to water_level + small transition
+    beach_top = water_level + (hills_level - water_level) * 0.15
+    if height <= beach_top:
+        # Beach: interpolate from SAND to GRASS
+        t = (height - water_level) / (beach_top - water_level) if beach_top > water_level else 0
         return lerp_color(SAND, GRASS, t)
-    elif height <= hillsLevel:
+
+    elif height <= hills_level:
         # Water level to hills: interpolate GRASS -> HILL
-        t = (height - waterLevel) / (hillsLevel - waterLevel)
+        t = (height - beach_top) / (hills_level - beach_top)
         return lerp_color(GRASS, HILL, t)
-    elif height <= mountainLevel:
+
+    elif height <= mountain_level:
         # Hills to mountain: interpolate HILL -> SNOW
-        t = (height - hillsLevel) / (mountainLevel - hillsLevel)
+        t = (height - hills_level) / (mountain_level - hills_level)
         return lerp_color(HILL, SNOW, t)
     else:
         # Above mountain: pure snow
         return SNOW
+
 
 
 def draw_terrain(surface, heights):
