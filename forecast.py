@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-forecast.py — Displays a calendar for the current week with temperatures for each day.
+forecast.py — Displays a calendar for the current week and the next week
+with temperatures for each day.
 
 Uses the Open-Meteo API (no API key required).
 
@@ -70,11 +71,21 @@ WMO_CODES: dict[int, tuple[str, str]] = {
 # Helpers
 # ---------------------------------------------------------------------------
 
-def get_week_days() -> list[date]:
+def get_current_week_days() -> list[date]:
     """Return a list of 7 dates from Monday to Sunday of the current week."""
     today = date.today()
     monday = today - timedelta(days=today.weekday())
     return [monday + timedelta(days=i) for i in range(7)]
+
+
+def get_next_week_days() -> list[date]:
+    """Return a list of 7 dates from next Monday to next Sunday."""
+    today = date.today()
+    days_until_monday = (7 - today.weekday()) % 7
+    if days_until_monday == 0:
+        days_until_monday = 7  # if today is Monday, go to next Monday
+    next_monday = today + timedelta(days=days_until_monday)
+    return [next_monday + timedelta(days=i) for i in range(7)]
 
 
 def load_config_location() -> str:
@@ -108,17 +119,17 @@ async def geocode(session: aiohttp.ClientSession, city: str) -> Optional[tuple[f
         return float(r["latitude"]), float(r["longitude"]), display
 
 
-async def fetch_week_forecast(
+async def fetch_forecast(
     session: aiohttp.ClientSession, lat: float, lon: float
 ) -> Optional[dict]:
-    """Fetch daily forecast for the next 7 days from Open-Meteo."""
+    """Fetch daily forecast for the next 14 days from Open-Meteo."""
     params = {
         "latitude": lat,
         "longitude": lon,
         "daily": "temperature_2m_max,temperature_2m_min,weather_code",
         "temperature_unit": "celsius",
         "timezone": "auto",
-        "forecast_days": 7,
+        "forecast_days": 14,
     }
     async with session.get(FORECAST_URL, params=params) as resp:
         if resp.status != 200:
@@ -134,42 +145,29 @@ def _weather_emoji(code: int) -> str:
 # Calendar display
 # ---------------------------------------------------------------------------
 
-def print_calendar(week_days: list[date], forecast: Optional[dict], city_display: str) -> None:
-    """Print a week calendar with temperatures."""
-    # Day name abbreviations
-    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-    # Extract forecast data keyed by date string "YYYY-MM-DD"
-    daily = forecast.get("daily", {}) if forecast else {}
+def build_forecast_map(forecast: Optional[dict]) -> dict[str, tuple[float, float, int]]:
+    """Build a lookup dict: date_str -> (high, low, weather_code)."""
+    forecast_map: dict[str, tuple[float, float, int]] = {}
+    if forecast is None:
+        return forecast_map
+    daily = forecast.get("daily", {})
     dates_api = daily.get("time", [])
     highs = daily.get("temperature_2m_max", [])
     lows = daily.get("temperature_2m_min", [])
     codes = daily.get("weather_code", [])
-
-    # Build lookup: date_str -> (high, low, code)
-    forecast_map: dict[str, tuple[float, float, int]] = {}
     for i, d in enumerate(dates_api):
         forecast_map[d] = (highs[i], lows[i], codes[i])
+    return forecast_map
 
-    # Header
-    today = date.today()
-    header = f"Weather Calendar — {city_display}"
-    sep = "=" * len(header)
-    print()
-    print(header)
-    print(sep)
-    print()
 
-    # Calendar grid
-    # ┌─────┬─────┬─────┬─────┬─────┬─────┬─────┐
-    # │ Mon │ Tue │ Wed │ Thu │ Fri │ Sat │ Sun │
-    # ├─────┼─────┼─────┼─────┼─────┼─────┼─────┤
-    # │  dd │  dd │  dd │  dd │  dd │  dd │  dd │
-    # ├─────┼─────┼─────┼─────┼─────┼─────┼─────┤
-    # │  H° │  H° │  H° │  H° │  H° │  H° │  H° │
-    # │  L° │  L° │  L° │  L° │  L° │  L° │  L° │
-    # └─────┴─────┴─────┴─────┴─────┴─────┴─────┘
-
+def print_week_calendar(
+    week_days: list[date],
+    forecast_map: dict[str, tuple[float, float, int]],
+    title: str,
+    today: date,
+) -> None:
+    """Print a single week calendar grid."""
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     cell_w = 7
 
     def render_row(cells: list[str]) -> str:
@@ -192,30 +190,31 @@ def print_calendar(week_days: list[date], forecast: Optional[dict], city_display
     for d in week_days:
         label = str(d.day)
         if d == today:
-            label = f"*{d.day}"  # mark today with an asterisk
+            label = f"*{d.day}"
         day_num_cells.append(label)
     num_row = render_row(day_num_cells)
 
-    # Row 3: High temps
+    # Rows 3-5: Emoji, High, Low
+    emoji_cells: list[str] = []
     high_cells: list[str] = []
     low_cells: list[str] = []
-    emoji_cells: list[str] = []
     for d in week_days:
         ds = d.isoformat()
         if ds in forecast_map:
             h, lo, c = forecast_map[ds]
+            emoji_cells.append(_weather_emoji(c))
             high_cells.append(f"{h:.0f}°C")
             low_cells.append(f"{lo:.0f}°C")
-            emoji_cells.append(_weather_emoji(c))
         else:
+            emoji_cells.append(" ")
             high_cells.append("--")
             low_cells.append("--")
-            emoji_cells.append(" ")
 
+    emoji_row = render_row(emoji_cells)
     high_row = render_row(high_cells)
     low_row = render_row(low_cells)
-    emoji_row = render_row(emoji_cells)
 
+    print(f"  {title}")
     print(top_border())
     print(day_row)
     print(mid_border())
@@ -225,10 +224,6 @@ def print_calendar(week_days: list[date], forecast: Optional[dict], city_display
     print(high_row)
     print(low_row)
     print(bot_border())
-
-    print()
-    if today in week_days:
-        print(f"  * = today ({today.isoformat()})")
     print()
 
 
@@ -252,13 +247,30 @@ async def main_async(location: str) -> None:
             sys.exit(1)
         lat, lon, display = geo
 
-        forecast = await fetch_week_forecast(session, lat, lon)
+        forecast = await fetch_forecast(session, lat, lon)
         if forecast is None:
             print("Failed to fetch forecast data.")
             sys.exit(1)
 
-    week_days = get_week_days()
-    print_calendar(week_days, forecast, display)
+    today = date.today()
+    forecast_map = build_forecast_map(forecast)
+
+    current_week = get_current_week_days()
+    next_week = get_next_week_days()
+
+    # Header
+    header = f"Weather Forecast — {display}"
+    sep = "=" * len(header)
+    print()
+    print(header)
+    print(sep)
+    print()
+
+    print_week_calendar(current_week, forecast_map, "This Week", today)
+    print_week_calendar(next_week, forecast_map, "Next Week", today)
+
+    print(f"  * = today ({today.isoformat()})")
+    print()
 
 
 def main() -> None:
