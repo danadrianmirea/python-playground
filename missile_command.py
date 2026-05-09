@@ -38,10 +38,10 @@ NUM_CITIES = 6
 CITY_WIDTH = 40
 CITY_HEIGHT = 25
 AMMO_PER_WAVE = 30
-INTERCEPTOR_SPEED = 12
-ENEMY_MISSILE_SPEED_BASE = 3
-EXPLOSION_RADIUS = 40
-EXPLOSION_DURATION = 30  # frames
+INTERCEPTOR_SPEED = 14
+ENEMY_MISSILE_SPEED_BASE = 1.2
+EXPLOSION_RADIUS = 50
+EXPLOSION_DURATION = 35  # frames
 
 # Fonts
 font = pygame.font.Font(None, 36)
@@ -227,8 +227,8 @@ class Game:
     def start_wave(self):
         self.wave += 1
         self.wave_active = True
-        self.ammo = AMMO_PER_WAVE + self.wave * 5
-        self.missiles_this_wave = 5 + self.wave * 3
+        self.ammo = AMMO_PER_WAVE + self.wave * 8
+        self.missiles_this_wave = 3 + self.wave * 2
         self.missiles_spawned = 0
         self.missiles_destroyed = 0
         self.wave_delay = 0
@@ -256,7 +256,7 @@ class Game:
             target_x = random.randint(50, SCREEN_WIDTH - 50)
             target_y = GROUND_Y + random.randint(-10, 10)
 
-        speed = ENEMY_MISSILE_SPEED_BASE + random.uniform(0, self.wave * 0.3)
+        speed = ENEMY_MISSILE_SPEED_BASE + random.uniform(0, self.wave * 0.15)
         color = random.choice([RED, ORANGE, (255, 100, 100)])
         self.enemy_missiles.append(Missile(start_x, start_y, target_x, target_y, speed, color, is_enemy=True))
         self.missiles_spawned += 1
@@ -286,12 +286,14 @@ class Game:
         # Spawn enemy missiles
         if self.missiles_spawned < self.missiles_this_wave:
             self.wave_delay += 1
-            spawn_rate = max(10, 30 - self.wave * 2)
+            spawn_rate = max(15, 60 - self.wave * 3)
             if self.wave_delay >= spawn_rate:
                 self.wave_delay = 0
                 self.spawn_enemy_missile()
                 # Sometimes spawn multiple at once in later waves
-                if self.wave > 3 and random.random() < 0.3:
+                if self.wave > 5 and random.random() < 0.2 + self.wave * 0.02:
+                    self.spawn_enemy_missile()
+                if self.wave > 10 and random.random() < 0.1 + self.wave * 0.01:
                     self.spawn_enemy_missile()
 
         # Update enemy missiles
