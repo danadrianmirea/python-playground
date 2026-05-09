@@ -63,10 +63,10 @@ def display_context_months(offset):
 
 
 def print_usage():
-    print("Usage: python my_calendar.py [option]")
+    print("Usage: python my_calendar.py <option>")
     print()
     print("Options:")
-    print("  (no argument)    Display the current month")
+    print("  month            Display the current month")
     print("  year             Display the entire current year")
     print("  1                Display current month +/-1 month")
     print("  3                Display current month +/-3 months")
@@ -75,11 +75,13 @@ def print_usage():
 
 def main():
     if len(sys.argv) == 1:
-        display_current_month()
+        print_usage()
     elif len(sys.argv) == 2:
         arg = sys.argv[1]
         if arg in ("-h", "--help"):
             print_usage()
+        elif arg == "month":
+            display_current_month()
         elif arg == "year":
             display_current_year()
         elif arg == "1":
