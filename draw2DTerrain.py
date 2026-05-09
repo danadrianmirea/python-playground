@@ -22,10 +22,11 @@ clock = pygame.time.Clock()
 
 # Terrain configuration
 maxTerrainHeight = 300
-minTerrainHeight = 50
+minTerrainHeight = 0
+waterLevel = 100
 numberOfSegments = 50
 roughness = 1.0
-baseHeight = HEIGHT - 100
+baseHeight = HEIGHT
 
 
 
@@ -71,6 +72,12 @@ def generate_terrain_heights():
 
 
 
+def draw_water(surface):
+    water_level = baseHeight - waterLevel
+    water_color = SKY_BLUE;
+    pygame.draw.rect(surface, water_color, (0, water_level, WIDTH, HEIGHT - water_level))
+
+
 def draw_terrain(surface, heights):
     """Draw the terrain as a filled polygon at the bottom of the screen."""
     segment_width = WIDTH / (numberOfSegments - 1)
@@ -99,6 +106,7 @@ def draw_terrain(surface, heights):
         x2 = (i + 1) * segment_width
         y2 = int(heights[i + 1])
         pygame.draw.line(surface, edge_color, (x1, y1), (x2, y2), 2)
+
 
 
 
@@ -170,8 +178,10 @@ def main():
 
         # Draw
         draw_sky(screen)
+        draw_water(screen)
         draw_terrain(screen, heights)
         draw_ui(screen)
+
 
         pygame.display.flip()
         clock.tick(FPS)
