@@ -126,3 +126,5 @@ token.txt
 
 .claude/
 .deepseek/
+
+*.mp3
