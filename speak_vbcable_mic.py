@@ -37,21 +37,50 @@ CABLE_DEVICE_NAMES = [
     "Stereo Mix",         # Windows Stereo Mix (may work as loopback)
 ]
 
-# Available English voices (male and female)
-# Verified against edge-tts --list-voices
-VOICES = {
-    "1": {"name": "Female (Jenny)",  "voice": "en-US-JennyNeural"},
-    "2": {"name": "Male (Guy)",      "voice": "en-US-GuyNeural"},
-    "3": {"name": "Female (Aria)",   "voice": "en-US-AriaNeural"},
-    "4": {"name": "Male (Brian)",    "voice": "en-US-BrianNeural"},
-    "5": {"name": "Female (Emma)",   "voice": "en-US-EmmaNeural"},
-    "6": {"name": "Male (Andrew)",   "voice": "en-US-AndrewNeural"},
-    "7": {"name": "Male (Steffan)",  "voice": "en-US-SteffanNeural"},
-    "8": {"name": "Male (Eric)",     "voice": "en-US-EricNeural"},
-    "9": {"name": "Male (Roger)",    "voice": "en-US-RogerNeural"},
-}
+# Will be populated dynamically at startup from edge-tts --list-voices
+VOICES = {}
+current_voice_key = None
 
-current_voice_key = "2"  # Default to male (Guy)
+
+async def load_voices():
+    """Fetch available voices from edge-tts and populate the VOICES dict.
+    
+    Filters to English voices (en-* locale) for a manageable menu.
+    Returns the key of the first available voice, or None if no voices found.
+    """
+    global VOICES, current_voice_key
+    
+    print("  Loading available voices from edge-tts...")
+    all_voices = await edge_tts.list_voices()
+    
+    # Filter to English voices and build the VOICES dict
+    english_voices = [v for v in all_voices if v['Locale'].startswith('en-')]
+    
+    if not english_voices:
+        print("  No English voices found! Falling back to all available voices.")
+        english_voices = all_voices
+    
+    VOICES.clear()
+    for i, voice in enumerate(english_voices, 1):
+        key = str(i)
+        short_name = voice['ShortName']
+        gender = voice['Gender']
+        friendly = voice['FriendlyName']
+        # Build a concise display name: "Gender (ShortName)" e.g. "Female (en-US-JennyNeural)"
+        display_name = f"{gender} ({short_name})"
+        VOICES[key] = {
+            "name": display_name,
+            "voice": short_name,
+        }
+    
+    # Set default to first voice
+    if VOICES:
+        current_voice_key = "1"
+        print(f"  Loaded {len(VOICES)} English voices.")
+    else:
+        print("  WARNING: No voices available from edge-tts!")
+    
+    return current_voice_key
 
 
 def find_virtual_cable_device():
@@ -164,6 +193,10 @@ def show_voice_menu():
     """Display available voices and let the user pick one."""
     global current_voice_key
     
+    if not VOICES:
+        print("\n  No voices available. Try restarting the script.")
+        return
+    
     print("\n  Available voices:")
     for key, info in VOICES.items():
         marker = " <-- current" if key == current_voice_key else ""
@@ -192,6 +225,13 @@ def main():
     print("Type text and press Enter to speak it through the virtual mic.")
     print("Type 'v' and press Enter to change voice.")
     print("Type 'q' and press Enter to quit.\n")
+    
+    # Load voices dynamically from edge-tts
+    asyncio.run(load_voices())
+    
+    if not VOICES:
+        print("  ERROR: No voices available. Exiting.")
+        return
     
     # Find virtual cable device
     cable_device = find_virtual_cable_device()
