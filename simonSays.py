@@ -8,7 +8,7 @@ import numpy as np
 
 # Initialize Pygame
 pygame.init()
-pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=1024)
 
 # Constants
 WIDTH, HEIGHT = 800, 800
@@ -45,7 +45,7 @@ font_small = pygame.font.SysFont("Arial", 24)
 # Sound generation using pygame's synth
 def generate_tone(frequency, duration=0.3, volume=0.2):
     """Generate a sine wave tone and return a pygame Sound object."""
-    sample_rate = 22050
+    sample_rate = 44100
     n_samples = int(sample_rate * duration)
     # Create stereo array (2 channels) as int16
     t = np.arange(n_samples, dtype=np.float64)
@@ -56,7 +56,7 @@ def generate_tone(frequency, duration=0.3, volume=0.2):
 
 def generate_chord(frequencies, duration=0.5, volume=0.15):
     """Generate a pleasant chord from a list of frequencies."""
-    sample_rate = 22050
+    sample_rate = 44100
     n_samples = int(sample_rate * duration)
     t = np.arange(n_samples, dtype=np.float64)
     # Mix multiple frequencies
@@ -70,7 +70,7 @@ def generate_chord(frequencies, duration=0.5, volume=0.15):
 
 def generate_buzzer(frequency=100, duration=0.3, volume=0.3):
     """Generate a harsh buzzer sound for losing."""
-    sample_rate = 22050
+    sample_rate = 44100
     n_samples = int(sample_rate * duration)
     t = np.arange(n_samples, dtype=np.float64)
     # Square wave with some noise for harshness
