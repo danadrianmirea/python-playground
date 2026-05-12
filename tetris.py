@@ -130,12 +130,15 @@ class Tetris:
         self.das_left_timer = 0
         self.das_right_timer = 0
         self.das_down_timer = 0
+        self.das_rotate_timer = 0
         self.das_left_active = False
         self.das_right_active = False
         self.das_down_active = False
+        self.das_rotate_active = False
         self.das_left_triggered = False
         self.das_right_triggered = False
         self.das_down_triggered = False
+        self.das_rotate_triggered = False
 
         self._spawn_piece()
 
@@ -305,6 +308,18 @@ class Tetris:
                 if self.das_down_timer >= self.das_rate:
                     self.das_down_timer = 0
                     self.move_down()
+
+        if self.das_rotate_active:
+            self.das_rotate_timer += dt
+            if not self.das_rotate_triggered:
+                if self.das_rotate_timer >= self.das_delay:
+                    self.das_rotate_triggered = True
+                    self.das_rotate_timer = 0
+                    self.rotate_piece()
+            else:
+                if self.das_rotate_timer >= self.das_rate:
+                    self.das_rotate_timer = 0
+                    self.rotate_piece()
 
         self.drop_timer += dt
         if self.drop_timer >= self.drop_delay:
@@ -481,6 +496,9 @@ def main():
                     game.das_down_triggered = False
                 elif event.key == pygame.K_UP or event.key == pygame.K_w:
                     game.rotate_piece()
+                    game.das_rotate_active = True
+                    game.das_rotate_timer = 0
+                    game.das_rotate_triggered = False
                 elif event.key == pygame.K_SPACE:
                     game.hard_drop()
                     game.drop_timer = 0
@@ -496,6 +514,9 @@ def main():
                     game.soft_dropping = False
                     game.das_down_active = False
                     game.das_down_triggered = False
+                if event.key == pygame.K_UP or event.key == pygame.K_w:
+                    game.das_rotate_active = False
+                    game.das_rotate_triggered = False
 
         # Update
         if game.soft_dropping:
