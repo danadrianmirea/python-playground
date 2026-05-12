@@ -95,7 +95,7 @@ def point_to_segment_distance(point, seg_a, seg_b):
 class Car:
     """A race car."""
 
-    def __init__(self, x, y, color, name="Player", is_player=False):
+    def __init__(self, x, y, color, name="Player", is_player=False, start_angle=0):
         self.x = x
         self.y = y
         self.color = color
@@ -103,7 +103,7 @@ class Car:
         self.is_player = is_player
 
         # Car physics
-        self.angle = 0  # radians, 0 = right
+        self.angle = start_angle  # radians, 0 = right
         self.speed = 0
         self.max_speed = 6 if is_player else 5
         self.acceleration = 0.15
@@ -116,13 +116,14 @@ class Car:
         self.height = 20
 
         # Racing state
-        self.current_waypoint = 0
+        self.current_waypoint = 1  # Start aiming for waypoint 1 (not 0, since we start near 0)
         self.lap = 0
         self.laps_completed = 0
         self.total_laps = 3
         self.finished = False
         self.finish_time = 0
         self.race_time = 0
+        self.last_waypoint_time = 0  # Prevent double-triggering
 
         # AI state
         self.ai_target_speed = 0
@@ -190,15 +191,19 @@ class Car:
         dy = self.y - target[1]
         dist = math.sqrt(dx * dx + dy * dy)
 
-        if dist < 40:
+        if dist < 120:
+            prev_waypoint = self.current_waypoint
             self.current_waypoint = (self.current_waypoint + 1) % len(waypoints)
+            print(f"{self.name}: reached waypoint {prev_waypoint}, now heading to {self.current_waypoint}, pos=({int(self.x)},{int(self.y)})", flush=True)
 
-            # Check if we completed a lap
-            if self.current_waypoint == 0:
+            # Check if we completed a lap (crossed from last waypoint back to waypoint 0)
+            if prev_waypoint == len(waypoints) - 1 and self.current_waypoint == 0:
                 self.laps_completed += 1
+                print(f"LAP COMPLETED! {self.name} lap {self.laps_completed}/{self.total_laps}", flush=True)
                 if self.laps_completed >= self.total_laps:
                     self.finished = True
                     self.finish_time = self.race_time
+                    print(f"{self.name} FINISHED!", flush=True)
 
     def is_on_track(self, waypoints):
         """Check if car is on the track (within TRACK_WIDTH of center line)."""
@@ -260,8 +265,8 @@ class Car:
 class AICar(Car):
     """AI-controlled car."""
 
-    def __init__(self, x, y, color, name):
-        super().__init__(x, y, color, name, is_player=False)
+    def __init__(self, x, y, color, name, start_angle=0):
+        super().__init__(x, y, color, name, is_player=False, start_angle=start_angle)
         self.max_speed = 4 + random.uniform(0.5, 1.5)
         self.look_ahead = 2  # waypoints to look ahead
         self.steering_noise = random.uniform(-0.01, 0.01)
@@ -314,7 +319,7 @@ class AICar(Car):
             self.brake()
 
         # Check if stuck (very slow and near waypoint)
-        if self.speed < 1 and dist_to_next < 60:
+        if self.speed < 1 and dist_to_next < 120:
             self.speed = 2
             self.angle += 0.1  # nudge to get unstuck
 
@@ -337,7 +342,10 @@ class Game:
 
         # Create player car
         start_pos = self._get_start_position()
-        self.player = Car(start_pos[0], start_pos[1], RED, "Player", is_player=True)
+        # Calculate starting angle to face waypoint 1
+        wp1 = self.waypoints[1]
+        start_angle = math.atan2(wp1[1] - start_pos[1], wp1[0] - start_pos[0])
+        self.player = Car(start_pos[0], start_pos[1], RED, "Player", is_player=True, start_angle=start_angle)
         self.cars.append(self.player)
 
         # Create AI cars
@@ -349,7 +357,7 @@ class Game:
         for i, (name, color) in enumerate(ai_configs):
             offset = (i + 1) * 30
             ai_start = (start_pos[0] - offset, start_pos[1])
-            ai_car = AICar(ai_start[0], ai_start[1], color, name)
+            ai_car = AICar(ai_start[0], ai_start[1], color, name, start_angle=start_angle)
             self.cars.append(ai_car)
 
     def _generate_grass(self):
@@ -372,13 +380,13 @@ class Game:
         return patches
 
     def _get_start_position(self):
-        """Get the starting position on the track."""
-        # Start between first and last waypoint
+        """Get the starting position on the track center line."""
+        # Start between first and last waypoint, on the center line
         a = self.waypoints[0]
         b = self.waypoints[-1]
         mx = (a[0] + b[0]) / 2
         my = (a[1] + b[1]) / 2
-        return (mx, my - TRACK_WIDTH // 2)
+        return (mx, my)
 
     def handle_event(self, event):
         """Handle keyboard input."""
@@ -430,6 +438,14 @@ class Game:
         # Update camera to follow player
         self.camera_x = self.player.x - SCREEN_WIDTH // 2
         self.camera_y = self.player.y - SCREEN_HEIGHT // 2
+
+        # Log player position periodically (every 30 frames)
+        if self.race_started and self.player.race_time % 30 == 0:
+            target = self.waypoints[self.player.current_waypoint]
+            dx = self.player.x - target[0]
+            dy = self.player.y - target[1]
+            dist = math.sqrt(dx * dx + dy * dy)
+            print(f"POS: player=({int(self.player.x)},{int(self.player.y)}) heading_to_wp={self.player.current_waypoint} wp_pos=({target[0]},{target[1]}) dist_to_wp={int(dist)} speed={self.player.speed:.1f} angle={math.degrees(self.player.angle):.0f}deg", flush=True)
 
         # Check finish
         finished_cars = [c for c in self.cars if c.finished and c not in self.finished_positions]
@@ -589,6 +605,19 @@ class Game:
                 p2 = (a[0] + (b[0] - a[0]) * t2 - self.camera_x,
                       a[1] + (b[1] - a[1]) * t2 - self.camera_y)
                 pygame.draw.line(surface, YELLOW, p1, p2, 2)
+
+        # Draw waypoints as numbered circles
+        for i, wp in enumerate(self.waypoints):
+            sx = wp[0] - self.camera_x
+            sy = wp[1] - self.camera_y
+            # Draw waypoint circle
+            color = GREEN if i == self.player.current_waypoint else RED
+            pygame.draw.circle(surface, color, (int(sx), int(sy)), 8, 2)
+            # Draw waypoint number
+            wp_text = small_font.render(str(i), True, WHITE)
+            surface.blit(wp_text, (sx - 4, sy - 20))
+            # Draw detection radius
+            pygame.draw.circle(surface, (255, 255, 0, 128), (int(sx), int(sy)), 120, 1)
 
     def _draw_finish_line(self, surface):
         """Draw the start/finish line."""
