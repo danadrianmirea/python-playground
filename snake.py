@@ -155,13 +155,13 @@ def main():
                 pygame.quit()
                 sys.exit()
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and direction != DOWN:
+                if (event.key == pygame.K_UP or event.key == pygame.K_w) and direction != DOWN:
                     next_direction = UP
-                elif event.key == pygame.K_DOWN and direction != UP:
+                elif (event.key == pygame.K_DOWN or event.key == pygame.K_s) and direction != UP:
                     next_direction = DOWN
-                elif event.key == pygame.K_LEFT and direction != RIGHT:
+                elif (event.key == pygame.K_LEFT or event.key == pygame.K_a) and direction != RIGHT:
                     next_direction = LEFT
-                elif event.key == pygame.K_RIGHT and direction != LEFT:
+                elif (event.key == pygame.K_RIGHT or event.key == pygame.K_d) and direction != LEFT:
                     next_direction = RIGHT
 
         # Apply direction
@@ -210,6 +210,10 @@ def main():
         # Draw score
         score_text = score_font.render(f"Score: {score}", True, WHITE)
         screen.blit(score_text, (10, 10))
+
+        # Draw controls
+        controls_text = font.render("WASD / Arrow Keys to move", True, LIGHT_GRAY)
+        screen.blit(controls_text, (10, 50))
 
         pygame.display.flip()
         clock.tick(FPS)
