@@ -150,21 +150,36 @@ class Brick:
                 ball.y - BALL_RADIUS <= self.y + self.height):
             self.active = False
 
-            # Determine bounce direction
-            # Calculate overlap on each side
+            # Determine bounce direction based on ball's movement direction
+            # and the overlap amounts
             overlap_left = (ball.x + BALL_RADIUS) - self.x
             overlap_right = (self.x + self.width) - (ball.x - BALL_RADIUS)
             overlap_top = (ball.y + BALL_RADIUS) - self.y
             overlap_bottom = (self.y + self.height) - (ball.y - BALL_RADIUS)
 
-            # Find smallest overlap to determine bounce direction
-            min_overlap_x = min(overlap_left, overlap_right)
-            min_overlap_y = min(overlap_top, overlap_bottom)
-
-            if min_overlap_x < min_overlap_y:
-                ball.speed_x *= -1
+            # Use the ball's velocity to help determine which side was hit
+            # If ball is moving more horizontally than vertically, prefer horizontal bounce
+            # and vice versa, but only if the overlap on that axis is reasonable
+            if abs(ball.speed_x) > abs(ball.speed_y):
+                # Moving more horizontally - likely hit left/right side
+                if overlap_left < overlap_right:
+                    ball.speed_x = -abs(ball.speed_x)  # bounce left
+                else:
+                    ball.speed_x = abs(ball.speed_x)   # bounce right
+            elif abs(ball.speed_y) > abs(ball.speed_x):
+                # Moving more vertically - likely hit top/bottom
+                if overlap_top < overlap_bottom:
+                    ball.speed_y = -abs(ball.speed_y)  # bounce up
+                else:
+                    ball.speed_y = abs(ball.speed_y)   # bounce down
             else:
-                ball.speed_y *= -1
+                # Diagonal movement - use overlap comparison
+                min_overlap_x = min(overlap_left, overlap_right)
+                min_overlap_y = min(overlap_top, overlap_bottom)
+                if min_overlap_x < min_overlap_y:
+                    ball.speed_x *= -1
+                else:
+                    ball.speed_y *= -1
 
             return True
         return False
