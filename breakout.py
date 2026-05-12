@@ -78,14 +78,13 @@ class Ball:
             self.speed_y *= -1
 
         # Bounce off left and right walls
-        if self.x <= 0 or self.x >= SCREEN_WIDTH - BALL_RADIUS:
+        if self.x <= BALL_RADIUS or self.x >= SCREEN_WIDTH - BALL_RADIUS:
             self.speed_x *= -1
-
-        # Keep ball within horizontal bounds
-        if self.x < BALL_RADIUS:
-            self.x = BALL_RADIUS
-        if self.x > SCREEN_WIDTH - BALL_RADIUS:
-            self.x = SCREEN_WIDTH - BALL_RADIUS
+            # Keep ball within horizontal bounds
+            if self.x < BALL_RADIUS:
+                self.x = BALL_RADIUS
+            if self.x > SCREEN_WIDTH - BALL_RADIUS:
+                self.x = SCREEN_WIDTH - BALL_RADIUS
 
     def draw(self, surface):
         pygame.draw.circle(surface, BALL_COLOR, (int(self.x), int(self.y)), BALL_RADIUS)
