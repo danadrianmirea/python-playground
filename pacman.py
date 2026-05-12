@@ -301,8 +301,9 @@ class Ghost:
                 continue
 
             if self.mode == 'frightened':
-                # Random direction
-                return random.choice(neighbors)
+                # Random direction - pick a random neighbor and return the direction vector
+                nc, nr = random.choice(neighbors)
+                return (nc - self.col, nr - self.row)
 
             dist = (nc - target[0]) ** 2 + (nr - target[1]) ** 2
             if dist < best_dist:
@@ -322,13 +323,18 @@ class Ghost:
                 self.x, self.y = get_pixel_pos(self.col, self.row)
             return
 
-        # Handle eaten state
+        # Handle eaten state - ghost returns to ghost house
         if self.eaten:
             target = (13, 11)
             if (self.col, self.row) == target:
                 self.eaten = False
-                self.mode = 'scatter'
+                self.in_house = True
+                self.house_timer = 0
+                self.col, self.row = GHOST_START[self.name]
+                self.x, self.y = get_pixel_pos(self.col, self.row)
+                self.direction = (0, 0)
                 self.speed = 1.5
+                self.mode = 'scatter'
 
         # Update frightened timer
         if self.mode == 'frightened':
@@ -336,6 +342,7 @@ class Ghost:
             self.flash_timer += 1
             if self.frightened_timer <= 0:
                 self.mode = 'scatter'
+                self.speed = 1.5  # Restore normal speed
 
         # Move ghost
         grid_x, grid_y = get_grid_pos(self.x, self.y)
@@ -362,20 +369,25 @@ class Ghost:
 
     def draw(self, surface):
         """Draw the ghost."""
-        if self.in_house:
-            return
-
         cx, cy = self.x, self.y
-        color = self.color
 
         if self.eaten:
-            # Draw just eyes
-            eye_color = WHITE
-            pygame.draw.circle(surface, eye_color, (cx - 5, cy - 3), 4)
-            pygame.draw.circle(surface, eye_color, (cx + 5, cy - 3), 4)
+            # Draw just eyes (fleeing back to ghost house)
+            pygame.draw.circle(surface, WHITE, (cx - 5, cy - 3), 4)
+            pygame.draw.circle(surface, WHITE, (cx + 5, cy - 3), 4)
             pygame.draw.circle(surface, BLACK, (cx - 5 + self.direction[0] * 2, cy - 3 + self.direction[1] * 2), 2)
             pygame.draw.circle(surface, BLACK, (cx + 5 + self.direction[0] * 2, cy - 3 + self.direction[1] * 2), 2)
             return
+
+        if self.in_house:
+            # Draw a faint ghost inside the house
+            color = self.color
+            alpha_body = pygame.Rect(cx - TILE_CENTER + 2, cy - TILE_CENTER + 2,
+                                     TILE_SIZE - 4, TILE_SIZE - 4)
+            pygame.draw.ellipse(surface, color, alpha_body)
+            return
+
+        color = self.color
 
         if self.mode == 'frightened':
             if self.frightened_timer < 120 and self.flash_timer % 10 < 5:
@@ -493,10 +505,11 @@ class Game:
         self.power_timer = 300  # 5 seconds
         self.ghost_combo = 0
         for ghost in self.ghosts:
-            if not ghost.eaten and not ghost.in_house:
+            if not ghost.eaten:
                 ghost.mode = 'frightened'
                 ghost.frightened_timer = 300
                 ghost.flash_timer = 0
+                ghost.speed = 1.0  # Slower when frightened
                 # Reverse direction
                 ghost.direction = (-ghost.direction[0], -ghost.direction[1])
 
@@ -507,9 +520,9 @@ class Game:
                 continue
             if (self.pacman.col, self.pacman.row) == (ghost.col, ghost.row):
                 if ghost.mode == 'frightened':
-                    # Eat ghost
+                    # Eat ghost - it flees back to the ghost house
                     ghost.eaten = True
-                    ghost.speed = 4
+                    ghost.speed = 4  # Fast return to house
                     self.ghost_combo += 1
                     self.score += 200 * (2 ** self.ghost_combo)
                 else:
