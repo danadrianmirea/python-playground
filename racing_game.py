@@ -267,9 +267,9 @@ class AICar(Car):
 
     def __init__(self, x, y, color, name, start_angle=0):
         super().__init__(x, y, color, name, is_player=False, start_angle=start_angle)
-        self.max_speed = 4 + random.uniform(0.5, 1.5)
+        self.max_speed = 5.5 + random.uniform(0.3, 0.8)
         self.look_ahead = 2  # waypoints to look ahead
-        self.steering_noise = random.uniform(-0.01, 0.01)
+        self.steering_noise = random.uniform(-0.005, 0.005)
 
     def update_ai(self, waypoints):
         """AI steering logic."""
@@ -293,10 +293,10 @@ class AICar(Car):
             angle_diff += 2 * math.pi
 
         # Steer towards target - stronger steering
-        steer_strength = 0.06
-        if angle_diff > 0.05:
+        steer_strength = 0.07
+        if angle_diff > 0.03:
             self.angle += steer_strength + self.steering_noise
-        elif angle_diff < -0.05:
+        elif angle_diff < -0.03:
             self.angle -= steer_strength + self.steering_noise
 
         # Speed control - always go fast, slight slowdown for sharp turns
@@ -304,9 +304,9 @@ class AICar(Car):
                                   (waypoints[self.current_waypoint][1] - self.y) ** 2)
 
         if abs(angle_diff) > 0.8:
-            self.ai_target_speed = self.max_speed * 0.6
+            self.ai_target_speed = self.max_speed * 0.7
         elif abs(angle_diff) > 0.5:
-            self.ai_target_speed = self.max_speed * 0.8
+            self.ai_target_speed = self.max_speed * 0.85
         else:
             self.ai_target_speed = self.max_speed
 
@@ -318,8 +318,8 @@ class AICar(Car):
 
         # Check if stuck (very slow and near waypoint)
         if self.speed < 1 and dist_to_next < 120:
-            self.speed = 3
-            self.angle += 0.2  # stronger nudge to get unstuck
+            self.speed = 4
+            self.angle += 0.3  # stronger nudge to get unstuck
 
 
 class Game:
