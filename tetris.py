@@ -123,6 +123,20 @@ class Tetris:
         self.lock_delay = 0
         self.lock_moves = 0
         self.soft_dropping = False
+
+        # Auto-repeat (DAS) settings
+        self.das_delay = 170  # ms before auto-repeat starts
+        self.das_rate = 50    # ms between auto-repeat actions
+        self.das_left_timer = 0
+        self.das_right_timer = 0
+        self.das_down_timer = 0
+        self.das_left_active = False
+        self.das_right_active = False
+        self.das_down_active = False
+        self.das_left_triggered = False
+        self.das_right_triggered = False
+        self.das_down_triggered = False
+
         self._spawn_piece()
 
     def _get_next_from_bag(self):
@@ -254,6 +268,43 @@ class Tetris:
         """Update game state. Called every frame."""
         if self.game_over:
             return
+
+        # Auto-repeat handling
+        if self.das_left_active:
+            self.das_left_timer += dt
+            if not self.das_left_triggered:
+                if self.das_left_timer >= self.das_delay:
+                    self.das_left_triggered = True
+                    self.das_left_timer = 0
+                    self.move_left()
+            else:
+                if self.das_left_timer >= self.das_rate:
+                    self.das_left_timer = 0
+                    self.move_left()
+
+        if self.das_right_active:
+            self.das_right_timer += dt
+            if not self.das_right_triggered:
+                if self.das_right_timer >= self.das_delay:
+                    self.das_right_triggered = True
+                    self.das_right_timer = 0
+                    self.move_right()
+            else:
+                if self.das_right_timer >= self.das_rate:
+                    self.das_right_timer = 0
+                    self.move_right()
+
+        if self.das_down_active:
+            self.das_down_timer += dt
+            if not self.das_down_triggered:
+                if self.das_down_timer >= self.das_delay:
+                    self.das_down_triggered = True
+                    self.das_down_timer = 0
+                    self.move_down()
+            else:
+                if self.das_down_timer >= self.das_rate:
+                    self.das_down_timer = 0
+                    self.move_down()
 
         self.drop_timer += dt
         if self.drop_timer >= self.drop_delay:
@@ -415,10 +466,19 @@ def main():
 
                 if event.key == pygame.K_LEFT or event.key == pygame.K_a:
                     game.move_left()
+                    game.das_left_active = True
+                    game.das_left_timer = 0
+                    game.das_left_triggered = False
                 elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
                     game.move_right()
+                    game.das_right_active = True
+                    game.das_right_timer = 0
+                    game.das_right_triggered = False
                 elif event.key == pygame.K_DOWN or event.key == pygame.K_s:
                     game.soft_dropping = True
+                    game.das_down_active = True
+                    game.das_down_timer = 0
+                    game.das_down_triggered = False
                 elif event.key == pygame.K_UP or event.key == pygame.K_w:
                     game.rotate_piece()
                 elif event.key == pygame.K_SPACE:
@@ -426,8 +486,16 @@ def main():
                     game.drop_timer = 0
 
             if event.type == pygame.KEYUP:
+                if event.key == pygame.K_LEFT or event.key == pygame.K_a:
+                    game.das_left_active = False
+                    game.das_left_triggered = False
+                if event.key == pygame.K_RIGHT or event.key == pygame.K_d:
+                    game.das_right_active = False
+                    game.das_right_triggered = False
                 if event.key == pygame.K_DOWN or event.key == pygame.K_s:
                     game.soft_dropping = False
+                    game.das_down_active = False
+                    game.das_down_triggered = False
 
         # Update
         if game.soft_dropping:
