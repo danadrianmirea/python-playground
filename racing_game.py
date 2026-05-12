@@ -276,9 +276,8 @@ class AICar(Car):
         if self.finished:
             return
 
-        # Look ahead a few waypoints
-        target_idx = (self.current_waypoint + self.look_ahead) % len(waypoints)
-        target = waypoints[target_idx]
+        # Look ahead to the current target waypoint
+        target = waypoints[self.current_waypoint]
 
         # Calculate angle to target
         dx = target[0] - self.x
@@ -293,35 +292,34 @@ class AICar(Car):
         while angle_diff < -math.pi:
             angle_diff += 2 * math.pi
 
-        # Steer towards target
-        steer_strength = 0.03
-        if angle_diff > 0.1:
+        # Steer towards target - stronger steering
+        steer_strength = 0.06
+        if angle_diff > 0.05:
             self.angle += steer_strength + self.steering_noise
-        elif angle_diff < -0.1:
+        elif angle_diff < -0.05:
             self.angle -= steer_strength + self.steering_noise
 
-        # Speed control
+        # Speed control - always go fast, slight slowdown for sharp turns
         dist_to_next = math.sqrt((waypoints[self.current_waypoint][0] - self.x) ** 2 +
                                   (waypoints[self.current_waypoint][1] - self.y) ** 2)
 
-        # Slow down for sharp turns, speed up on straights
-        if abs(angle_diff) > 0.5:
-            self.ai_target_speed = self.max_speed * 0.5
-        elif abs(angle_diff) > 0.3:
-            self.ai_target_speed = self.max_speed * 0.7
+        if abs(angle_diff) > 0.8:
+            self.ai_target_speed = self.max_speed * 0.6
+        elif abs(angle_diff) > 0.5:
+            self.ai_target_speed = self.max_speed * 0.8
         else:
             self.ai_target_speed = self.max_speed
 
         # Accelerate or brake to reach target speed
         if self.speed < self.ai_target_speed:
             self.accelerate()
-        elif self.speed > self.ai_target_speed + 0.5:
+        elif self.speed > self.ai_target_speed + 1.0:
             self.brake()
 
         # Check if stuck (very slow and near waypoint)
         if self.speed < 1 and dist_to_next < 120:
-            self.speed = 2
-            self.angle += 0.1  # nudge to get unstuck
+            self.speed = 3
+            self.angle += 0.2  # stronger nudge to get unstuck
 
 
 class Game:
@@ -428,8 +426,8 @@ class Game:
             car.update_ai(self.waypoints)
             car.update(self.waypoints)
 
-        # Check car-to-car collisions
-        self._check_car_collisions()
+        # No collisions - ghost mode
+        # self._check_car_collisions()
 
         # Check if player is off track
         if not self.player.is_on_track(self.waypoints):
@@ -438,14 +436,6 @@ class Game:
         # Update camera to follow player
         self.camera_x = self.player.x - SCREEN_WIDTH // 2
         self.camera_y = self.player.y - SCREEN_HEIGHT // 2
-
-        # Log player position periodically (every 30 frames)
-        if self.race_started and self.player.race_time % 30 == 0:
-            target = self.waypoints[self.player.current_waypoint]
-            dx = self.player.x - target[0]
-            dy = self.player.y - target[1]
-            dist = math.sqrt(dx * dx + dy * dy)
-            print(f"POS: player=({int(self.player.x)},{int(self.player.y)}) heading_to_wp={self.player.current_waypoint} wp_pos=({target[0]},{target[1]}) dist_to_wp={int(dist)} speed={self.player.speed:.1f} angle={math.degrees(self.player.angle):.0f}deg", flush=True)
 
         # Check finish
         finished_cars = [c for c in self.cars if c.finished and c not in self.finished_positions]
