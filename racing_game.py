@@ -111,9 +111,9 @@ class Car:
         self.friction = 0.05
         self.turn_speed = 0.04  # radians per frame
 
-        # Car dimensions
-        self.width = 20
-        self.height = 35
+        # Car dimensions (height is the length of the car, width is the width)
+        self.width = 35
+        self.height = 20
 
         # Racing state
         self.current_waypoint = 0
