@@ -39,6 +39,7 @@ PURPLE = (128, 0, 128)
 font = pygame.font.Font(None, 36)
 score_font = pygame.font.Font(None, 48)
 game_over_font = pygame.font.Font(None, 60)
+title_font = pygame.font.Font(None, 22)
 
 # Clock
 clock = pygame.time.Clock()
@@ -536,6 +537,10 @@ class Game:
 
             death_text = font.render("You died! Press SPACE to continue", True, WHITE)
             surface.blit(death_text, (SCREEN_WIDTH // 2 - death_text.get_width() // 2, SCREEN_HEIGHT // 2 - 20))
+
+        # Draw controls hint at top
+        controls_text = title_font.render("Arrow Keys / WASD - Move | SPACE - Continue", True, WHITE)
+        surface.blit(controls_text, (SCREEN_WIDTH // 2 - controls_text.get_width() // 2, 20))
 
         # Draw UI
         # Score
