@@ -528,6 +528,15 @@ class Game:
         # Draw frog
         self.frog.draw(surface)
 
+        # Draw death overlay if frog is dead but game isn't over
+        if not self.frog.alive and not self.game_over and not self.won:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 120))
+            surface.blit(overlay, (0, 0))
+
+            death_text = font.render("You died! Press SPACE to continue", True, WHITE)
+            surface.blit(death_text, (SCREEN_WIDTH // 2 - death_text.get_width() // 2, SCREEN_HEIGHT // 2 - 20))
+
         # Draw UI
         # Score
         score_text = score_font.render(f"Score: {self.score}", True, WHITE)
