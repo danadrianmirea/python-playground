@@ -187,7 +187,7 @@ class Frog:
         self.on_log = None
         self.facing = 'up'
 
-    def hop(self, dc, dr, filled_goals=None):
+    def hop(self, dc, dr):
         """Start a hop in the given direction."""
         if self.moving or not self.alive:
             return
@@ -200,12 +200,6 @@ class Frog:
             return
         if new_row < 0 or new_row >= ROWS:
             return
-
-        # Can't hop into goal row unless it's an open goal spot
-        if new_row == 0 and filled_goals is not None:
-            # Check if this goal spot is already taken
-            if (new_col, new_row) in filled_goals:
-                return
 
         self.target_x = new_col * GRID_SIZE
         self.target_y = new_row * GRID_SIZE
@@ -313,7 +307,6 @@ class Game:
         self.frog = Frog()
         self.cars = []
         self.logs = []
-        self.filled_goals = set()
         self.score = 0
         self.lives = 5
         self.level = 1
@@ -322,6 +315,7 @@ class Game:
         self.time_left = 3000  # frames (50 seconds at 60fps)
         self.spawn_timer = 0
         self.animation_timer = 0
+        self.level_transition_timer = 0
 
         self._spawn_vehicles()
         self._spawn_logs()
@@ -329,6 +323,9 @@ class Game:
     def _spawn_vehicles(self):
         """Spawn cars and trucks on road lanes."""
         self.cars = []
+
+        # Gentle speed multiplier - increases slowly with level
+        speed_mult = 1.0 + (self.level - 1) * 0.08
 
         # Road lane configurations: (row, speed, direction, color, width, count)
         road_configs = [
@@ -339,15 +336,33 @@ class Game:
             (13, 1, 1, PURPLE, 1, 3),     # purple cars right (slow)
         ]
 
+        # Add extra cars sparingly: +1 at level 5, +2 at level 10, +3 at level 15
+        extra_count = max(0, (self.level - 4) // 5)
+        extra_count = min(extra_count, 3)
+
+        # On higher levels, add some speed variation within lanes
+        speed_variation = 0
+        if self.level >= 4:
+            speed_variation = 1  # Some cars get +1 speed
+
         for row, speed, direction, color, width, count in road_configs:
+            count += extra_count
             spacing = COLS // count
             for i in range(count):
                 col = i * spacing + random.randint(0, spacing - 2)
-                self.cars.append(Car(col, row, speed, direction, color, width))
+                # Add slight speed variation to some cars for unpredictability
+                car_speed = int(speed * speed_mult)
+                if speed_variation > 0 and random.random() < 0.3:
+                    car_speed += random.choice([-1, 1])
+                car_speed = max(1, car_speed)
+                self.cars.append(Car(col, row, car_speed, direction, color, width))
 
     def _spawn_logs(self):
         """Spawn logs on river lanes."""
         self.logs = []
+
+        # Gentle speed multiplier for logs
+        speed_mult = 1.0 + (self.level - 1) * 0.06
 
         # River lane configurations: (row, speed, direction, length, count)
         river_configs = [
@@ -358,11 +373,24 @@ class Game:
             (7, 1, 1, 3, 3),    # long logs right
         ]
 
+        # Reduce log count very sparingly: -1 at level 8, -2 at level 16
+        count_reduction = max(0, (self.level - 7) // 8)
+        count_reduction = min(count_reduction, 2)
+
+        # On higher levels, occasionally use shorter logs to create gaps
+        length_reduction = 0
+        if self.level >= 6:
+            length_reduction = 1  # Some logs are 1 tile shorter
+
         for row, speed, direction, length, count in river_configs:
+            count = max(count - count_reduction, 2)
             spacing = COLS // count
             for i in range(count):
                 col = i * spacing + random.randint(0, spacing - length)
-                self.logs.append(Log(col, row, length, speed, direction))
+                log_length = length
+                if length_reduction > 0 and random.random() < 0.3:
+                    log_length = max(length - 1, 2)
+                self.logs.append(Log(col, row, log_length, int(speed * speed_mult), direction))
 
     def reset_frog(self):
         """Reset frog to starting position."""
@@ -383,17 +411,22 @@ class Game:
                 return
 
             if event.key == pygame.K_UP or event.key == pygame.K_w:
-                self.frog.hop(0, -1, self.filled_goals)
+                self.frog.hop(0, -1)
             elif event.key == pygame.K_DOWN or event.key == pygame.K_s:
-                self.frog.hop(0, 1, self.filled_goals)
+                self.frog.hop(0, 1)
             elif event.key == pygame.K_LEFT or event.key == pygame.K_a:
-                self.frog.hop(-1, 0, self.filled_goals)
+                self.frog.hop(-1, 0)
             elif event.key == pygame.K_RIGHT or event.key == pygame.K_d:
-                self.frog.hop(1, 0, self.filled_goals)
+                self.frog.hop(1, 0)
 
     def update(self):
         """Update game state."""
         if self.game_over or self.won:
+            return
+
+        # Level transition countdown
+        if self.level_transition_timer > 0:
+            self.level_transition_timer -= 1
             return
 
         # Update timer
@@ -445,19 +478,14 @@ class Game:
                         self.game_over = True
                     return
 
-        # Check if frog reached a goal
+        # Check if frog reached the top (advance to next level)
         if self.frog.row == 0:
-            goal_col = self.frog.col
-            if goal_col not in [g[0] for g in self.filled_goals]:
-                self.filled_goals.add((goal_col, 0))
-                self.score += 100 + (self.time_left // 10)
-                self.time_left = 3000
-
-                # Check if all goals are filled
-                if len(self.filled_goals) >= 5:
-                    self.won = True
-                else:
-                    self.reset_frog()
+            self.score += 100 + (self.time_left // 10)
+            self.level += 1
+            self._spawn_vehicles()
+            self._spawn_logs()
+            self.reset_frog()
+            self.level_transition_timer = 60  # Show level transition for 1 second
 
     def draw(self, surface):
         """Draw the entire game."""
@@ -476,20 +504,12 @@ class Game:
                     for gc in range(COLS):
                         gx = gc * GRID_SIZE
                         if gc % 3 == 0:  # Every 3rd column is a goal
-                            if (gc, 0) in self.filled_goals:
-                                # Filled goal - draw a frog
-                                pygame.draw.ellipse(surface, GREEN, (gx + 4, y + 6, GRID_SIZE - 8, GRID_SIZE - 12))
-                                pygame.draw.circle(surface, WHITE, (gx + 12, y + 8), 4)
-                                pygame.draw.circle(surface, WHITE, (gx + 28, y + 8), 4)
-                                pygame.draw.circle(surface, BLACK, (gx + 12, y + 8), 2)
-                                pygame.draw.circle(surface, BLACK, (gx + 28, y + 8), 2)
-                            else:
-                                # Empty goal - draw lily pad
-                                pygame.draw.ellipse(surface, (0, 150, 0), (gx + 6, y + 10, GRID_SIZE - 12, GRID_SIZE - 16))
-                                pygame.draw.ellipse(surface, (0, 100, 0), (gx + 8, y + 12, GRID_SIZE - 16, GRID_SIZE - 20))
-                                # Flower
-                                pygame.draw.circle(surface, (255, 100, 100), (gx + GRID_SIZE // 2, y + 8), 4)
-                                pygame.draw.circle(surface, YELLOW, (gx + GRID_SIZE // 2, y + 8), 2)
+                            # Draw lily pad
+                            pygame.draw.ellipse(surface, (0, 150, 0), (gx + 6, y + 10, GRID_SIZE - 12, GRID_SIZE - 16))
+                            pygame.draw.ellipse(surface, (0, 100, 0), (gx + 8, y + 12, GRID_SIZE - 16, GRID_SIZE - 20))
+                            # Flower
+                            pygame.draw.circle(surface, (255, 100, 100), (gx + GRID_SIZE // 2, y + 8), 4)
+                            pygame.draw.circle(surface, YELLOW, (gx + GRID_SIZE // 2, y + 8), 2)
                 else:
                     # Regular grass
                     shade = DARK_GREEN if (row + (row % 2)) % 2 == 0 else GREEN
@@ -564,6 +584,18 @@ class Game:
         pygame.draw.rect(surface, GRAY, (timer_x, timer_y, timer_width, timer_height))
         timer_color = RED if timer_pct < 0.3 else YELLOW if timer_pct < 0.6 else GREEN
         pygame.draw.rect(surface, timer_color, (timer_x, timer_y, int(timer_width * timer_pct), timer_height))
+
+        # Level transition
+        if self.level_transition_timer > 0:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, 160))
+            surface.blit(overlay, (0, 0))
+
+            level_up_text = game_over_font.render(f"LEVEL {self.level}!", True, YELLOW)
+            surface.blit(level_up_text, (SCREEN_WIDTH // 2 - level_up_text.get_width() // 2, SCREEN_HEIGHT // 2 - 40))
+
+            level_info_text = font.render("Get ready...", True, WHITE)
+            surface.blit(level_info_text, (SCREEN_WIDTH // 2 - level_info_text.get_width() // 2, SCREEN_HEIGHT // 2 + 20))
 
         # Game over / win
         if self.game_over:
