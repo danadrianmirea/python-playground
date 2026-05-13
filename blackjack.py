@@ -539,22 +539,26 @@ class Blackjack:
 
             if player_bust:
                 results.append((f"Hand {i + 1}: Bust! Lost ${hand.bet}", RED))
-                total_winnings -= hand.bet
+                # Bet was already deducted, no money returned
             elif hand.is_blackjack() and not dealer_bust and not self.dealer_hand.is_blackjack():
-                # Blackjack pays 3:2
-                winnings = int(hand.bet * 1.5)
+                # Blackjack pays 3:2 - return bet + 1.5x profit
+                winnings = hand.bet + int(hand.bet * 1.5)
                 total_winnings += winnings
-                results.append((f"Hand {i + 1}: Blackjack! Won ${winnings}", GOLD))
+                results.append((f"Hand {i + 1}: Blackjack! Won ${int(hand.bet * 1.5)}", GOLD))
             elif dealer_bust:
-                total_winnings += hand.bet
+                # Return bet + equal profit
+                total_winnings += hand.bet * 2
                 results.append((f"Hand {i + 1}: Dealer bust! Won ${hand.bet}", GOLD))
             elif player_value > dealer_value:
-                total_winnings += hand.bet
+                # Return bet + equal profit
+                total_winnings += hand.bet * 2
                 results.append((f"Hand {i + 1}: Won ${hand.bet}", GOLD))
             elif player_value == dealer_value:
+                # Push - return the bet
+                total_winnings += hand.bet
                 results.append((f"Hand {i + 1}: Push (tie)", YELLOW))
             else:
-                total_winnings -= hand.bet
+                # Lost - bet stays with the house
                 results.append((f"Hand {i + 1}: Lost ${hand.bet}", RED))
 
         self.player_money += total_winnings
