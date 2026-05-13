@@ -285,7 +285,7 @@ class ConnectTheGems:
 
     def has_valid_moves(self):
         """Check if there are any valid moves remaining (at least 3 same-color gems adjacent)."""
-        # Check for any group of 3+ same-color gems connected horizontally or vertically
+        # Check for any group of 2+ same-color gems connected horizontally or vertically
         visited = [[False for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
 
         for row in range(BOARD_SIZE):
@@ -447,7 +447,7 @@ class ConnectTheGems:
 
         # Draw score
         score_text = self.font_large.render(f"Score: {self.score}", True, WHITE)
-        self.screen.blit(score_text, (20, 20))
+        self.screen.blit(score_text, (20, 10))
 
         # Draw combo
         if self.combo_count > 1:
@@ -455,7 +455,7 @@ class ConnectTheGems:
             self.screen.blit(combo_text, (WINDOW_WIDTH - 150, 25))
 
         # Draw hint text
-        hint_text = self.font_small.render("Drag to connect 2+ same-color gems", True, LIGHT_GRAY)
+        hint_text = self.font_small.render("Drag to connect 2+ same-color gems", True, WHITE)
         self.screen.blit(hint_text, (WINDOW_WIDTH // 2 - hint_text.get_width() // 2, 55))
 
         # Draw board background
