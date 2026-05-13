@@ -1,6 +1,6 @@
 """
-Connect The Gems - A match-3 puzzle game
-Click and drag to connect 3 or more gems of the same color.
+Connect The Gems - A match puzzle game
+Click and drag to connect 2 or more gems of the same color.
 Release to remove them and score points.
 """
 
