@@ -113,6 +113,10 @@ class Banana:
         self.active = True
 
     def update(self, buildings, gorillas, dt):
+        # Store previous position for continuous collision detection
+        prev_x = self.x
+        prev_y = self.y
+
         self.trail.append((int(self.x), int(self.y)))
         if len(self.trail) > 20:
             self.trail.pop(0)
@@ -131,10 +135,22 @@ class Banana:
             self.active = False
             return
 
-        # Check if close to a gorilla (let it pass through buildings to reach them)
+        # Continuous collision check with gorillas (check line segment from prev to current pos)
         for gorilla in gorillas:
-            dist = math.sqrt((self.x - gorilla.x) ** 2 + (self.y - gorilla.y) ** 2)
-            if dist < 40:
+            # Gorilla's body center (the body ellipse is centered at gorilla.x, gorilla.y - GORILLA_HEIGHT/2)
+            gx, gy = gorilla.x, gorilla.y - GORILLA_HEIGHT // 2
+            dx = self.x - prev_x
+            dy = self.y - prev_y
+            # If the banana didn't move this frame, just check point distance
+            if dx == 0 and dy == 0:
+                dist = math.sqrt((self.x - gx) ** 2 + (self.y - gy) ** 2)
+            else:
+                # Project gorilla body center onto the movement line, clamped to [0, 1]
+                t = max(0, min(1, ((gx - prev_x) * dx + (gy - prev_y) * dy) / (dx * dx + dy * dy)))
+                closest_x = prev_x + t * dx
+                closest_y = prev_y + t * dy
+                dist = math.sqrt((closest_x - gx) ** 2 + (closest_y - gy) ** 2)
+            if dist < 35:
                 self.active = False
                 return
 
@@ -323,10 +339,10 @@ class GorillasGame:
         # Create explosion
         self.explosions.append(Explosion(bx, by))
 
-        # Check if hit a gorilla
+        # Check if hit a gorilla (check against body center, not feet)
         for i, gorilla in enumerate(self.gorillas):
-            dist = math.sqrt((bx - gorilla.x) ** 2 + (by - gorilla.y) ** 2)
-            if dist < 40:
+            dist = math.sqrt((bx - gorilla.x) ** 2 + (by - (gorilla.y - GORILLA_HEIGHT // 2)) ** 2)
+            if dist < 35:
                 gorilla.health -= 50
                 if gorilla.health <= 0:
                     self.state = "game_over"
