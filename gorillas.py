@@ -518,7 +518,7 @@ class GorillasGame:
         overlay.fill(BLACK)
         self.screen.blit(overlay, (0, 0))
 
-        winner = 1 - self.current_player  # The one who was hit loses
+        winner = self.current_player  # The thrower wins when the opponent is hit
         congrats = self.font_large.render(f"Player {winner + 1} Wins!", True, (255, 215, 0))
         congrats_rect = congrats.get_rect(center=(WINDOW_WIDTH // 2, 200))
         self.screen.blit(congrats, congrats_rect)
