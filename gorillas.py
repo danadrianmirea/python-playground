@@ -31,7 +31,8 @@ WINDOW_COLOR = (200, 200, 50)
 STAR_COLOR = (255, 255, 200)
 
 # Aiming adjustment rate per second (frame-rate independent)
-AUTOREPEAT_SPEED = 3
+AUTOREPEAT_SPEED = 1
+AUTOREPEAT_SPEED_SLOW = 0.3
 
 class Building:
     def __init__(self, x, width, height):
@@ -574,14 +575,17 @@ class GorillasGame:
                 # Handle smooth continuous key input for aiming (frame-rate independent)
                 if self.aiming:
                     keys = pygame.key.get_pressed()
+                    autoRepeatSpeed = AUTOREPEAT_SPEED
+                    if keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]:
+                        autoRepeatSpeed = AUTOREPEAT_SPEED_SLOW
                     if keys[pygame.K_LEFT]:
-                        self.angle = min(180, self.angle + AUTOREPEAT_SPEED * dt)
+                        self.angle = min(180, self.angle + autoRepeatSpeed * dt)
                     if keys[pygame.K_RIGHT]:
-                        self.angle = max(0, self.angle - AUTOREPEAT_SPEED * dt)
+                        self.angle = max(0, self.angle - autoRepeatSpeed * dt)
                     if keys[pygame.K_UP]:
-                        self.power = min(100, self.power + AUTOREPEAT_SPEED * dt)
+                        self.power = min(100, self.power + autoRepeatSpeed * dt)
                     if keys[pygame.K_DOWN]:
-                        self.power = max(10, self.power - AUTOREPEAT_SPEED * dt)
+                        self.power = max(10, self.power - autoRepeatSpeed * dt)
 
                 # Update banana
                 if self.banana:
