@@ -314,6 +314,41 @@ class GorillasGame:
         self.turn_count += 1
         self.banana_landed = False
 
+    def damage_buildings(self, cx, cy, radius):
+        """Damage buildings within the blast radius. Buildings are reduced in height or removed."""
+        new_buildings = []
+        for building in self.buildings:
+            # Find the closest point on the building rectangle to the explosion center
+            closest_x = max(building.x, min(cx, building.x + building.width))
+            closest_y = max(WINDOW_HEIGHT - GROUND_HEIGHT - building.height,
+                          min(cy, WINDOW_HEIGHT - GROUND_HEIGHT))
+            dist = math.sqrt((cx - closest_x) ** 2 + (cy - closest_y) ** 2)
+
+            if dist < radius:
+                # Building is within blast radius - reduce its height
+                # The building top is at WINDOW_HEIGHT - GROUND_HEIGHT - building.height
+                # We reduce the building height based on how close the explosion is
+                damage_ratio = 1.0 - (dist / radius * 0.1)
+                height_loss = int(damage_ratio * radius * 0.1)
+                new_height = building.height - height_loss
+                if new_height > 10:
+                    building.height = new_height
+                    # Regenerate windows for the damaged building
+                    building.windows = []
+                    win_w = 8
+                    win_h = 10
+                    win_margin = 6
+                    for wx in range(int(building.x + 10), int(building.x + building.width - 10), win_w + win_margin):
+                        for wy in range(int(WINDOW_HEIGHT - GROUND_HEIGHT - building.height + 15),
+                                       int(WINDOW_HEIGHT - GROUND_HEIGHT - 10), win_h + win_margin):
+                            if random.random() < 0.7:
+                                building.windows.append(pygame.Rect(wx, wy, win_w, win_h))
+                    new_buildings.append(building)
+                # If building is too short, it's destroyed (not added to new list)
+            else:
+                new_buildings.append(building)
+        self.buildings = new_buildings
+
     def check_hit(self):
         if not self.banana:
             return
@@ -345,7 +380,9 @@ class GorillasGame:
         # Only process landing effects when banana becomes inactive (hit terrain/building)
         if not self.banana.active:
             # Create explosion
-            self.explosions.append(Explosion(bx, by))
+            explosion = Explosion(bx, by)
+            self.explosions.append(explosion)
+            self.damage_buildings(bx, by, explosion.max_radius)
 
             # Check if hit a building
             for building in self.buildings:
