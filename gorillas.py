@@ -30,6 +30,7 @@ EXPLOSION_COLORS = [(255, 100, 0), (255, 150, 0), (255, 200, 50), (255, 255, 100
 WINDOW_COLOR = (200, 200, 50)
 STAR_COLOR = (255, 255, 200)
 
+# Aiming adjustment rate per second (frame-rate independent)
 AUTOREPEAT_SPEED = 3
 
 class Building:
@@ -354,19 +355,34 @@ class GorillasGame:
     def draw_menu(self):
         self.screen.fill(SKY_COLOR)
 
-        # Draw some buildings for background
-        for building in self.buildings[:5]:
+        # Draw all buildings for background
+        for building in self.buildings:
             building.draw(self.screen)
 
+        # Draw ground
+        ground_rect = pygame.Rect(0, WINDOW_HEIGHT - GROUND_HEIGHT, WINDOW_WIDTH, GROUND_HEIGHT)
+        pygame.draw.rect(self.screen, (40, 120, 40), ground_rect)
+        pygame.draw.rect(self.screen, DARK_GRAY, ground_rect, 2)
+
         title = self.font_large.render("GORILLAS", True, WHITE)
-        title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, 100))
+        title_rect = title.get_rect(center=(WINDOW_WIDTH // 2, 50))
         self.screen.blit(title, title_rect)
 
         subtitle = self.font_medium.render("The Classic Artillery Game", True, WHITE)
-        sub_rect = subtitle.get_rect(center=(WINDOW_WIDTH // 2, 150))
+        sub_rect = subtitle.get_rect(center=(WINDOW_WIDTH // 2, 100))
         self.screen.blit(subtitle, sub_rect)
 
-        btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 300, 200, 50)
+        instr = [
+            "Click on the screen to aim and throw",
+            "Player 1: left side  |  Player 2: right side",
+            "First to hit the opponent twice wins!"
+        ]
+        for i, line in enumerate(instr):
+            t = self.font_small.render(line, True, WHITE)
+            t_rect = t.get_rect(center=(WINDOW_WIDTH // 2, 150 + i * 30))
+            self.screen.blit(t, t_rect)
+        
+        btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 250, 200, 50)
         mouse_pos = pygame.mouse.get_pos()
         hover = btn_rect.collidepoint(mouse_pos)
         color = (100, 200, 100) if hover else (60, 150, 60)
@@ -376,15 +392,6 @@ class GorillasGame:
         text_rect = text.get_rect(center=btn_rect.center)
         self.screen.blit(text, text_rect)
 
-        instr = [
-            "Click on the screen to aim and throw",
-            "Player 1: left side  |  Player 2: right side",
-            "First to hit the opponent twice wins!"
-        ]
-        for i, line in enumerate(instr):
-            t = self.font_small.render(line, True, WHITE)
-            t_rect = t.get_rect(center=(WINDOW_WIDTH // 2, 400 + i * 30))
-            self.screen.blit(t, t_rect)
 
     def draw_game(self):
         self.screen.fill(SKY_COLOR)
