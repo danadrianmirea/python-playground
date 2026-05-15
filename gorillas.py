@@ -215,6 +215,8 @@ class GorillasGame:
         self.current_player = 0
         self.angle = 45
         self.power = 50
+        self.player_angle = [45, 135]  # Player 1 shoots right-up, Player 2 shoots left-up
+        self.player_power = [50, 50]
         self.wind = 0
         self.message = ""
         self.message_timer = 0
@@ -223,6 +225,9 @@ class GorillasGame:
         self.banana_landed = False
         self.banana_land_time = 0
         self.generate_city()
+        # Set initial angle based on player direction
+        self.angle = self.player_angle[self.current_player]
+        self.power = self.player_power[self.current_player]
 
     def generate_city(self):
         self.buildings = []
@@ -259,8 +264,10 @@ class GorillasGame:
         self.banana = None
         self.explosions = []
         self.current_player = 0
-        self.angle = 45
-        self.power = 50
+        self.player_angle = [45, 135]  # Player 1 shoots right-up, Player 2 shoots left-up
+        self.player_power = [50, 50]
+        self.angle = self.player_angle[0]
+        self.power = self.player_power[0]
         self.aiming = True
         self.turn_count = 0
         self.message = ""
@@ -352,10 +359,15 @@ class GorillasGame:
             self.message_timer = pygame.time.get_ticks()
 
     def next_turn(self):
+        # Save current player's angle and power for next time
+        self.player_angle[self.current_player] = self.angle
+        self.player_power[self.current_player] = self.power
+
         self.banana = None
         self.current_player = 1 - self.current_player
-        self.angle = 45
-        self.power = 50
+        # Restore the next player's last used angle and power
+        self.angle = self.player_angle[self.current_player]
+        self.power = self.player_power[self.current_player]
         self.aiming = True
         self.banana_landed = False
 
