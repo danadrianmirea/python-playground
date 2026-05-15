@@ -112,11 +112,7 @@ class Banana:
         self.trail = []
         self.active = True
 
-    def update(self, buildings, gorillas, dt):
-        # Store previous position for continuous collision detection
-        prev_x = self.x
-        prev_y = self.y
-
+    def update(self, buildings, dt):
         self.trail.append((int(self.x), int(self.y)))
         if len(self.trail) > 20:
             self.trail.pop(0)
@@ -134,25 +130,6 @@ class Banana:
         if self.x < 0 or self.x > WINDOW_WIDTH:
             self.active = False
             return
-
-        # Continuous collision check with gorillas (check line segment from prev to current pos)
-        for gorilla in gorillas:
-            # Gorilla's body center (the body ellipse is centered at gorilla.x, gorilla.y - GORILLA_HEIGHT/2)
-            gx, gy = gorilla.x, gorilla.y - GORILLA_HEIGHT // 2
-            dx = self.x - prev_x
-            dy = self.y - prev_y
-            # If the banana didn't move this frame, just check point distance
-            if dx == 0 and dy == 0:
-                dist = math.sqrt((self.x - gx) ** 2 + (self.y - gy) ** 2)
-            else:
-                # Project gorilla body center onto the movement line, clamped to [0, 1]
-                t = max(0, min(1, ((gx - prev_x) * dx + (gy - prev_y) * dy) / (dx * dx + dy * dy)))
-                closest_x = prev_x + t * dx
-                closest_y = prev_y + t * dy
-                dist = math.sqrt((closest_x - gx) ** 2 + (closest_y - gy) ** 2)
-            if dist < 35:
-                self.active = False
-                return
 
         # Check collision with buildings
         for building in buildings:
@@ -331,18 +308,23 @@ class GorillasGame:
         self.banana_landed = False
 
     def check_hit(self):
-        if not self.banana or self.banana.active:
+        if not self.banana:
             return
 
         bx, by = self.banana.x, self.banana.y
 
-        # Create explosion
-        self.explosions.append(Explosion(bx, by))
-
-        # Check if hit a gorilla (check against body center, not feet)
+        # Check if hit a gorilla (check against center of body+head)
+        # Skip the current player's gorilla to avoid self-hit on throw
         for i, gorilla in enumerate(self.gorillas):
-            dist = math.sqrt((bx - gorilla.x) ** 2 + (by - (gorilla.y - GORILLA_HEIGHT // 2)) ** 2)
-            if dist < 35:
+            if i == self.current_player:
+                continue
+            dist = math.sqrt((bx - gorilla.x) ** 2 + (by - (gorilla.y - GORILLA_HEIGHT // 2 - 6)) ** 2)
+            if dist < 40:
+                # Hit! Deactivate banana, create explosion, and mark as landed
+                self.banana.active = False
+                self.banana_landed = True
+                self.banana_land_time = pygame.time.get_ticks()
+                self.explosions.append(Explosion(bx, by))
                 gorilla.health -= 50
                 if gorilla.health <= 0:
                     self.state = "game_over"
@@ -353,16 +335,21 @@ class GorillasGame:
                     self.message_timer = pygame.time.get_ticks()
                 return
 
-        # Check if hit a building
-        for building in self.buildings:
-            if (building.x <= bx <= building.x + building.width and
-                WINDOW_HEIGHT - GROUND_HEIGHT - building.height <= by <= WINDOW_HEIGHT - GROUND_HEIGHT):
-                self.message = "Hit a building!"
-                self.message_timer = pygame.time.get_ticks()
-                return
+        # Only process landing effects when banana becomes inactive (hit terrain/building)
+        if not self.banana.active:
+            # Create explosion
+            self.explosions.append(Explosion(bx, by))
 
-        self.message = "Miss!"
-        self.message_timer = pygame.time.get_ticks()
+            # Check if hit a building
+            for building in self.buildings:
+                if (building.x <= bx <= building.x + building.width and
+                    WINDOW_HEIGHT - GROUND_HEIGHT - building.height <= by <= WINDOW_HEIGHT - GROUND_HEIGHT):
+                    self.message = "Hit a building!"
+                    self.message_timer = pygame.time.get_ticks()
+                    return
+
+            self.message = "Miss!"
+            self.message_timer = pygame.time.get_ticks()
 
     def next_turn(self):
         self.banana = None
@@ -606,7 +593,9 @@ class GorillasGame:
                 # Update banana
                 if self.banana:
                     if self.banana.active:
-                        self.banana.update(self.buildings, self.gorillas, dt)
+                        self.banana.update(self.buildings, dt)
+                        # Check for gorilla hit every frame while banana is in flight
+                        self.check_hit()
                     elif not self.banana_landed:
                         # First frame the banana is inactive - process hit and record time
                         self.check_hit()
