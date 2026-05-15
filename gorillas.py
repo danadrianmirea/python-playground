@@ -30,6 +30,8 @@ EXPLOSION_COLORS = [(255, 100, 0), (255, 150, 0), (255, 200, 50), (255, 255, 100
 WINDOW_COLOR = (200, 200, 50)
 STAR_COLOR = (255, 255, 200)
 
+AUTOREPEAT_SPEED = 3
+
 class Building:
     def __init__(self, x, width, height):
         self.x = x
@@ -108,14 +110,14 @@ class Banana:
         self.trail = []
         self.active = True
 
-    def update(self, buildings):
+    def update(self, buildings, dt):
         self.trail.append((int(self.x), int(self.y)))
         if len(self.trail) > 20:
             self.trail.pop(0)
 
-        self.x += self.vx
-        self.vy += GRAVITY
-        self.y += self.vy
+        self.x += self.vx * dt
+        self.vy += GRAVITY * dt
+        self.y += self.vy * dt
 
         # Check terrain (ground)
         if self.y > WINDOW_HEIGHT - GROUND_HEIGHT:
@@ -167,16 +169,16 @@ class Explosion:
                 'life': random.uniform(0.5, 1.0)
             })
 
-    def update(self):
-        self.radius += 3
+    def update(self, dt):
+        self.radius += 3 * dt
         if self.radius >= self.max_radius:
             self.active = False
 
         for p in self.particles:
-            p['x'] += p['vx']
-            p['y'] += p['vy']
-            p['vy'] += 0.1
-            p['life'] -= 0.02
+            p['x'] += p['vx'] * dt
+            p['y'] += p['vy'] * dt
+            p['vy'] += 0.1 * dt
+            p['life'] -= 0.02 * dt
 
     def draw(self, screen):
         # Explosion circle
@@ -530,6 +532,9 @@ class GorillasGame:
 
     def run(self):
         while self.running:
+            # Delta time in seconds, capped at 50ms to prevent physics explosions on lag spikes
+            dt = min(self.clock.tick(FPS) / 16.667, 3.0)
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
@@ -548,22 +553,26 @@ class GorillasGame:
                             self.state = "menu"
 
                 if event.type == pygame.KEYDOWN and self.state == "playing" and self.aiming:
-                    if event.key == pygame.K_LEFT:
-                        self.angle = min(180, self.angle + 2)
-                    elif event.key == pygame.K_RIGHT:
-                        self.angle = max(0, self.angle - 2)
-                    elif event.key == pygame.K_UP:
-                        self.power = min(100, self.power + 2)
-                    elif event.key == pygame.K_DOWN:
-                        self.power = max(10, self.power - 2)
-                    elif event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_SPACE:
                         self.throw_banana()
 
             if self.state == "playing":
+                # Handle smooth continuous key input for aiming (frame-rate independent)
+                if self.aiming:
+                    keys = pygame.key.get_pressed()
+                    if keys[pygame.K_LEFT]:
+                        self.angle = min(180, self.angle + AUTOREPEAT_SPEED * dt)
+                    if keys[pygame.K_RIGHT]:
+                        self.angle = max(0, self.angle - AUTOREPEAT_SPEED * dt)
+                    if keys[pygame.K_UP]:
+                        self.power = min(100, self.power + AUTOREPEAT_SPEED * dt)
+                    if keys[pygame.K_DOWN]:
+                        self.power = max(10, self.power - AUTOREPEAT_SPEED * dt)
+
                 # Update banana
                 if self.banana:
                     if self.banana.active:
-                        self.banana.update(self.buildings)
+                        self.banana.update(self.buildings, dt)
                     elif not self.banana_landed:
                         # First frame the banana is inactive - process hit and record time
                         self.check_hit()
@@ -577,7 +586,7 @@ class GorillasGame:
                 # Update explosions
                 self.explosions = [e for e in self.explosions if e.active]
                 for explosion in self.explosions:
-                    explosion.update()
+                    explosion.update(dt)
 
             if self.state == "menu":
                 self.draw_menu()
@@ -587,7 +596,6 @@ class GorillasGame:
                 self.draw_game_over()
 
             pygame.display.flip()
-            self.clock.tick(FPS)
 
         pygame.quit()
         sys.exit()
