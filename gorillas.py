@@ -108,7 +108,7 @@ class Banana:
         self.trail = []
         self.active = True
 
-    def update(self):
+    def update(self, buildings):
         self.trail.append((int(self.x), int(self.y)))
         if len(self.trail) > 20:
             self.trail.pop(0)
@@ -117,8 +117,22 @@ class Banana:
         self.vy += GRAVITY
         self.y += self.vy
 
-        if self.y > WINDOW_HEIGHT - GROUND_HEIGHT or self.x < 0 or self.x > WINDOW_WIDTH:
+        # Check terrain (ground)
+        if self.y > WINDOW_HEIGHT - GROUND_HEIGHT:
             self.active = False
+            return
+
+        # Check out of bounds horizontally
+        if self.x < 0 or self.x > WINDOW_WIDTH:
+            self.active = False
+            return
+
+        # Check collision with buildings
+        for building in buildings:
+            if (building.x <= self.x <= building.x + building.width and
+                WINDOW_HEIGHT - GROUND_HEIGHT - building.height <= self.y <= WINDOW_HEIGHT - GROUND_HEIGHT):
+                self.active = False
+                return
 
     def draw(self, screen):
         # Draw trail
@@ -202,6 +216,8 @@ class GorillasGame:
         self.message_timer = 0
         self.aiming = True
         self.turn_count = 0
+        self.banana_landed = False
+        self.banana_land_time = 0
         self.generate_city()
 
     def generate_city(self):
@@ -245,6 +261,8 @@ class GorillasGame:
         self.turn_count = 0
         self.message = ""
         self.message_timer = 0
+        self.banana_landed = False
+        self.banana_land_time = 0
 
     def handle_menu_click(self, pos):
         btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 300, 200, 50)
@@ -283,6 +301,7 @@ class GorillasGame:
         self.banana = Banana(gorilla.x, gorilla.y - GORILLA_HEIGHT - 10, vx, vy)
         self.aiming = False
         self.turn_count += 1
+        self.banana_landed = False
 
     def check_hit(self):
         if not self.banana or self.banana.active:
@@ -324,6 +343,7 @@ class GorillasGame:
         self.angle = 45
         self.power = 50
         self.aiming = True
+        self.banana_landed = False
 
         # Random wind change
         self.wind += random.uniform(-1, 1)
@@ -543,11 +563,15 @@ class GorillasGame:
                 # Update banana
                 if self.banana:
                     if self.banana.active:
-                        self.banana.update()
-                    else:
+                        self.banana.update(self.buildings)
+                    elif not self.banana_landed:
+                        # First frame the banana is inactive - process hit and record time
                         self.check_hit()
+                        self.banana_landed = True
+                        self.banana_land_time = pygame.time.get_ticks()
+                    else:
                         # Wait a moment before next turn
-                        if not self.banana.active and pygame.time.get_ticks() - self.message_timer > 800:
+                        if pygame.time.get_ticks() - self.banana_land_time > 800:
                             self.next_turn()
 
                 # Update explosions
