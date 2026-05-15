@@ -111,8 +111,10 @@ class Banana:
         self.vy = vy
         self.trail = []
         self.active = True
+        self.frame_count = 0
 
     def update(self, buildings, dt):
+        self.frame_count += 1
         self.trail.append((int(self.x), int(self.y)))
         if len(self.trail) > 20:
             self.trail.pop(0)
@@ -356,9 +358,9 @@ class GorillasGame:
         bx, by = self.banana.x, self.banana.y
 
         # Check if hit a gorilla (check against center of body+head)
-        # Skip the current player's gorilla to avoid self-hit on throw
+        # Skip own gorilla for the first few frames to avoid self-hit on throw
         for i, gorilla in enumerate(self.gorillas):
-            if i == self.current_player:
+            if i == self.current_player and self.banana.frame_count < 10:
                 continue
             dist = math.sqrt((bx - gorilla.x) ** 2 + (by - (gorilla.y - GORILLA_HEIGHT // 2 - 6)) ** 2)
             if dist < 40:
