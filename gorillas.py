@@ -328,8 +328,6 @@ class GorillasGame:
 
             if dist < radius:
                 # Building is within blast radius - reduce its height
-                # The building top is at WINDOW_HEIGHT - GROUND_HEIGHT - building.height
-                # We reduce the building height based on how close the explosion is
                 damage_ratio = 1.0 - (dist / radius * 0.1)
                 height_loss = int(damage_ratio * radius * 0.1)
                 new_height = building.height - height_loss
@@ -350,6 +348,18 @@ class GorillasGame:
             else:
                 new_buildings.append(building)
         self.buildings = new_buildings
+
+        # Reposition gorillas to stand on top of their building (or ground if building destroyed)
+        for gorilla in self.gorillas:
+            # Find which building this gorilla is standing on
+            for building in self.buildings:
+                if building.x <= gorilla.x <= building.x + building.width:
+                    # Gorilla stands on top of this building
+                    gorilla.y = WINDOW_HEIGHT - GROUND_HEIGHT - building.height
+                    break
+            else:
+                # No building found - gorilla falls to the ground
+                gorilla.y = WINDOW_HEIGHT - GROUND_HEIGHT
 
     def check_hit(self):
         if not self.banana:
