@@ -111,7 +111,7 @@ class Banana:
         self.trail = []
         self.active = True
 
-    def update(self, buildings, dt):
+    def update(self, buildings, gorillas, dt):
         self.trail.append((int(self.x), int(self.y)))
         if len(self.trail) > 20:
             self.trail.pop(0)
@@ -129,6 +129,13 @@ class Banana:
         if self.x < 0 or self.x > WINDOW_WIDTH:
             self.active = False
             return
+
+        # Check if close to a gorilla (let it pass through buildings to reach them)
+        for gorilla in gorillas:
+            dist = math.sqrt((self.x - gorilla.x) ** 2 + (self.y - gorilla.y) ** 2)
+            if dist < 40:
+                self.active = False
+                return
 
         # Check collision with buildings
         for building in buildings:
@@ -268,7 +275,7 @@ class GorillasGame:
         self.banana_land_time = 0
 
     def handle_menu_click(self, pos):
-        btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 300, 200, 50)
+        btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 250, 200, 50)
         if btn_rect.collidepoint(pos):
             self.reset_game()
             self.state = "playing"
@@ -579,7 +586,7 @@ class GorillasGame:
                 # Update banana
                 if self.banana:
                     if self.banana.active:
-                        self.banana.update(self.buildings, dt)
+                        self.banana.update(self.buildings, self.gorillas, dt)
                     elif not self.banana_landed:
                         # First frame the banana is inactive - process hit and record time
                         self.check_hit()
