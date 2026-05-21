@@ -371,29 +371,32 @@ class HighNoonGame:
         self.message_timer = pygame.time.get_ticks()
 
     def generate_obstacles(self):
-        """Generate rocks and cactuses in the play area."""
+        """Generate rocks and cactuses across the entire screen,
+        avoiding the initial player positions."""
         self.obstacles = []
 
+        # Safe zones around initial player positions (no obstacles here)
         safe_zones = [
-            (0, 120),
-            (WINDOW_WIDTH - 120, WINDOW_WIDTH)
+            pygame.Rect(0, 0, 140, WINDOW_HEIGHT),                    # Player 1 zone
+            pygame.Rect(WINDOW_WIDTH - 140, 0, 140, WINDOW_HEIGHT),   # Player 2 zone
         ]
 
-        num_obstacles = random.randint(6, 10)
+        num_obstacles = random.randint(8, 14)
         for _ in range(num_obstacles):
-            for attempt in range(20):
-                x = random.randint(30, WINDOW_WIDTH - 30)
-                y = random.randint(WINDOW_HEIGHT - GROUND_HEIGHT - 120,
-                                  WINDOW_HEIGHT - GROUND_HEIGHT - 20)
+            for attempt in range(30):
+                x = random.randint(20, WINDOW_WIDTH - 20)
+                y = random.randint(30, WINDOW_HEIGHT - GROUND_HEIGHT - 10)
 
+                # Check safe zones (don't place on top of initial player positions)
                 in_safe_zone = False
-                for sz_start, sz_end in safe_zones:
-                    if sz_start <= x <= sz_end:
+                for sz in safe_zones:
+                    if sz.collidepoint(x, y):
                         in_safe_zone = True
                         break
                 if in_safe_zone:
                     continue
 
+                # Check no overlap with existing obstacles
                 overlap = False
                 new_rect = pygame.Rect(x - 15, y - 15, 30, 30)
                 for obs in self.obstacles:
@@ -403,6 +406,7 @@ class HighNoonGame:
                 if overlap:
                     continue
 
+                # Place obstacle
                 if random.random() < 0.5:
                     self.obstacles.append(Rock(x, y))
                 else:
