@@ -22,7 +22,7 @@ COWBOY_WIDTH = 30
 COWBOY_HEIGHT = 60
 MOVE_SPEED = 3
 BULLET_SPEED = 10
-SHOOT_COOLDOWN = 15  # frames between shots
+SHOOT_COOLDOWN = 60  # frames between shots (1 per second at 60 FPS)
 
 # Colors
 SKY_COLOR = (135, 180, 220)
@@ -160,10 +160,11 @@ class Cowboy:
                           (self.x + 4, self.y + 8, 12, 8))
 
     def get_hitbox(self):
-        """Get the bounding box for collision detection."""
+        """Get the bounding box for collision detection.
+        Extended upward to cover the head/hat area."""
         return pygame.Rect(self.x - COWBOY_WIDTH // 2,
-                          self.y - COWBOY_HEIGHT,
-                          COWBOY_WIDTH, COWBOY_HEIGHT)
+                          self.y - COWBOY_HEIGHT - 16,
+                          COWBOY_WIDTH, COWBOY_HEIGHT + 16)
 
     def get_gun_position(self):
         """Get the position of the gun barrel tip."""
@@ -281,7 +282,7 @@ class Chariot:
     def __init__(self):
         self.width = 60
         self.height = 40
-        self.x = random.randint(50, WINDOW_WIDTH - 50 - self.width)
+        self.x = random.randint(200, WINDOW_WIDTH - 200 - self.width)
         self.y = WINDOW_HEIGHT + 10
         self.speed = random.uniform(0.3, 0.8)
         self.active = True
@@ -582,6 +583,23 @@ class HighNoonGame:
             chariot.update(dt)
             if not chariot.active:
                 self.chariots.remove(chariot)
+                continue
+
+            # Check if chariot hits a cowboy
+            chariot_rect = chariot.get_rect()
+            for i, cowboy in enumerate(self.cowboys):
+                if not cowboy.alive:
+                    continue
+                if chariot_rect.colliderect(cowboy.get_hitbox()):
+                    # Chariot hit! Cowboy dies, other player wins
+                    cowboy.alive = False
+                    chariot.active = False
+                    winner = 1 - i
+                    self.scores[winner] += 1
+                    self.message = f"Player {winner + 1} wins the round!"
+                    self.message_timer = pygame.time.get_ticks()
+                    self.state = "round_over"
+                    break
 
         # Update dust particles
         self.dust_particles = [p for p in self.dust_particles if p.life > 0]
