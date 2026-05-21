@@ -58,6 +58,10 @@ class Bullet:
         self.active = True
         self.trail = []
 
+    def get_rect(self):
+        """Get the bounding box for collision detection."""
+        return pygame.Rect(self.x - 4, self.y - 4, 8, 8)
+
     def update(self, dt):
         self.trail.append((int(self.x), int(self.y)))
         if len(self.trail) > 15:
@@ -155,6 +159,12 @@ class Cowboy:
         pygame.draw.ellipse(screen, COWBOY_BOOTS,
                           (self.x + 4, self.y + 8, 12, 8))
 
+    def get_hitbox(self):
+        """Get the bounding box for collision detection."""
+        return pygame.Rect(self.x - COWBOY_WIDTH // 2,
+                          self.y - COWBOY_HEIGHT,
+                          COWBOY_WIDTH, COWBOY_HEIGHT)
+
     def get_gun_position(self):
         """Get the position of the gun barrel tip."""
         arm_dir = 1 if self.facing_right else -1
@@ -172,14 +182,35 @@ class Cowboy:
 
         return Bullet(gun_x, gun_y, direction)
 
-    def move(self, dx, dy):
-        """Move the cowboy, clamped to screen bounds."""
+    def move(self, dx, dy, obstacles, chariots):
+        """Move the cowboy, clamped to screen bounds and blocked by obstacles."""
         new_x = self.x + dx
         new_y = self.y + dy
 
         # Clamp to screen
-        self.x = max(COWBOY_WIDTH // 2, min(WINDOW_WIDTH - COWBOY_WIDTH // 2, new_x))
-        self.y = max(COWBOY_HEIGHT, min(WINDOW_HEIGHT - GROUND_HEIGHT, new_y))
+        new_x = max(COWBOY_WIDTH // 2, min(WINDOW_WIDTH - COWBOY_WIDTH // 2, new_x))
+        new_y = max(COWBOY_HEIGHT, min(WINDOW_HEIGHT - GROUND_HEIGHT, new_y))
+
+        # Check collision with obstacles
+        test_rect = pygame.Rect(new_x - COWBOY_WIDTH // 2,
+                               new_y - COWBOY_HEIGHT,
+                               COWBOY_WIDTH, COWBOY_HEIGHT)
+
+        blocked = False
+        for obs in obstacles:
+            if test_rect.colliderect(obs.get_rect()):
+                blocked = True
+                break
+
+        if not blocked:
+            for chariot in chariots:
+                if test_rect.colliderect(chariot.get_rect()):
+                    blocked = True
+                    break
+
+        if not blocked:
+            self.x = new_x
+            self.y = new_y
 
 
 class Obstacle:
@@ -422,20 +453,19 @@ class HighNoonGame:
             self.state = "playing"
 
     def check_collisions(self):
-        """Check bullet collisions with cowboys, obstacles, and chariots."""
+        """Check bullet collisions with cowboys, obstacles, and chariots using bounding boxes."""
         for bullet in self.bullets[:]:
             if not bullet.active:
                 continue
+
+            bullet_rect = bullet.get_rect()
 
             # Check collision with cowboys
             for i, cowboy in enumerate(self.cowboys):
                 if not cowboy.alive:
                     continue
 
-                # Check distance to cowboy center
-                cx, cy = cowboy.x, cowboy.y - COWBOY_HEIGHT // 2
-                dist = math.sqrt((bullet.x - cx) ** 2 + (bullet.y - cy) ** 2)
-                if dist < 25:
+                if bullet_rect.colliderect(cowboy.get_hitbox()):
                     # HIT!
                     bullet.active = False
                     cowboy.alive = False
@@ -449,7 +479,7 @@ class HighNoonGame:
 
             # Check collision with obstacles
             for obstacle in self.obstacles[:]:
-                if obstacle.collides_with(bullet.x, bullet.y):
+                if bullet_rect.colliderect(obstacle.get_rect()):
                     bullet.active = False
                     for _ in range(8):
                         self.dust_particles.append(DustParticle(bullet.x, bullet.y))
@@ -457,7 +487,7 @@ class HighNoonGame:
 
             # Check collision with chariots
             for chariot in self.chariots[:]:
-                if chariot.collides_with(bullet.x, bullet.y):
+                if bullet_rect.colliderect(chariot.get_rect()):
                     bullet.active = False
                     for _ in range(8):
                         self.dust_particles.append(DustParticle(bullet.x, bullet.y))
@@ -484,7 +514,7 @@ class HighNoonGame:
             if keys[pygame.K_s]:
                 dy1 = MOVE_SPEED
             if dx1 != 0 or dy1 != 0:
-                p1.move(dx1 * dt, dy1 * dt)
+                p1.move(dx1 * dt, dy1 * dt, self.obstacles, self.chariots)
                 # Face the direction of movement
                 if dx1 > 0:
                     p1.facing_right = True
@@ -512,7 +542,7 @@ class HighNoonGame:
             if keys[pygame.K_DOWN]:
                 dy2 = MOVE_SPEED
             if dx2 != 0 or dy2 != 0:
-                p2.move(dx2 * dt, dy2 * dt)
+                p2.move(dx2 * dt, dy2 * dt, self.obstacles, self.chariots)
                 # Face the direction of movement
                 if dx2 > 0:
                     p2.facing_right = True
