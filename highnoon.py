@@ -342,6 +342,12 @@ class HighNoonGame:
         self.chariot_spawn_timer = 0
         self.chariot_spawn_interval = 120
 
+        # Decorative cactuses for the menu (created once to avoid flickering)
+        self.menu_cactuses = []
+        for cx in [100, 300, 500, 700]:
+            cy = WINDOW_HEIGHT - GROUND_HEIGHT
+            self.menu_cactuses.append(Cactus(cx, cy - 40))
+
         self.setup_round()
 
     def setup_round(self):
@@ -564,9 +570,7 @@ class HighNoonGame:
         pygame.draw.rect(self.screen, GROUND_COLOR, ground_rect)
         pygame.draw.rect(self.screen, GROUND_DARK, ground_rect, 2)
 
-        for cx in [100, 300, 500, 700]:
-            cy = WINDOW_HEIGHT - GROUND_HEIGHT
-            deco_cactus = Cactus(cx, cy - 40)
+        for deco_cactus in self.menu_cactuses:
             deco_cactus.draw(self.screen)
 
         title = self.font_large.render("HIGH NOON", True, (200, 50, 50))
