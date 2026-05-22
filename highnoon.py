@@ -184,34 +184,31 @@ class Cowboy:
         return Bullet(gun_x, gun_y, direction)
 
     def move(self, dx, dy, obstacles, chariots):
-        """Move the cowboy, clamped to screen bounds and blocked by obstacles."""
-        new_x = self.x + dx
-        new_y = self.y + dy
+        """Move the cowboy with sliding collision.
+        Tries X movement first, then Y, so the player slides along obstacles."""
+        all_solids = obstacles + chariots
 
-        # Clamp to screen
-        new_x = max(COWBOY_WIDTH // 2, min(WINDOW_WIDTH - COWBOY_WIDTH // 2, new_x))
-        new_y = max(COWBOY_HEIGHT, min(WINDOW_HEIGHT - GROUND_HEIGHT, new_y))
+        # Clamp target to screen bounds
+        target_x = max(COWBOY_WIDTH // 2, min(WINDOW_WIDTH - COWBOY_WIDTH // 2, self.x + dx))
+        target_y = max(COWBOY_HEIGHT, min(WINDOW_HEIGHT - GROUND_HEIGHT, self.y + dy))
 
-        # Check collision with obstacles
-        test_rect = pygame.Rect(new_x - COWBOY_WIDTH // 2,
-                               new_y - COWBOY_HEIGHT,
+        # Try moving on X axis only
+        test_rect = pygame.Rect(target_x - COWBOY_WIDTH // 2,
+                               self.y - COWBOY_HEIGHT,
                                COWBOY_WIDTH, COWBOY_HEIGHT)
+        blocked_x = any(test_rect.colliderect(s.get_rect()) for s in all_solids)
 
-        blocked = False
-        for obs in obstacles:
-            if test_rect.colliderect(obs.get_rect()):
-                blocked = True
-                break
+        # Try moving on Y axis only
+        test_rect = pygame.Rect(self.x - COWBOY_WIDTH // 2,
+                               target_y - COWBOY_HEIGHT,
+                               COWBOY_WIDTH, COWBOY_HEIGHT)
+        blocked_y = any(test_rect.colliderect(s.get_rect()) for s in all_solids)
 
-        if not blocked:
-            for chariot in chariots:
-                if test_rect.colliderect(chariot.get_rect()):
-                    blocked = True
-                    break
-
-        if not blocked:
-            self.x = new_x
-            self.y = new_y
+        # Apply movement: if X is blocked, keep old X; if Y is blocked, keep old Y
+        if not blocked_x:
+            self.x = target_x
+        if not blocked_y:
+            self.y = target_y
 
 
 class Obstacle:
