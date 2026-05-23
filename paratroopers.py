@@ -687,6 +687,15 @@ class ParatroopersGame:
 
             # Check if landed
             if para.landed:
+                # Check if paratrooper landed directly on the turret (instant game over)
+                if abs(para.x - TURRET_CENTER_X) < 20:
+                    self.game_over_message = "A paratrooper landed directly on the turret!"
+                    self.game_over_side = "center"
+                    self.state = "game_over"
+                    if self.score > self.high_score:
+                        self.high_score = self.score
+                    return
+
                 # Create a landed soldier at this position
                 soldier = LandedSoldier(para.x, para.side)
                 self.landed_soldiers.append(soldier)
