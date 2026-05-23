@@ -408,6 +408,64 @@ class Paratrooper:
                               (cx - 8, TURRET_BASE_Y - 2, 16, 4))
 
 
+class LandedSoldier:
+    """A paratrooper that has landed and is now a soldier on the ground with a rifle."""
+
+    def __init__(self, x, side):
+        self.x = x
+        self.y = TURRET_BASE_Y  # bottom of soldier is at ground level
+        self.width = PARA_WIDTH
+        self.height = PARA_HEIGHT
+        self.side = side  # "left" or "right" of the turret
+
+    def get_rect(self):
+        return pygame.Rect(self.x - self.width // 2, self.y - self.height,
+                          self.width, self.height)
+
+    def draw(self, screen):
+        cx = int(self.x)
+        top = int(self.y - self.height)
+
+        # Body
+        body_rect = pygame.Rect(cx - 5, top + 4, 10, 12)
+        pygame.draw.rect(screen, PARA_GREEN, body_rect)
+        pygame.draw.rect(screen, DARK_GREEN, body_rect, 1)
+
+        # Head
+        pygame.draw.circle(screen, SKIN, (cx, top + 2), 4)
+
+        # Legs (standing)
+        pygame.draw.line(screen, PARA_GREEN, (cx - 3, top + 16), (cx - 4, top + 20), 2)
+        pygame.draw.line(screen, PARA_GREEN, (cx + 3, top + 16), (cx + 4, top + 20), 2)
+
+        # Rifle pointing toward the turret (center of screen)
+        if self.side == "left":
+            # Soldier is on the left, rifle points right toward turret
+            rifle_start = (cx + 5, top + 8)
+            rifle_end = (cx + 18, top + 6)
+        else:
+            # Soldier is on the right, rifle points left toward turret
+            rifle_start = (cx - 5, top + 8)
+            rifle_end = (cx - 18, top + 6)
+
+        # Rifle barrel
+        pygame.draw.line(screen, DARK_BROWN, rifle_start, rifle_end, 3)
+        # Rifle tip
+        pygame.draw.circle(screen, DARK_GRAY, rifle_end, 2)
+
+        # Arms holding rifle
+        if self.side == "left":
+            pygame.draw.line(screen, SKIN, (cx - 5, top + 6), (cx + 3, top + 8), 2)
+            pygame.draw.line(screen, SKIN, (cx + 5, top + 6), (cx + 8, top + 8), 2)
+        else:
+            pygame.draw.line(screen, SKIN, (cx + 5, top + 6), (cx - 3, top + 8), 2)
+            pygame.draw.line(screen, SKIN, (cx - 5, top + 6), (cx - 8, top + 8), 2)
+
+        # Shadow
+        pygame.draw.ellipse(screen, (0, 0, 0, 60),
+                          (cx - 8, TURRET_BASE_Y - 2, 16, 4))
+
+
 class Explosion:
     """A simple explosion effect."""
 
@@ -469,6 +527,7 @@ class ParatroopersGame:
         self.bullets = []
         self.planes = []
         self.paratroopers = []
+        self.landed_soldiers = []
         self.explosions = []
         self.plane_spawn_timer = 0
 
@@ -530,6 +589,7 @@ class ParatroopersGame:
         self.bullets = []
         self.planes = []
         self.paratroopers = []
+        self.landed_soldiers = []
         self.explosions = []
         self.plane_spawn_timer = 0
         self.landed_left = 0
@@ -627,6 +687,10 @@ class ParatroopersGame:
 
             # Check if landed
             if para.landed:
+                # Create a landed soldier at this position
+                soldier = LandedSoldier(para.x, para.side)
+                self.landed_soldiers.append(soldier)
+
                 if para.side == "left":
                     self.landed_left += 1
                 else:
@@ -683,7 +747,7 @@ class ParatroopersGame:
         high_rect = high_text.get_rect(topright=(WINDOW_WIDTH - 10, 5))
         self.screen.blit(high_text, high_rect)
 
-        # Landing indicators
+        # Landing indicators (text only, no red danger zone bars)
         left_text = self.font_small.render(
             f"Left: {self.landed_left}/{MAX_LANDED_PARAS}", True,
             RED if self.landed_left >= MAX_LANDED_PARAS - 1 else WHITE)
@@ -693,25 +757,6 @@ class ParatroopersGame:
             f"Right: {self.landed_right}/{MAX_LANDED_PARAS}", True,
             RED if self.landed_right >= MAX_LANDED_PARAS - 1 else WHITE)
         self.screen.blit(right_text, (WINDOW_WIDTH // 2 + 20, 5))
-
-        # Danger zone indicators on the ground
-        # Left danger zone
-        if self.landed_left > 0:
-            danger_width = 30 * self.landed_left
-            pygame.draw.rect(self.screen, (255, 0, 0, 80),
-                           (10, WINDOW_HEIGHT - GROUND_HEIGHT - 5, danger_width, 5))
-            label = self.font_small.render(f"{self.landed_left}", True, RED)
-            self.screen.blit(label, (15, WINDOW_HEIGHT - GROUND_HEIGHT - 22))
-
-        # Right danger zone
-        if self.landed_right > 0:
-            danger_width = 30 * self.landed_right
-            pygame.draw.rect(self.screen, (255, 0, 0, 80),
-                           (WINDOW_WIDTH - 10 - danger_width,
-                            WINDOW_HEIGHT - GROUND_HEIGHT - 5, danger_width, 5))
-            label = self.font_small.render(f"{self.landed_right}", True, RED)
-            label_rect = label.get_rect(topright=(WINDOW_WIDTH - 15, WINDOW_HEIGHT - GROUND_HEIGHT - 22))
-            self.screen.blit(label, label_rect)
 
     def draw_menu(self):
         """Draw the main menu."""
@@ -772,6 +817,10 @@ class ParatroopersGame:
         # Draw paratroopers (behind planes)
         for para in self.paratroopers:
             para.draw(self.screen)
+
+        # Draw landed soldiers (on the ground)
+        for soldier in self.landed_soldiers:
+            soldier.draw(self.screen)
 
         # Draw planes
         for plane in self.planes:
