@@ -23,6 +23,7 @@ COWBOY_HEIGHT = 60
 MOVE_SPEED = 3
 BULLET_SPEED = 10
 SHOOT_COOLDOWN = 60  # frames between shots (1 per second at 60 FPS)
+WINS_NEEDED = 11  # first to 11 round wins takes the match
 
 # Colors
 SKY_COLOR = (135, 180, 220)
@@ -370,6 +371,8 @@ class HighNoonGame:
         self.message_timer = 0
         self.chariot_spawn_timer = 0
         self.chariot_spawn_interval = 120
+        self.match_over = False
+        self.match_winner = None
 
         # Decorative cactuses for the menu (created once to avoid flickering)
         self.menu_cactuses = []
@@ -472,6 +475,9 @@ class HighNoonGame:
                     self.scores[shooter] += 1
                     self.message = f"Player {shooter + 1} wins the round!"
                     self.message_timer = pygame.time.get_ticks()
+                    if self.scores[shooter] >= WINS_NEEDED:
+                        self.match_over = True
+                        self.match_winner = shooter
                     self.state = "round_over"
                     return
 
@@ -595,6 +601,9 @@ class HighNoonGame:
                     self.scores[winner] += 1
                     self.message = f"Player {winner + 1} wins the round!"
                     self.message_timer = pygame.time.get_ticks()
+                    if self.scores[winner] >= WINS_NEEDED:
+                        self.match_over = True
+                        self.match_winner = winner
                     self.state = "round_over"
                     break
 
@@ -725,46 +734,84 @@ class HighNoonGame:
         overlay.fill(BLACK)
         self.screen.blit(overlay, (0, 0))
 
-        winner = None
-        for i, cowboy in enumerate(self.cowboys):
-            if not cowboy.alive:
-                winner = 1 - i
-                break
+        if self.match_over:
+            # Show match winner
+            match_text = f"Player {self.match_winner + 1} WINS THE MATCH!"
+            congrats = self.font_large.render(match_text, True, (255, 215, 0))
+            congrats_rect = congrats.get_rect(center=(WINDOW_WIDTH // 2, 180))
+            self.screen.blit(congrats, congrats_rect)
 
-        if winner is not None:
-            result_text = f"Player {winner + 1} Wins the Round!"
+            final_score = self.font_medium.render(
+                f"Final Score - Player 1: {self.scores[0]}  |  Player 2: {self.scores[1]}", True, WHITE)
+            final_rect = final_score.get_rect(center=(WINDOW_WIDTH // 2, 230))
+            self.screen.blit(final_score, final_rect)
+
+            match_msg = self.font_small.render(
+                f"First to {WINS_NEEDED} round wins! The duel is over!", True, (200, 200, 200))
+            match_msg_rect = match_msg.get_rect(center=(WINDOW_WIDTH // 2, 270))
+            self.screen.blit(match_msg, match_msg_rect)
+
+            btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 320, 200, 50)
+            mouse_pos = pygame.mouse.get_pos()
+            hover = btn_rect.collidepoint(mouse_pos)
+            color = (100, 200, 100) if hover else (60, 150, 60)
+            pygame.draw.rect(self.screen, color, btn_rect, border_radius=10)
+            pygame.draw.rect(self.screen, WHITE, btn_rect, 2, border_radius=10)
+            next_text = self.font_medium.render("Play Again", True, WHITE)
+            next_rect = next_text.get_rect(center=btn_rect.center)
+            self.screen.blit(next_text, next_rect)
+
+            menu_btn = pygame.Rect(WINDOW_WIDTH // 2 - 100, 390, 200, 50)
+            hover2 = menu_btn.collidepoint(mouse_pos)
+            color2 = (150, 150, 150) if hover2 else (100, 100, 100)
+            pygame.draw.rect(self.screen, color2, menu_btn, border_radius=10)
+            pygame.draw.rect(self.screen, WHITE, menu_btn, 2, border_radius=10)
+            menu_text = self.font_medium.render("Main Menu", True, WHITE)
+            menu_rect = menu_text.get_rect(center=menu_btn.center)
+            self.screen.blit(menu_text, menu_rect)
+
+            return btn_rect, menu_btn
         else:
-            result_text = "Draw!"
+            winner = None
+            for i, cowboy in enumerate(self.cowboys):
+                if not cowboy.alive:
+                    winner = 1 - i
+                    break
 
-        congrats = self.font_large.render(result_text, True, (255, 215, 0))
-        congrats_rect = congrats.get_rect(center=(WINDOW_WIDTH // 2, 200))
-        self.screen.blit(congrats, congrats_rect)
+            if winner is not None:
+                result_text = f"Player {winner + 1} Wins the Round!"
+            else:
+                result_text = "Draw!"
 
-        score_text = self.font_medium.render(
-            f"Score - Player 1: {self.scores[0]}  |  Player 2: {self.scores[1]}", True, WHITE)
-        score_rect = score_text.get_rect(center=(WINDOW_WIDTH // 2, 260))
-        self.screen.blit(score_text, score_rect)
+            congrats = self.font_large.render(result_text, True, (255, 215, 0))
+            congrats_rect = congrats.get_rect(center=(WINDOW_WIDTH // 2, 200))
+            self.screen.blit(congrats, congrats_rect)
 
-        btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 320, 200, 50)
-        mouse_pos = pygame.mouse.get_pos()
-        hover = btn_rect.collidepoint(mouse_pos)
-        color = (100, 200, 100) if hover else (60, 150, 60)
-        pygame.draw.rect(self.screen, color, btn_rect, border_radius=10)
-        pygame.draw.rect(self.screen, WHITE, btn_rect, 2, border_radius=10)
-        next_text = self.font_medium.render("Next Round", True, WHITE)
-        next_rect = next_text.get_rect(center=btn_rect.center)
-        self.screen.blit(next_text, next_rect)
+            score_text = self.font_medium.render(
+                f"Score - Player 1: {self.scores[0]}  |  Player 2: {self.scores[1]}", True, WHITE)
+            score_rect = score_text.get_rect(center=(WINDOW_WIDTH // 2, 260))
+            self.screen.blit(score_text, score_rect)
 
-        menu_btn = pygame.Rect(WINDOW_WIDTH // 2 - 100, 390, 200, 50)
-        hover2 = menu_btn.collidepoint(mouse_pos)
-        color2 = (150, 150, 150) if hover2 else (100, 100, 100)
-        pygame.draw.rect(self.screen, color2, menu_btn, border_radius=10)
-        pygame.draw.rect(self.screen, WHITE, menu_btn, 2, border_radius=10)
-        menu_text = self.font_medium.render("Main Menu", True, WHITE)
-        menu_rect = menu_text.get_rect(center=menu_btn.center)
-        self.screen.blit(menu_text, menu_rect)
+            btn_rect = pygame.Rect(WINDOW_WIDTH // 2 - 100, 320, 200, 50)
+            mouse_pos = pygame.mouse.get_pos()
+            hover = btn_rect.collidepoint(mouse_pos)
+            color = (100, 200, 100) if hover else (60, 150, 60)
+            pygame.draw.rect(self.screen, color, btn_rect, border_radius=10)
+            pygame.draw.rect(self.screen, WHITE, btn_rect, 2, border_radius=10)
+            next_text = self.font_medium.render("Next Round", True, WHITE)
+            next_rect = next_text.get_rect(center=btn_rect.center)
+            self.screen.blit(next_text, next_rect)
 
-        return btn_rect, menu_btn
+            menu_btn = pygame.Rect(WINDOW_WIDTH // 2 - 100, 390, 200, 50)
+            hover2 = menu_btn.collidepoint(mouse_pos)
+            color2 = (150, 150, 150) if hover2 else (100, 100, 100)
+            pygame.draw.rect(self.screen, color2, menu_btn, border_radius=10)
+            pygame.draw.rect(self.screen, WHITE, menu_btn, 2, border_radius=10)
+            menu_text = self.font_medium.render("Main Menu", True, WHITE)
+            menu_rect = menu_text.get_rect(center=menu_btn.center)
+            self.screen.blit(menu_text, menu_rect)
+
+            return btn_rect, menu_btn
 
     def run(self):
         """Main game loop."""
@@ -781,10 +828,23 @@ class HighNoonGame:
                     elif self.state == "round_over":
                         btn_rect, menu_btn = self.draw_round_over()
                         if btn_rect.collidepoint(event.pos):
-                            self.round_num += 1
+                            if self.match_over:
+                                # Reset match completely
+                                self.match_over = False
+                                self.match_winner = None
+                                self.round_num = 1
+                                self.scores = [0, 0]
+                            else:
+                                self.round_num += 1
                             self.setup_round()
                             self.state = "playing"
                         elif menu_btn.collidepoint(event.pos):
+                            if self.match_over:
+                                # Reset match completely
+                                self.match_over = False
+                                self.match_winner = None
+                                self.round_num = 1
+                                self.scores = [0, 0]
                             self.state = "menu"
 
             # Update game state (handles continuous key input)
