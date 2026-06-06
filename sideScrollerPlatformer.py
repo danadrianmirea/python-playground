@@ -564,7 +564,8 @@ def generate_level():
             ey = plat.y - 30
             enemies.append(Enemy(ex, ey))
 
-    # --- Place coins only on reachable platforms ---
+    # --- Place exactly NUM_COINS coins on reachable platforms ---
+    NUM_COINS = 40
     reachable_platforms = [p for i, p in enumerate(platforms) if reachable.get(i, False)]
     if not reachable_platforms:
         reachable_platforms = platforms
@@ -576,31 +577,29 @@ def generate_level():
         for p in platforms:
             if coin_rect.colliderect(p.get_rect()):
                 return False
-        # Check if there's enough vertical clearance for the player to reach the coin
-        # by checking for platforms above and below that would trap it
+        # Check if there's a platform directly above the coin (blocking access from above)
+        # or if the gap between platforms is too small for the player to fit
         player_clearance = PLAYER_HEIGHT + 10
         for p in platforms:
             if p.x < cx < p.x + p.width:
-                # Platform above the coin
-                if p.y + p.height > cy and p.y < cy:
-                    return False  # platform is above the coin, blocking access
-                # Platform below the coin - check gap is big enough
+                # Platform above the coin (coin is below the platform's bottom edge)
+                if p.y <= cy <= p.y + p.height:
+                    return False  # coin is inside or directly under a platform
+                # Two platforms sandwiching the coin vertically with too small a gap
                 if p.y > cy and p.y - cy < player_clearance:
-                    return False  # too tight to fit
+                    return False  # too tight to fit between this platform and the one below
         return True
 
-    for plat in reachable_platforms:
-        if random.random() < 0.4:
-            coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
-            coin_y = plat.y - 25
-            if coin_is_reachable(coin_x, coin_y, platforms):
-                coins.append(Coin(coin_x, coin_y))
-
-    # Extra coins in the air (within jump range of reachable platforms)
-    for _ in range(20):
+    attempts = 0
+    while len(coins) < NUM_COINS and attempts < NUM_COINS * 10:
+        attempts += 1
         plat = random.choice(reachable_platforms)
         coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
-        coin_y = plat.y - random.randint(25, 60)  # max 60px above platform (safe jump height)
+        # Mix of coins on platforms and in the air
+        if random.random() < 0.5:
+            coin_y = plat.y - 25
+        else:
+            coin_y = plat.y - random.randint(25, 60)
         if coin_is_reachable(coin_x, coin_y, platforms):
             coins.append(Coin(coin_x, coin_y))
 
