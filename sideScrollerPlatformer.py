@@ -643,7 +643,7 @@ def generate_level():
         return True
 
     attempts = 0
-    while len(coins) < NUM_COINS and attempts < NUM_COINS * 10:
+    while len(coins) < NUM_COINS and attempts < NUM_COINS * 100:
         attempts += 1
         plat = random.choice(reachable_platforms)
         coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
