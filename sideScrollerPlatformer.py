@@ -458,13 +458,23 @@ def generate_level():
         platforms.append(Platform(x, ground_y, seg_width, TILE_SIZE, "ground"))
         x += seg_width
 
+    def platform_overlaps(new_plat, existing_platforms):
+        """Check if a new platform overlaps with any existing one."""
+        new_rect = new_plat.get_rect()
+        for p in existing_platforms:
+            if new_rect.colliderect(p.get_rect()):
+                return True
+        return False
+
     # Floating platforms at various heights
     for _ in range(40):
         px = random.randint(2, LEVEL_LENGTH - 3) * TILE_SIZE
         py = random.randint(ground_y - 200, ground_y - 30)
         pw = random.randint(1, 3) * TILE_SIZE
         ptype = random.choice(["brick", "stone", "brick"])
-        platforms.append(Platform(px, py, pw, TILE_SIZE // 2, ptype))
+        new_plat = Platform(px, py, pw, TILE_SIZE // 2, ptype)
+        if not platform_overlaps(new_plat, platforms):
+            platforms.append(new_plat)
 
     # Staircase sections
     for _ in range(4):
@@ -474,10 +484,12 @@ def generate_level():
         for i in range(stair_height):
             sy = ground_y + direction * (i + 1) * (TILE_SIZE // 2)
             sy = max(ground_y - 200, min(ground_y, sy))
-            platforms.append(Platform(
+            new_plat = Platform(
                 stair_start + i * TILE_SIZE, sy,
                 TILE_SIZE, TILE_SIZE // 2, "stone"
-            ))
+            )
+            if not platform_overlaps(new_plat, platforms):
+                platforms.append(new_plat)
 
     # --- Ensure completability by adding bridge platforms ---
     # Sort platforms by x position
@@ -552,19 +564,45 @@ def generate_level():
             ey = plat.y - 30
             enemies.append(Enemy(ex, ey))
 
-    # --- Place coins ---
-    for plat in platforms:
+    # --- Place coins only on reachable platforms ---
+    reachable_platforms = [p for i, p in enumerate(platforms) if reachable.get(i, False)]
+    if not reachable_platforms:
+        reachable_platforms = platforms
+
+    # For each x position, only place coins on the highest platform
+    # to avoid coins being trapped between overlapping platforms
+    for plat in reachable_platforms:
         if random.random() < 0.4:
             coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
             coin_y = plat.y - 25
-            coins.append(Coin(coin_x, coin_y))
+            # Check if this coin position would be inside another platform
+            blocked = False
+            for other in platforms:
+                if other is plat:
+                    continue
+                if (other.x < coin_x < other.x + other.width and
+                        other.y < coin_y < other.y + other.height):
+                    blocked = True
+                    break
+            if not blocked:
+                coins.append(Coin(coin_x, coin_y))
 
-    # Extra coins in the air
+    # Extra coins in the air (within jump range of reachable platforms)
     for _ in range(20):
-        plat = random.choice(platforms)
+        plat = random.choice(reachable_platforms)
         coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
-        coin_y = plat.y - random.randint(30, 80)
-        coins.append(Coin(coin_x, coin_y))
+        coin_y = plat.y - random.randint(25, 60)  # max 60px above platform (safe jump height)
+        # Check if this coin position would be inside another platform
+        blocked = False
+        for other in platforms:
+            if other is plat:
+                continue
+            if (other.x < coin_x < other.x + other.width and
+                    other.y < coin_y < other.y + other.height):
+                blocked = True
+                break
+        if not blocked:
+            coins.append(Coin(coin_x, coin_y))
 
     # --- Exit door at the rightmost platform ---
     rightmost = max(platforms, key=lambda p: p.x)
