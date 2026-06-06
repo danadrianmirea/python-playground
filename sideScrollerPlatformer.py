@@ -87,6 +87,9 @@ class Player:
         self.axe_angle = 0
         self.invincible = 0
         self.alive = True
+        self.health = 3  # hits per life
+        self.lives = 3
+        self.max_health = 3
 
     def update(self):
         self.vel_y += GRAVITY
@@ -495,8 +498,9 @@ def generate_level():
 
 
 def check_collisions(player, platforms, enemies, coins, exit_door):
-    """Handle all collision logic."""
+    """Handle all collision logic. Returns True if player lost a life."""
     player.on_ground = False
+    lost_life = False
 
     # Platform collisions
     player_rect = player.get_rect()
@@ -543,19 +547,25 @@ def check_collisions(player, platforms, enemies, coins, exit_door):
             continue
 
         # Check player collision with enemy
-        if player_rect.colliderect(enemy_rect) and player.invincible == 0:
+        if player.get_rect().colliderect(enemy_rect) and player.invincible == 0:
             player.invincible = 30
             player.vel_y = -8
             player.vel_x = -5 if player.facing_right else 5
+            player.health -= 1
+            if player.health <= 0:
+                player.lives -= 1
+                lost_life = True
 
     # Coin collection
     for coin in coins:
-        if not coin.collected and player_rect.colliderect(coin.get_rect()):
+        if not coin.collected and player.get_rect().colliderect(coin.get_rect()):
             coin.collected = True
 
     # Exit check
-    if exit_door and player_rect.colliderect(exit_door.get_rect()):
+    if exit_door and player.get_rect().colliderect(exit_door.get_rect()):
         exit_door.reached = True
+
+    return lost_life
 
 
 def draw_background(surface, cam):
@@ -590,8 +600,8 @@ hud_bg.set_alpha(120)
 hud_bg.fill(BLACK)
 
 
-def show_hud(surface, coins_collected, total_coins, level):
-    """Display HUD."""
+def show_hud(surface, player, coins_collected, total_coins, level):
+    """Display HUD with health bar and lives."""
     surface.blit(hud_bg, (0, 0))
 
     coin_text = font_small.render(f"Coins: {coins_collected}/{total_coins}", True, GOLD)
@@ -600,9 +610,34 @@ def show_hud(surface, coins_collected, total_coins, level):
     level_text = font_small.render(f"Level {level}", True, WHITE)
     surface.blit(level_text, (SCREEN_WIDTH // 2 - 30, 8))
 
+    # Health bar
+    bar_x = SCREEN_WIDTH - 200
+    bar_y = 8
+    bar_width = 80
+    bar_height = 12
+    # Background
+    pygame.draw.rect(surface, (60, 0, 0), (bar_x, bar_y, bar_width, bar_height))
+    pygame.draw.rect(surface, WHITE, (bar_x, bar_y, bar_width, bar_height), 1)
+    # Health fill
+    health_pct = player.health / player.max_health
+    fill_width = int(bar_width * health_pct)
+    health_color = GREEN if health_pct > 0.5 else (YELLOW if health_pct > 0.25 else RED)
+    pygame.draw.rect(surface, health_color, (bar_x + 1, bar_y + 1, fill_width - 2, bar_height - 2))
+
+    # Lives (heart icons)
+    heart_x = bar_x - 50
+    for i in range(player.lives):
+        hx = heart_x + i * 16
+        hy = bar_y + 2
+        pygame.draw.polygon(surface, RED, [
+            (hx + 4, hy + 2), (hx + 2, hy + 5), (hx + 4, hy + 9),
+            (hx + 7, hy + 6), (hx + 10, hy + 9), (hx + 12, hy + 5),
+            (hx + 10, hy + 2), (hx + 7, hy + 4),
+        ])
+
     # Axe indicator
-    axe_text = font_small.render("[SPACE] Swing Axe", True, (200, 200, 200))
-    surface.blit(axe_text, (SCREEN_WIDTH - 160, 8))
+    axe_text = font_small.render("[SPACE] Axe", True, (200, 200, 200))
+    surface.blit(axe_text, (SCREEN_WIDTH - 120, 8))
 
 
 def show_level_complete(surface, coins_collected, total_coins):
@@ -703,6 +738,7 @@ def main():
         game_over = False
 
         restart_level = False
+        life_lost_timer = 0
         while game_state == "playing" and running:
             clock.tick(FPS)
 
@@ -757,14 +793,38 @@ def main():
             for enemy in enemies:
                 enemy.update(platforms)
 
-            check_collisions(player, platforms, enemies, coins, exit_door)
+            lost_life = check_collisions(player, platforms, enemies, coins, exit_door)
+
+            # Handle life lost
+            if lost_life:
+                if player.lives <= 0:
+                    game_over = True
+                else:
+                    # Respawn with full health
+                    player.health = player.max_health
+                    player.x = 100
+                    player.y = SCREEN_HEIGHT - 120
+                    player.vel_x = 0
+                    player.vel_y = 0
+                    player.invincible = 60  # 1 second of invincibility
+                    life_lost_timer = 45  # Show "Life Lost" for 45 frames
 
             # Count collected coins
             coins_collected = sum(1 for c in coins if c.collected)
 
             # Check death (fell off world)
             if player.y > SCREEN_HEIGHT + 100:
-                game_over = True
+                player.lives -= 1
+                if player.lives <= 0:
+                    game_over = True
+                else:
+                    player.health = player.max_health
+                    player.x = 100
+                    player.y = SCREEN_HEIGHT - 120
+                    player.vel_x = 0
+                    player.vel_y = 0
+                    player.invincible = 60
+                    life_lost_timer = 45
 
             # Check exit
             if exit_door and exit_door.reached:
@@ -793,7 +853,16 @@ def main():
             player.draw(screen, camera)
 
             # Draw HUD
-            show_hud(screen, coins_collected, total_coins, level)
+            show_hud(screen, player, coins_collected, total_coins, level)
+
+            # Draw life lost message
+            if life_lost_timer > 0:
+                life_lost_timer -= 1
+                life_text = font_large.render("LIFE LOST!", True, RED)
+                life_shadow = font_large.render("LIFE LOST!", True, (100, 0, 0))
+                lr = life_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                screen.blit(life_shadow, (lr.x + 3, lr.y + 3))
+                screen.blit(life_text, lr)
 
             # Draw level complete or game over
             if level_complete:
