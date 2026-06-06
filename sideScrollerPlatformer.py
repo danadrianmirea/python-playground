@@ -891,7 +891,7 @@ def main():
         game_over = False
 
         restart_level = False
-        life_lost_timer = 0
+        life_lost_pending = False
         while game_state == "playing" and running:
             clock.tick(FPS)
 
@@ -913,6 +913,15 @@ def main():
                             level = 1
                             total_coins_all = 0
                             restart_level = True
+                        elif life_lost_pending:
+                            # Respawn instantly at start
+                            player.health = player.max_health
+                            player.x = 100
+                            player.y = SCREEN_HEIGHT - 120
+                            player.vel_x = 0
+                            player.vel_y = 0
+                            player.invincible = 60
+                            life_lost_pending = False
                         else:
                             player.swing_axe()
 
@@ -922,7 +931,42 @@ def main():
             if restart_level:
                 break
 
-            if level_complete or game_over:
+            if level_complete or game_over or life_lost_pending:
+                # Still draw the frame even when paused
+                if life_lost_pending:
+                    draw_background(screen, camera)
+                    for plat in platforms:
+                        plat.draw(screen, camera)
+                    for coin in coins:
+                        coin.draw(screen, camera)
+                    for enemy in enemies:
+                        enemy.draw(screen, camera)
+                    if exit_door:
+                        exit_door.draw(screen, camera)
+                    player.draw(screen, camera)
+                    show_hud(screen, player, coins_collected, total_coins, level)
+
+                    # Life lost overlay
+                    overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+                    overlay.set_alpha(180)
+                    overlay.fill(BLACK)
+                    screen.blit(overlay, (0, 0))
+
+                    life_text = font_large.render("LIFE LOST!", True, RED)
+                    life_shadow = font_large.render("LIFE LOST!", True, (100, 0, 0))
+                    lr = life_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 30))
+                    screen.blit(life_shadow, (lr.x + 3, lr.y + 3))
+                    screen.blit(life_text, lr)
+
+                    lives_text = font_medium.render(f"{player.lives} lives remaining", True, WHITE)
+                    lr2 = lives_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 20))
+                    screen.blit(lives_text, lr2)
+
+                    continue_text = font_small.render("Press SPACE to continue", True, YELLOW)
+                    lr3 = continue_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 60))
+                    screen.blit(continue_text, lr3)
+
+                    pygame.display.flip()
                 continue
 
             # Input
@@ -953,14 +997,7 @@ def main():
                 if player.lives <= 0:
                     game_over = True
                 else:
-                    # Respawn with full health
-                    player.health = player.max_health
-                    player.x = 100
-                    player.y = SCREEN_HEIGHT - 120
-                    player.vel_x = 0
-                    player.vel_y = 0
-                    player.invincible = 60  # 1 second of invincibility
-                    life_lost_timer = 45  # Show "Life Lost" for 45 frames
+                    life_lost_pending = True
 
             # Count collected coins
             coins_collected = sum(1 for c in coins if c.collected)
@@ -971,13 +1008,7 @@ def main():
                 if player.lives <= 0:
                     game_over = True
                 else:
-                    player.health = player.max_health
-                    player.x = 100
-                    player.y = SCREEN_HEIGHT - 120
-                    player.vel_x = 0
-                    player.vel_y = 0
-                    player.invincible = 60
-                    life_lost_timer = 45
+                    life_lost_pending = True
 
             # Check exit (activated by pressing DOWN when near)
             if exit_door and exit_door.player_near and (keys[pygame.K_DOWN] or keys[pygame.K_s]):
@@ -1010,15 +1041,6 @@ def main():
 
             # Draw HUD
             show_hud(screen, player, coins_collected, total_coins, level)
-
-            # Draw life lost message
-            if life_lost_timer > 0:
-                life_lost_timer -= 1
-                life_text = font_large.render("LIFE LOST!", True, RED)
-                life_shadow = font_large.render("LIFE LOST!", True, (100, 0, 0))
-                lr = life_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                screen.blit(life_shadow, (lr.x + 3, lr.y + 3))
-                screen.blit(life_text, lr)
 
             # Draw level complete or game over
             if level_complete:
