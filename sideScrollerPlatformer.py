@@ -569,22 +569,31 @@ def generate_level():
     if not reachable_platforms:
         reachable_platforms = platforms
 
-    # For each x position, only place coins on the highest platform
-    # to avoid coins being trapped between overlapping platforms
+    def coin_is_reachable(cx, cy, platforms):
+        """Check if a coin position is reachable (not inside or trapped between platforms)."""
+        coin_rect = pygame.Rect(cx - 8, cy - 8, 16, 16)
+        # Check if coin is inside any platform
+        for p in platforms:
+            if coin_rect.colliderect(p.get_rect()):
+                return False
+        # Check if there's enough vertical clearance for the player to reach the coin
+        # by checking for platforms above and below that would trap it
+        player_clearance = PLAYER_HEIGHT + 10
+        for p in platforms:
+            if p.x < cx < p.x + p.width:
+                # Platform above the coin
+                if p.y + p.height > cy and p.y < cy:
+                    return False  # platform is above the coin, blocking access
+                # Platform below the coin - check gap is big enough
+                if p.y > cy and p.y - cy < player_clearance:
+                    return False  # too tight to fit
+        return True
+
     for plat in reachable_platforms:
         if random.random() < 0.4:
             coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
             coin_y = plat.y - 25
-            # Check if this coin position would be inside another platform
-            blocked = False
-            for other in platforms:
-                if other is plat:
-                    continue
-                if (other.x < coin_x < other.x + other.width and
-                        other.y < coin_y < other.y + other.height):
-                    blocked = True
-                    break
-            if not blocked:
+            if coin_is_reachable(coin_x, coin_y, platforms):
                 coins.append(Coin(coin_x, coin_y))
 
     # Extra coins in the air (within jump range of reachable platforms)
@@ -592,16 +601,7 @@ def generate_level():
         plat = random.choice(reachable_platforms)
         coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
         coin_y = plat.y - random.randint(25, 60)  # max 60px above platform (safe jump height)
-        # Check if this coin position would be inside another platform
-        blocked = False
-        for other in platforms:
-            if other is plat:
-                continue
-            if (other.x < coin_x < other.x + other.width and
-                    other.y < coin_y < other.y + other.height):
-                blocked = True
-                break
-        if not blocked:
+        if coin_is_reachable(coin_x, coin_y, platforms):
             coins.append(Coin(coin_x, coin_y))
 
     # --- Exit door at the rightmost platform ---
