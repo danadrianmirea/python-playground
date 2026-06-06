@@ -434,65 +434,141 @@ class Exit:
 
 
 def generate_level():
-    """Procedurally generate a level."""
+    """Procedurally generate a varied but completable level."""
     platforms = []
     enemies = []
     coins = []
     exit_door = None
 
-    # Ground segments (with gaps)
-    ground_y = SCREEN_HEIGHT - 60
-    x = 0
-    while x < LEVEL_LENGTH * TILE_SIZE:
-        segment_width = random.randint(3, 8) * TILE_SIZE
-        if x > 0 and random.random() < 0.2:
-            # Gap
-            gap_width = random.randint(1, 2) * TILE_SIZE
-            x += gap_width
-            continue
-        platforms.append(Platform(x, ground_y, segment_width, TILE_SIZE, "ground"))
-        x += segment_width
+    # Max jump height: v²/(2g) = 144/(2*0.6) = 120 pixels
+    MAX_JUMP_HEIGHT = 120
+    SAFE_VERTICAL_GAP = 100  # safe margin
 
-    # Floating platforms
-    for _ in range(30):
+    ground_y = SCREEN_HEIGHT - 60
+
+    # --- Generate varied terrain ---
+    # Ground segments with gaps
+    x = 0
+    while x < (LEVEL_LENGTH - 2) * TILE_SIZE:
+        seg_width = random.randint(3, 8) * TILE_SIZE
+        if x > 0 and random.random() < 0.2:
+            gap = random.randint(1, 2) * TILE_SIZE
+            x += gap
+            continue
+        platforms.append(Platform(x, ground_y, seg_width, TILE_SIZE, "ground"))
+        x += seg_width
+
+    # Floating platforms at various heights
+    for _ in range(40):
         px = random.randint(2, LEVEL_LENGTH - 3) * TILE_SIZE
-        py = random.randint(ground_y - 150, ground_y - 40)
+        py = random.randint(ground_y - 200, ground_y - 30)
         pw = random.randint(1, 3) * TILE_SIZE
         ptype = random.choice(["brick", "stone", "brick"])
         platforms.append(Platform(px, py, pw, TILE_SIZE // 2, ptype))
 
     # Staircase sections
-    for _ in range(3):
+    for _ in range(4):
         stair_start = random.randint(5, LEVEL_LENGTH - 15) * TILE_SIZE
         stair_height = random.randint(3, 6)
+        direction = random.choice([-1, 1])
         for i in range(stair_height):
+            sy = ground_y + direction * (i + 1) * (TILE_SIZE // 2)
+            sy = max(ground_y - 200, min(ground_y, sy))
             platforms.append(Platform(
-                stair_start + i * TILE_SIZE,
-                ground_y - (i + 1) * TILE_SIZE,
-                TILE_SIZE, TILE_SIZE, "stone"
+                stair_start + i * TILE_SIZE, sy,
+                TILE_SIZE, TILE_SIZE // 2, "stone"
             ))
 
-    # Enemies
-    for _ in range(15):
-        ex = random.randint(3, LEVEL_LENGTH - 3) * TILE_SIZE
-        ey = ground_y - TILE_SIZE - random.randint(0, 100)
-        enemies.append(Enemy(ex, ey))
+    # --- Ensure completability by adding bridge platforms ---
+    # Sort platforms by x position
+    platforms.sort(key=lambda p: p.x)
 
-    # Coins
-    for _ in range(30):
-        cx = random.randint(2, LEVEL_LENGTH - 2) * TILE_SIZE
-        cy = random.randint(ground_y - 200, ground_y - 40)
-        coins.append(Coin(cx, cy))
+    # Check each platform is reachable from a previous one
+    # We do this by checking vertical gaps between nearby platforms
+    reachable = {0: True}  # index 0 (first ground) is always reachable
+    for i, plat in enumerate(platforms):
+        if i == 0:
+            continue
+        # Check if this platform is reachable from any earlier platform
+        can_reach = False
+        for j in range(i):
+            if not reachable.get(j, False):
+                continue
+            prev = platforms[j]
+            # Horizontal distance
+            h_dist = plat.x - (prev.x + prev.width)
+            if h_dist < -TILE_SIZE:  # platform is behind, skip
+                continue
+            # Vertical distance
+            v_dist = prev.y - plat.y  # positive = plat is higher
+            # Check if jumpable: need to be within jump height
+            # and horizontal gap should be traversable
+            if v_dist > SAFE_VERTICAL_GAP:
+                continue  # too high to jump
+            if v_dist < -SAFE_VERTICAL_GAP:
+                continue  # too far down (would take damage or can't reach back)
 
-    # Place coins along paths (above platforms)
+            # Check horizontal gap - player can jump about 3-4 tiles horizontally
+            if h_dist > 4 * TILE_SIZE:
+                continue
+
+            can_reach = True
+            break
+
+        reachable[i] = can_reach
+
+        # If not reachable, add a bridge platform
+        if not can_reach:
+            # Find the closest reachable platform to the left
+            best_j = -1
+            best_dist = float('inf')
+            for j in range(i):
+                if not reachable.get(j, False):
+                    continue
+                prev = platforms[j]
+                dist = plat.x - (prev.x + prev.width)
+                if 0 < dist < best_dist:
+                    best_dist = dist
+                    best_j = j
+
+            if best_j >= 0:
+                prev = platforms[best_j]
+                # Add stepping stone platforms between prev and plat
+                steps_needed = max(1, best_dist // (3 * TILE_SIZE))
+                for step in range(1, steps_needed + 1):
+                    t = step / (steps_needed + 1)
+                    bridge_x = int(prev.x + prev.width + t * (plat.x - (prev.x + prev.width)))
+                    bridge_y = int(prev.y + t * (plat.y - prev.y))
+                    # Clamp bridge y to be reachable
+                    bridge_y = max(ground_y - 200, min(ground_y, bridge_y))
+                    bridge = Platform(bridge_x, bridge_y, TILE_SIZE, TILE_SIZE // 2, "stone")
+                    platforms.append(bridge)
+                    reachable[len(platforms) - 1] = True
+
+    # --- Place enemies on platforms ---
     for plat in platforms:
-        if random.random() < 0.3:
-            coin_x = plat.x + random.randint(10, plat.width - 10)
+        if random.random() < 0.2 and plat.width >= TILE_SIZE:
+            ex = plat.x + random.randint(0, max(0, plat.width - 30))
+            ey = plat.y - 30
+            enemies.append(Enemy(ex, ey))
+
+    # --- Place coins ---
+    for plat in platforms:
+        if random.random() < 0.4:
+            coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
             coin_y = plat.y - 25
             coins.append(Coin(coin_x, coin_y))
 
-    # Exit door at the end
-    exit_door = Exit((LEVEL_LENGTH - 2) * TILE_SIZE, ground_y - 60)
+    # Extra coins in the air
+    for _ in range(20):
+        plat = random.choice(platforms)
+        coin_x = plat.x + random.randint(10, max(11, plat.width - 10))
+        coin_y = plat.y - random.randint(30, 80)
+        coins.append(Coin(coin_x, coin_y))
+
+    # --- Exit door at the rightmost platform ---
+    rightmost = max(platforms, key=lambda p: p.x)
+    exit_door = Exit(rightmost.x + rightmost.width // 2 - 20, rightmost.y - 60)
 
     return platforms, enemies, coins, exit_door
 
