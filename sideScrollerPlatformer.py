@@ -513,6 +513,7 @@ def generate_level():
     # Check each platform is reachable from a previous one
     # We do this by checking vertical gaps between nearby platforms
     reachable = {0: True}  # index 0 (first ground) is always reachable
+    bridges_added = []
     for i, plat in enumerate(platforms):
         if i == 0:
             continue
@@ -569,15 +570,29 @@ def generate_level():
                     # Clamp bridge y to be reachable
                     bridge_y = max(ground_y - 200, min(ground_y, bridge_y))
                     bridge = Platform(bridge_x, bridge_y, TILE_SIZE, TILE_SIZE // 2, "stone")
-                    platforms.append(bridge)
-                    reachable[len(platforms) - 1] = True
+                    # Check bridge doesn't overlap existing platforms
+                    if not platform_overlaps(bridge, platforms):
+                        bridges_added.append(bridge)
 
-    # --- Place enemies on platforms ---
+    # Add all bridges at once (after the loop to avoid modifying during iteration)
+    for bridge in bridges_added:
+        platforms.append(bridge)
+        reachable[len(platforms) - 1] = True
+
+    # --- Place enemies on platforms (avoid overlaps) ---
     for plat in platforms:
         if random.random() < 0.2 and plat.width >= TILE_SIZE:
             ex = plat.x + random.randint(0, max(0, plat.width - 30))
             ey = plat.y - 30
-            enemies.append(Enemy(ex, ey))
+            new_enemy = Enemy(ex, ey)
+            # Check enemy doesn't overlap with existing enemies
+            overlap = False
+            for e in enemies:
+                if new_enemy.get_rect().colliderect(e.get_rect()):
+                    overlap = True
+                    break
+            if not overlap:
+                enemies.append(new_enemy)
 
     # --- Place exactly NUM_COINS coins on reachable platforms ---
     NUM_COINS = 40
@@ -630,39 +645,40 @@ def check_collisions(player, platforms, enemies, coins, exit_door):
     player.on_ground = False
     lost_life = False
 
-    # Platform collisions
-    player_rect = player.get_rect()
+    # Platform collisions - use fresh rect each time to handle multi-platform contact
     for plat in platforms:
-        plat_rect = plat.get_rect()
-        if player_rect.colliderect(plat_rect):
-            # Determine overlap amounts
-            overlap_left = (player.x + player.width) - plat.x
-            overlap_right = (plat.x + plat.width) - player.x
-            overlap_top = (player.y + player.height) - plat.y
-            overlap_bottom = (plat.y + plat.height) - player.y
+        if not player.get_rect().colliderect(plat.get_rect()):
+            continue
 
-            # Find smallest overlap to determine collision side
-            min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+        # Determine overlap amounts
+        overlap_left = (player.x + player.width) - plat.x
+        overlap_right = (plat.x + plat.width) - player.x
+        overlap_top = (player.y + player.height) - plat.y
+        overlap_bottom = (plat.y + plat.height) - player.y
 
-            if min_overlap == overlap_top and player.vel_y >= 0:
-                # Landing on top of platform
-                player.y = plat.y - player.height
-                player.vel_y = 0
-                player.on_ground = True
-            elif min_overlap == overlap_bottom and player.vel_y <= 0:
-                # Hitting head on bottom of platform
-                player.y = plat.y + plat.height
-                player.vel_y = 0
-            elif min_overlap == overlap_left:
-                # Hitting left side
-                player.x = plat.x - player.width
-                player.vel_x = 0
-            elif min_overlap == overlap_right:
-                # Hitting right side
-                player.x = plat.x + plat.width
-                player.vel_x = 0
+        # Find smallest overlap to determine collision side
+        min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+
+        if min_overlap == overlap_top and player.vel_y >= 0:
+            # Landing on top of platform
+            player.y = plat.y - player.height
+            player.vel_y = 0
+            player.on_ground = True
+        elif min_overlap == overlap_bottom and player.vel_y <= 0:
+            # Hitting head on bottom of platform
+            player.y = plat.y + plat.height
+            player.vel_y = 0
+        elif min_overlap == overlap_left:
+            # Hitting left side
+            player.x = plat.x - player.width
+            player.vel_x = 0
+        elif min_overlap == overlap_right:
+            # Hitting right side
+            player.x = plat.x + plat.width
+            player.vel_x = 0
 
     # Enemy collisions
+    player_rect = player.get_rect()
     for enemy in enemies:
         if not enemy.alive:
             continue
@@ -675,7 +691,7 @@ def check_collisions(player, platforms, enemies, coins, exit_door):
             continue
 
         # Check player collision with enemy
-        if player.get_rect().colliderect(enemy_rect) and player.invincible == 0:
+        if player_rect.colliderect(enemy_rect) and player.invincible == 0:
             player.invincible = 30
             player.vel_y = -8
             player.vel_x = -5 if player.facing_right else 5
