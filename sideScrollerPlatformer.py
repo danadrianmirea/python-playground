@@ -96,9 +96,12 @@ class Player:
         self.x += self.vel_x
         self.y += self.vel_y
 
-        # Don't let player go past left edge
+        # Don't let player go past left or right edge
         if self.x < 0:
             self.x = 0
+            self.vel_x = 0
+        if self.x > LEVEL_LENGTH * TILE_SIZE - self.width:
+            self.x = LEVEL_LENGTH * TILE_SIZE - self.width
             self.vel_x = 0
 
         if self.invincible > 0:
@@ -408,6 +411,7 @@ class Exit:
         self.width = 40
         self.height = 60
         self.reached = False
+        self.player_near = False
 
     def draw(self, surface, cam):
         screen_x = self.x - cam.x
@@ -433,6 +437,12 @@ class Exit:
         # "EXIT" text
         exit_text = font_small.render("EXIT", True, YELLOW)
         surface.blit(exit_text, (screen_x + 2, arrow_y - 25))
+
+        # "Press DOWN" prompt when player is near
+        if self.player_near and not self.reached:
+            prompt = font_small.render("Press DOWN to enter", True, WHITE)
+            pr = prompt.get_rect(center=(screen_x + self.width // 2, self.y - 55))
+            surface.blit(prompt, pr)
 
     def get_rect(self):
         return pygame.Rect(self.x, self.y, self.width, self.height)
@@ -679,9 +689,11 @@ def check_collisions(player, platforms, enemies, coins, exit_door):
         if not coin.collected and player.get_rect().colliderect(coin.get_rect()):
             coin.collected = True
 
-    # Exit check
+    # Exit check - just mark proximity, actual activation requires DOWN key
     if exit_door and player.get_rect().colliderect(exit_door.get_rect()):
-        exit_door.reached = True
+        exit_door.player_near = True
+    elif exit_door:
+        exit_door.player_near = False
 
     return lost_life
 
@@ -944,7 +956,10 @@ def main():
                     player.invincible = 60
                     life_lost_timer = 45
 
-            # Check exit
+            # Check exit (activated by pressing DOWN when near)
+            if exit_door and exit_door.player_near and (keys[pygame.K_DOWN] or keys[pygame.K_s]):
+                exit_door.reached = True
+
             if exit_door and exit_door.reached:
                 level_complete = True
 
