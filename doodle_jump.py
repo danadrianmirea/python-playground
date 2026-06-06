@@ -23,6 +23,9 @@ PLAYER_WIDTH = 30
 PLAYER_HEIGHT = 40
 FPS = 60
 SCROLL_THRESHOLD = SCREEN_HEIGHT // 3
+RISING_SPEED = 0.3  # How fast the death zone rises
+RISING_ACCEL = 0.0005  # How much the rising speed increases per frame
+MAX_RISING_SPEED = 1.5
 
 # Colors
 WHITE = (255, 255, 255)
@@ -339,6 +342,31 @@ def reset_game():
     return player, platforms, score, scroll_y
 
 
+def draw_rising_zone(surface, rising_y):
+    """Draw the rising death zone at the bottom."""
+    if rising_y >= SCREEN_HEIGHT:
+        return
+
+    # Red danger zone
+    zone_height = int(SCREEN_HEIGHT - rising_y)
+    zone_rect = pygame.Rect(0, int(rising_y), SCREEN_WIDTH, zone_height)
+    danger_surf = pygame.Surface((SCREEN_WIDTH, zone_height))
+    for i in range(zone_height):
+        alpha = min(200, 80 + int((i / zone_height) * 120))
+        color = (180, 0, 0)
+        danger_surf.set_at((0, i), color)
+        pygame.draw.line(danger_surf, color, (0, i), (SCREEN_WIDTH, i))
+    danger_surf.set_alpha(160)
+    surface.blit(danger_surf, (0, rising_y))
+
+    # Top edge line
+    pygame.draw.line(surface, BLUE, (0, rising_y), (SCREEN_WIDTH, rising_y), 3)
+
+    # Warning label
+    #warn_text = font_small.render("RISING!", True, RED)
+    #surface.blit(warn_text, (SCREEN_WIDTH // 2 - 30, rising_y + 10))
+
+
 def check_collision(player, platforms):
     """Check if player lands on any platform."""
     player_rect = player.get_rect()
@@ -377,6 +405,8 @@ def main():
     high_score = 0
     game_state = "start"
     running = True
+    rising_y = SCREEN_HEIGHT  # Top of the rising death zone (starts off-screen)
+    rising_speed = RISING_SPEED
 
     while running:
         clock.tick(FPS)
@@ -430,9 +460,10 @@ def main():
                 player.y = SCROLL_THRESHOLD
                 scroll_y += diff
 
-                # Move platforms down and generate new ones
+                # Move platforms and rising zone down
                 for platform in platforms:
                     platform.y += diff
+                rising_y += diff
 
                 # Remove off-screen platforms and add new ones
                 platforms = [p for p in platforms if p.y < SCREEN_HEIGHT + 50]
@@ -451,12 +482,24 @@ def main():
             if player.y > SCREEN_HEIGHT + 50:
                 game_state = "game_over"
 
+            # Update rising death zone
+            rising_speed = min(rising_speed + RISING_ACCEL, MAX_RISING_SPEED)
+            rising_y -= rising_speed
+
+            # Check collision with rising zone
+            if player.y + player.height > rising_y:
+                game_state = "game_over"
+
             # Update special platforms
             for platform in platforms:
                 platform.update()
 
         # Draw
         draw_background(screen, scroll_y)
+
+        # Draw rising zone (behind platforms)
+        if game_state == "playing":
+            draw_rising_zone(screen, rising_y)
 
         # Draw platforms
         for platform in platforms:
