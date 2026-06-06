@@ -345,25 +345,36 @@ def reset_game():
 
 
 def draw_rising_zone(surface, rising_y):
-    """Draw the rising death zone at the bottom."""
+    """Draw the rising water at the bottom."""
     if rising_y >= SCREEN_HEIGHT:
         return
 
-    # Red danger zone
+    # Water zone
     zone_height = int(SCREEN_HEIGHT - rising_y)
-    danger_surf = pygame.Surface((SCREEN_WIDTH, zone_height))
+    water_surf = pygame.Surface((SCREEN_WIDTH, zone_height))
     for i in range(zone_height):
-        color = (180, 0, 0)
-        pygame.draw.line(danger_surf, color, (0, i), (SCREEN_WIDTH, i))
-    danger_surf.set_alpha(160)
-    surface.blit(danger_surf, (0, int(rising_y)))
+        # Gradient from dark blue at bottom to lighter blue at top
+        t = i / max(zone_height, 1)
+        r = int(20 + t * 40)
+        g = int(80 + t * 80)
+        b = int(180 + t * 40)
+        pygame.draw.line(water_surf, (r, g, b), (0, i), (SCREEN_WIDTH, i))
+    water_surf.set_alpha(180)
+    surface.blit(water_surf, (0, int(rising_y)))
 
-    # Top edge line
-    pygame.draw.line(surface, RED, (0, int(rising_y)), (SCREEN_WIDTH, int(rising_y)), 3)
+    # Water surface line
+    pygame.draw.line(surface, (100, 200, 255), (0, int(rising_y)), (SCREEN_WIDTH, int(rising_y)), 3)
 
-    # Warning label
-    warn_text = font_small.render("RISING!", True, RED)
-    surface.blit(warn_text, (SCREEN_WIDTH // 2 - 30, int(rising_y) + 10))
+    # Water surface wave effect
+    wave_y = int(rising_y)
+    for wx in range(0, SCREEN_WIDTH, 20):
+        wave_offset = int(3 * ((wx + wave_y) % 20) / 20)
+        pygame.draw.line(
+            surface, (150, 220, 255),
+            (wx, wave_y - 2 + wave_offset),
+            (wx + 10, wave_y - 2 - wave_offset),
+            2,
+        )
 
 
 def check_collision(player, platforms):
