@@ -339,7 +339,9 @@ def reset_game():
     platforms = generate_platforms(12, SCREEN_HEIGHT - 50)
     score = 0
     scroll_y = 0
-    return player, platforms, score, scroll_y
+    rising_y = SCREEN_HEIGHT
+    rising_speed = RISING_SPEED
+    return player, platforms, score, scroll_y, rising_y, rising_speed
 
 
 def draw_rising_zone(surface, rising_y):
@@ -349,22 +351,19 @@ def draw_rising_zone(surface, rising_y):
 
     # Red danger zone
     zone_height = int(SCREEN_HEIGHT - rising_y)
-    zone_rect = pygame.Rect(0, int(rising_y), SCREEN_WIDTH, zone_height)
     danger_surf = pygame.Surface((SCREEN_WIDTH, zone_height))
     for i in range(zone_height):
-        alpha = min(200, 80 + int((i / zone_height) * 120))
         color = (180, 0, 0)
-        danger_surf.set_at((0, i), color)
         pygame.draw.line(danger_surf, color, (0, i), (SCREEN_WIDTH, i))
     danger_surf.set_alpha(160)
-    surface.blit(danger_surf, (0, rising_y))
+    surface.blit(danger_surf, (0, int(rising_y)))
 
     # Top edge line
-    pygame.draw.line(surface, BLUE, (0, rising_y), (SCREEN_WIDTH, rising_y), 3)
+    pygame.draw.line(surface, RED, (0, int(rising_y)), (SCREEN_WIDTH, int(rising_y)), 3)
 
     # Warning label
-    #warn_text = font_small.render("RISING!", True, RED)
-    #surface.blit(warn_text, (SCREEN_WIDTH // 2 - 30, rising_y + 10))
+    warn_text = font_small.render("RISING!", True, RED)
+    surface.blit(warn_text, (SCREEN_WIDTH // 2 - 30, int(rising_y) + 10))
 
 
 def check_collision(player, platforms):
@@ -401,12 +400,10 @@ def check_collision(player, platforms):
 
 def main():
     """Main game loop."""
-    player, platforms, score, scroll_y = reset_game()
+    player, platforms, score, scroll_y, rising_y, rising_speed = reset_game()
     high_score = 0
     game_state = "start"
     running = True
-    rising_y = SCREEN_HEIGHT  # Top of the rising death zone (starts off-screen)
-    rising_speed = RISING_SPEED
 
     while running:
         clock.tick(FPS)
@@ -423,20 +420,20 @@ def main():
                 if event.key == pygame.K_SPACE:
                     if game_state == "start":
                         game_state = "playing"
-                        player, platforms, score, scroll_y = reset_game()
+                        player, platforms, score, scroll_y, rising_y, rising_speed = reset_game()
                     elif game_state == "playing":
                         player.jump()
                     elif game_state == "game_over":
                         game_state = "playing"
-                        player, platforms, score, scroll_y = reset_game()
+                        player, platforms, score, scroll_y, rising_y, rising_speed = reset_game()
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if game_state == "start":
                     game_state = "playing"
-                    player, platforms, score, scroll_y = reset_game()
+                    player, platforms, score, scroll_y, rising_y, rising_speed = reset_game()
                 elif game_state == "game_over":
                     game_state = "playing"
-                    player, platforms, score, scroll_y = reset_game()
+                    player, platforms, score, scroll_y, rising_y, rising_speed = reset_game()
 
         # Update
         if game_state == "playing":
