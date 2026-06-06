@@ -336,7 +336,14 @@ def show_start_screen(surface):
 def reset_game():
     """Reset game state."""
     player = Player(SCREEN_WIDTH // 2 - PLAYER_WIDTH // 2, SCREEN_HEIGHT // 2)
-    platforms = generate_platforms(12, SCREEN_HEIGHT - 50)
+    # Place a platform directly under the player
+    start_platform = Platform(
+        SCREEN_WIDTH // 2 - PLATFORM_WIDTH // 2,
+        SCREEN_HEIGHT // 2 + PLAYER_HEIGHT + 10,
+        "normal",
+    )
+    platforms = [start_platform]
+    platforms.extend(generate_platforms(11, SCREEN_HEIGHT - 50))
     score = 0
     scroll_y = 0
     rising_y = SCREEN_HEIGHT
