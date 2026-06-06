@@ -692,13 +692,20 @@ def check_collisions(player, platforms, enemies, coins, exit_door):
 
         # Check player collision with enemy
         if player_rect.colliderect(enemy_rect) and player.invincible == 0:
-            player.invincible = 30
-            player.vel_y = -8
-            player.vel_x = -5 if player.facing_right else 5
-            player.health -= 1
-            if player.health <= 0:
-                player.lives -= 1
-                lost_life = True
+            # Check if player is falling onto the enemy (stomp kill like Mario)
+            if player.vel_y > 0 and player.y + player.height - enemy.y < 20:
+                # Stomp the enemy!
+                enemy.alive = False
+                player.vel_y = -8  # Bounce up
+            else:
+                # Take damage from side/bottom collision
+                player.invincible = 30
+                player.vel_y = -8
+                player.vel_x = -5 if player.facing_right else 5
+                player.health -= 1
+                if player.health <= 0:
+                    player.lives -= 1
+                    lost_life = True
 
     # Coin collection
     for coin in coins:
