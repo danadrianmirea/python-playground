@@ -579,26 +579,48 @@ def generate_level():
         platforms.append(bridge)
         reachable[len(platforms) - 1] = True
 
-    # --- Place enemies on platforms (avoid overlaps) ---
-    for plat in platforms:
-        if random.random() < 0.2 and plat.width >= TILE_SIZE:
-            ex = plat.x + random.randint(0, max(0, plat.width - 30))
-            ey = plat.y - 30
-            new_enemy = Enemy(ex, ey)
-            # Check enemy doesn't overlap with existing enemies
-            overlap = False
-            for e in enemies:
-                if new_enemy.get_rect().colliderect(e.get_rect()):
-                    overlap = True
-                    break
-            if not overlap:
-                enemies.append(new_enemy)
-
-    # --- Place exactly NUM_COINS coins on reachable platforms ---
-    NUM_COINS = 40
+    # Build list of reachable platforms for enemy/coin placement
     reachable_platforms = [p for i, p in enumerate(platforms) if reachable.get(i, False)]
     if not reachable_platforms:
         reachable_platforms = platforms
+
+    # --- Place exactly NUM_ENEMIES enemies on reachable platforms ---
+    NUM_ENEMIES = 20
+    # Filter out the starting platform (first ground segment at x=0)
+    spawn_platforms = [p for p in reachable_platforms if p.x > 200]
+    if not spawn_platforms:
+        spawn_platforms = reachable_platforms
+    attempts = 0
+    while len(enemies) < NUM_ENEMIES and attempts < NUM_ENEMIES * 20:
+        attempts += 1
+        plat = random.choice(spawn_platforms)
+        if plat.width < TILE_SIZE:
+            continue
+        ex = plat.x + random.randint(0, max(0, plat.width - 30))
+        ey = plat.y - 30
+        new_enemy = Enemy(ex, ey)
+        # Check enemy doesn't overlap with existing enemies
+        overlap = False
+        for e in enemies:
+            if new_enemy.get_rect().colliderect(e.get_rect()):
+                overlap = True
+                break
+        if overlap:
+            continue
+        # Check enemy isn't trapped inside another platform
+        enemy_rect = new_enemy.get_rect()
+        trapped = False
+        for p in platforms:
+            if p is plat:
+                continue
+            if enemy_rect.colliderect(p.get_rect()):
+                trapped = True
+                break
+        if not trapped:
+            enemies.append(new_enemy)
+
+    # --- Place exactly NUM_COINS coins on reachable platforms ---
+    NUM_COINS = 40
 
     def coin_is_reachable(cx, cy, platforms):
         """Check if a coin position is reachable (not inside or trapped between platforms)."""
@@ -753,12 +775,15 @@ hud_bg.set_alpha(120)
 hud_bg.fill(BLACK)
 
 
-def show_hud(surface, player, coins_collected, total_coins, level):
+def show_hud(surface, player, coins_collected, total_coins, level, enemies_alive, total_enemies):
     """Display HUD with health bar and lives."""
     surface.blit(hud_bg, (0, 0))
 
     coin_text = font_small.render(f"Coins: {coins_collected}/{total_coins}", True, GOLD)
     surface.blit(coin_text, (10, 8))
+
+    enemy_text = font_small.render(f"Enemies: {enemies_alive}/{total_enemies}", True, RED)
+    surface.blit(enemy_text, (160, 8))
 
     level_text = font_small.render(f"Level {level}", True, WHITE)
     surface.blit(level_text, (SCREEN_WIDTH // 2 - 30, 8))
@@ -887,6 +912,7 @@ def main():
         camera = Camera()
         coins_collected = 0
         total_coins = len(coins)
+        total_enemies = len(enemies)
         level_complete = False
         game_over = False
 
@@ -944,7 +970,8 @@ def main():
                     if exit_door:
                         exit_door.draw(screen, camera)
                     player.draw(screen, camera)
-                    show_hud(screen, player, coins_collected, total_coins, level)
+                    enemies_alive = sum(1 for e in enemies if e.alive)
+                    show_hud(screen, player, coins_collected, total_coins, level, enemies_alive, total_enemies)
 
                     # Life lost overlay
                     overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -1040,7 +1067,8 @@ def main():
             player.draw(screen, camera)
 
             # Draw HUD
-            show_hud(screen, player, coins_collected, total_coins, level)
+            enemies_alive = sum(1 for e in enemies if e.alive)
+            show_hud(screen, player, coins_collected, total_coins, level, enemies_alive, total_enemies)
 
             # Draw level complete or game over
             if level_complete:
