@@ -148,11 +148,11 @@ class Player:
         eye_offset = 5 if self.facing_right else -5
         pygame.draw.circle(surface, BLACK, (int(screen_x + self.width // 2 + eye_offset), int(self.y - 2)), 3)
 
-        # Legs
+        # Legs (always same size to avoid flickering)
         leg_color = (0, 80, 200)
-        leg_offset = 3 if self.on_ground else 0
-        pygame.draw.rect(surface, leg_color, (screen_x + 4, self.y + self.height - 4, 8, 4 + leg_offset))
-        pygame.draw.rect(surface, leg_color, (screen_x + self.width - 12, self.y + self.height - 4, 8, 4 + leg_offset))
+        leg_height = 7
+        pygame.draw.rect(surface, leg_color, (screen_x + 4, self.y + self.height - leg_height, 8, leg_height))
+        pygame.draw.rect(surface, leg_color, (screen_x + self.width - 12, self.y + self.height - leg_height, 8, leg_height))
 
         # Axe
         if self.axe_swinging:
