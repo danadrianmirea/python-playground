@@ -48,6 +48,10 @@ PINK = (255, 100, 150)
 font_large = pygame.font.SysFont("Arial", 48, bold=True)
 font_medium = pygame.font.SysFont("Arial", 28)
 font_small = pygame.font.SysFont("Arial", 20)
+font_tiny = pygame.font.SysFont("Arial", 12, bold=True)
+
+# Pre-rendered coin dollar sign
+coin_dollar = font_tiny.render("$", True, (200, 150, 0))
 
 clock = pygame.time.Clock()
 
@@ -240,16 +244,20 @@ class Enemy:
 
         if not self.alive:
             if self.death_timer < 20:
-                # Death animation - fade out
-                alpha = max(0, 255 - self.death_timer * 12)
-                s = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-                if self.type == "slime":
-                    pygame.draw.ellipse(s, (100, 255, 100, alpha), (0, 0, self.width, self.height))
-                elif self.type == "bat":
-                    pygame.draw.ellipse(s, (100, 100, 255, alpha), (0, 0, self.width, self.height))
-                else:
-                    pygame.draw.ellipse(s, (255, 100, 100, alpha), (0, 0, self.width, self.height))
-                surface.blit(s, (screen_x, self.y))
+                # Death animation - simple shrink
+                scale = 1.0 - self.death_timer / 20
+                w = int(self.width * scale)
+                h = int(self.height * scale)
+                if w > 0 and h > 0:
+                    offset_x = (self.width - w) // 2
+                    offset_y = (self.height - h) // 2
+                    if self.type == "slime":
+                        color = (100, 255, 100)
+                    elif self.type == "bat":
+                        color = (100, 100, 255)
+                    else:
+                        color = (255, 100, 100)
+                    pygame.draw.ellipse(surface, color, (screen_x + offset_x, self.y + offset_y, w, h))
             return
 
         if self.type == "slime":
@@ -265,8 +273,8 @@ class Enemy:
             # Purple bat
             body_rect = pygame.Rect(screen_x + 5, self.y + 8, self.width - 10, self.height - 16)
             pygame.draw.ellipse(surface, (120, 50, 180), body_rect)
-            # Wings
-            wing_flap = math.sin(pygame.time.get_ticks() * 0.01) * 5
+            # Wings (frame-based animation)
+            wing_flap = ((self.x + self.y) % 10) - 5
             pygame.draw.ellipse(surface, (100, 40, 160),
                                 (screen_x - 10, self.y + wing_flap, 15, 15))
             pygame.draw.ellipse(surface, (100, 40, 160),
@@ -303,16 +311,11 @@ class Coin:
         if self.collected:
             return
         screen_x = self.x - cam.x
-        # Glow effect
-        glow = int(50 + 30 * math.sin(pygame.time.get_ticks() * 0.005))
-        pygame.draw.circle(surface, (255, 255, 200, glow), (int(screen_x), int(self.y)), self.radius + 4)
         # Coin
         pygame.draw.circle(surface, GOLD, (int(screen_x), int(self.y)), self.radius)
         pygame.draw.circle(surface, (200, 170, 0), (int(screen_x), int(self.y)), self.radius, 2)
-        # Dollar sign
-        font = pygame.font.SysFont("Arial", 12, bold=True)
-        text = font.render("$", True, (200, 150, 0))
-        surface.blit(text, (screen_x - 4, self.y - 6))
+        # Dollar sign (pre-rendered)
+        surface.blit(coin_dollar, (screen_x - 4, self.y - 6))
 
     def get_rect(self):
         return pygame.Rect(self.x - self.radius, self.y - self.radius, self.radius * 2, self.radius * 2)
@@ -469,30 +472,37 @@ def check_collisions(player, platforms, enemies, coins, exit_door):
     """Handle all collision logic."""
     player.on_ground = False
 
-    # Platform collisions - vertical first
+    # Platform collisions
     player_rect = player.get_rect()
     for plat in platforms:
         plat_rect = plat.get_rect()
         if player_rect.colliderect(plat_rect):
-            if player.vel_y > 0:  # Falling
+            # Determine overlap amounts
+            overlap_left = (player.x + player.width) - plat.x
+            overlap_right = (plat.x + plat.width) - player.x
+            overlap_top = (player.y + player.height) - plat.y
+            overlap_bottom = (plat.y + plat.height) - player.y
+
+            # Find smallest overlap to determine collision side
+            min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+
+            if min_overlap == overlap_top and player.vel_y >= 0:
+                # Landing on top of platform
                 player.y = plat.y - player.height
                 player.vel_y = 0
                 player.on_ground = True
-            elif player.vel_y < 0:  # Jumping up into platform
+            elif min_overlap == overlap_bottom and player.vel_y <= 0:
+                # Hitting head on bottom of platform
                 player.y = plat.y + plat.height
                 player.vel_y = 0
-
-    # Side collision with platforms (only if not standing on top)
-    player_rect = player.get_rect()
-    for plat in platforms:
-        plat_rect = plat.get_rect()
-        if player_rect.colliderect(plat_rect):
-            # Only resolve side collision if player isn't standing on this platform
-            if player.y + player.height > plat.y + 5:
-                if player.vel_x > 0:
-                    player.x = plat.x - player.width
-                elif player.vel_x < 0:
-                    player.x = plat.x + plat.width
+            elif min_overlap == overlap_left:
+                # Hitting left side
+                player.x = plat.x - player.width
+                player.vel_x = 0
+            elif min_overlap == overlap_right:
+                # Hitting right side
+                player.x = plat.x + plat.width
+                player.vel_x = 0
 
     # Enemy collisions
     for enemy in enemies:
@@ -527,10 +537,11 @@ def draw_background(surface, cam):
     # Sky - solid fill for performance
     surface.fill(SKY_BLUE)
 
-    # Mountains (parallax)
+    # Mountains (parallax) - fixed heights for performance
     mountain_color = (100, 150, 100)
-    for mx in range(0, SCREEN_WIDTH + 50, 80):
-        mh = 100 + 50 * math.sin((mx + cam.x * 0.2) * 0.01)
+    mountain_heights = [120, 90, 140, 80, 110, 130, 95, 115, 100, 125, 85]
+    for i, mx in enumerate(range(0, SCREEN_WIDTH + 50, 80)):
+        mh = mountain_heights[i % len(mountain_heights)]
         pygame.draw.polygon(surface, mountain_color, [
             (mx - 60, SCREEN_HEIGHT - 60),
             (mx, SCREEN_HEIGHT - 60 - mh),
@@ -547,11 +558,14 @@ def draw_background(surface, cam):
         pygame.draw.ellipse(surface, cloud_color, (cx + 35, cy, 30, 18))
 
 
+# Pre-created HUD background surface
+hud_bg = pygame.Surface((SCREEN_WIDTH, 40))
+hud_bg.set_alpha(120)
+hud_bg.fill(BLACK)
+
+
 def show_hud(surface, coins_collected, total_coins, level):
     """Display HUD."""
-    hud_bg = pygame.Surface((SCREEN_WIDTH, 40))
-    hud_bg.set_alpha(120)
-    hud_bg.fill(BLACK)
     surface.blit(hud_bg, (0, 0))
 
     coin_text = font_small.render(f"Coins: {coins_collected}/{total_coins}", True, GOLD)
