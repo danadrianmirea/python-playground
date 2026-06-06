@@ -440,7 +440,8 @@ def main():
                         game_state = "playing"
                         player, platforms, score, scroll_y, rising_y, rising_speed = reset_game()
                     elif game_state == "playing":
-                        player.jump()
+                        if player.on_platform:
+                            player.jump()
                     elif game_state == "game_over":
                         game_state = "playing"
                         player, platforms, score, scroll_y, rising_y, rising_speed = reset_game()
