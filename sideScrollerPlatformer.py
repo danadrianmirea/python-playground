@@ -676,6 +676,7 @@ def main():
         level_complete = False
         game_over = False
 
+        restart_level = False
         while game_state == "playing" and running:
             clock.tick(FPS)
 
@@ -692,15 +693,18 @@ def main():
                         if level_complete:
                             level += 1
                             total_coins_all += coins_collected
-                            break  # Restart loop with new level
+                            restart_level = True
                         elif game_over:
                             level = 1
                             total_coins_all = 0
-                            break  # Restart loop
+                            restart_level = True
                         else:
                             player.swing_axe()
 
             if game_state == "quit":
+                break
+
+            if restart_level:
                 break
 
             if level_complete or game_over:
