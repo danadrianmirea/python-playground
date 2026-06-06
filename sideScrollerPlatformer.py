@@ -217,10 +217,32 @@ class Enemy:
         self.on_ground = False
         for plat in platforms:
             if self.get_rect().colliderect(plat.get_rect()):
-                if self.vel_y > 0:
+                # Determine overlap amounts
+                overlap_left = (self.x + self.width) - plat.x
+                overlap_right = (plat.x + plat.width) - self.x
+                overlap_top = (self.y + self.height) - plat.y
+                overlap_bottom = (plat.y + plat.height) - self.y
+
+                # Find smallest overlap
+                min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
+
+                if min_overlap == overlap_top and self.vel_y >= 0:
+                    # Landing on top
                     self.y = plat.y - self.height
                     self.vel_y = 0
                     self.on_ground = True
+                elif min_overlap == overlap_bottom and self.vel_y <= 0:
+                    # Hitting head
+                    self.y = plat.y + plat.height
+                    self.vel_y = 0
+                elif min_overlap == overlap_left:
+                    # Hitting left side - reverse direction
+                    self.x = plat.x - self.width
+                    self.vel_x *= -1
+                elif min_overlap == overlap_right:
+                    # Hitting right side - reverse direction
+                    self.x = plat.x + plat.width
+                    self.vel_x *= -1
 
         # Reverse direction at edges
         if self.on_ground:
@@ -235,8 +257,12 @@ class Enemy:
             if not on_ground_ahead:
                 self.vel_x *= -1
 
-        # Bounce off walls
-        if self.x < 0 or self.x > LEVEL_LENGTH * TILE_SIZE - self.width:
+        # Bounce off world boundaries
+        if self.x < 0:
+            self.x = 0
+            self.vel_x *= -1
+        elif self.x > LEVEL_LENGTH * TILE_SIZE - self.width:
+            self.x = LEVEL_LENGTH * TILE_SIZE - self.width
             self.vel_x *= -1
 
     def draw(self, surface, cam):
