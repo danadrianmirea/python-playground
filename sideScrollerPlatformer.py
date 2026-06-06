@@ -96,6 +96,11 @@ class Player:
         self.x += self.vel_x
         self.y += self.vel_y
 
+        # Don't let player go past left edge
+        if self.x < 0:
+            self.x = 0
+            self.vel_x = 0
+
         if self.invincible > 0:
             self.invincible -= 1
 
