@@ -884,12 +884,18 @@ class JoustGame:
         lava_rect = pygame.Rect(0, SCREEN_HEIGHT - 40, SCREEN_WIDTH, 40)
         pygame.draw.rect(self.screen, LAVA_COLOR, lava_rect)
 
-        # Lava glow
-        for x in range(0, SCREEN_WIDTH, 4):
-            glow_h = random.randint(5, 15)
-            glow_color = (255, random.randint(100, 200), random.randint(20, 60))
-            pygame.draw.line(self.screen, glow_color,
-                             (x, SCREEN_HEIGHT - 40 - glow_h),
+        # Lava glow - use pre-computed values to avoid per-frame random flickering
+        if not hasattr(self, 'lava_glow_data'):
+            self.lava_glow_data = []
+            for x in range(0, SCREEN_WIDTH, 4):
+                h = random.randint(5, 15)
+                r = random.randint(100, 200)
+                g = random.randint(20, 60)
+                self.lava_glow_data.append((h, r, g))
+        for i, x in enumerate(range(0, SCREEN_WIDTH, 4)):
+            h, r, g = self.lava_glow_data[i]
+            pygame.draw.line(self.screen, (255, r, g),
+                             (x, SCREEN_HEIGHT - 40 - h),
                              (x, SCREEN_HEIGHT - 40), 2)
 
     def draw_hud(self):
