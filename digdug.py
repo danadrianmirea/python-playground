@@ -652,7 +652,8 @@ class DigDugGame:
                 if 0 <= nx < GRID_COLS and 0 <= ny < GRID_ROWS:
                     grid[ny][nx] = 0
 
-        # Pre-compute dirt colors
+        # Pre-compute dirt colors and texture dots
+        self.dirt_dots = [[[] for _ in range(GRID_COLS)] for _ in range(GRID_ROWS)]
         for gy in range(GRID_ROWS):
             for gx in range(GRID_COLS):
                 if grid[gy][gx] == 1:
@@ -661,6 +662,14 @@ class DigDugGame:
                     g = max(0, min(255, DIRT_COLOR[1] + shade))
                     b = max(0, min(255, DIRT_COLOR[2] + shade))
                     self.dirt_colors[gy][gx] = (r, g, b)
+                    # Pre-compute texture dots
+                    dots = []
+                    for _ in range(3):
+                        if random.random() < 0.3:
+                            dx = gx * TILE_SIZE + random.randint(3, TILE_SIZE - 3)
+                            dy = gy * TILE_SIZE + random.randint(3, TILE_SIZE - 3) + PLAY_OFFSET_Y
+                            dots.append((dx, dy))
+                    self.dirt_dots[gy][gx] = dots
 
         # Place some rocks on dirt tiles near the top
         self.rocks = []
@@ -915,17 +924,15 @@ class DigDugGame:
                 tile = self.grid[gy][gx]
                 rect = tile_rect(gx, gy)
                 if tile == 1:  # Dirt
-                    # Draw dirt with slight variation
-                    shade = random.randint(-10, 10)
-                    r = max(0, min(255, DIRT_COLOR[0] + shade))
-                    g = max(0, min(255, DIRT_COLOR[1] + shade))
-                    b = max(0, min(255, DIRT_COLOR[2] + shade))
-                    pygame.draw.rect(self.screen, (r, g, b), rect)
-                    # Dirt texture dots
-                    if random.random() < 0.3:
-                        dx = gx * TILE_SIZE + random.randint(3, TILE_SIZE - 3)
-                        dy = gy * TILE_SIZE + random.randint(3, TILE_SIZE - 3) + PLAY_OFFSET_Y
-                        pygame.draw.circle(self.screen, DIRT_DARK, (dx, dy), 2)
+                    # Use pre-computed color (no random per frame = no flicker)
+                    color = self.dirt_colors[gy][gx]
+                    if color is None:
+                        color = DIRT_COLOR
+                    pygame.draw.rect(self.screen, color, rect)
+                    # Dirt texture dots (pre-computed positions)
+                    if hasattr(self, 'dirt_dots') and self.dirt_dots[gy][gx]:
+                        for dx, dy in self.dirt_dots[gy][gx]:
+                            pygame.draw.circle(self.screen, DIRT_DARK, (dx, dy), 2)
                 elif tile == 0:  # Tunnel
                     pygame.draw.rect(self.screen, TUNNEL_COLOR, rect)
                     # Tunnel border
