@@ -53,7 +53,7 @@ GRID_ROWS = (SCREEN_HEIGHT - 48) // TILE_SIZE  # 33 (leave 48px for HUD)
 PLAY_OFFSET_Y = 48  # HUD area at top
 
 # Player
-PLAYER_SPEED = 2
+PLAYER_SPEED = 2.0
 PLAYER_SIZE = 14
 
 # Pump
@@ -156,12 +156,48 @@ class DigDug:
         self.pump_cooldown = 0
         self.pump_anim_timer = 0
         self.pump_anim_frame = 0
+        # Pixel-based movement interpolation
+        self.move_progress = 0.0  # 0.0 = at current tile, 1.0 = at next tile
+        self.move_from_gx = self.gx
+        self.move_from_gy = self.gy
+        self.move_to_gx = self.gx
+        self.move_to_gy = self.gy
+        self.move_dx = 0
+        self.move_dy = 0
 
     def update(self, keys, grid):
         if not self.alive:
             return
 
-        # Movement
+        # If currently interpolating between tiles, continue moving
+        if self.move_progress > 0 and self.move_progress < 1.0:
+            self.move_progress += self.speed / TILE_SIZE
+            if self.move_progress >= 1.0:
+                self.move_progress = 0.0
+                # Snap to destination tile
+                self.gx = self.move_to_gx
+                self.gy = self.move_to_gy
+                self.px, self.py = grid_to_pixel(self.gx, self.gy)
+                # Dig the tile (turn dirt into tunnel)
+                if grid[self.gy][self.gx] == 1:
+                    grid[self.gy][self.gx] = 0
+            else:
+                # Interpolate pixel position
+                from_px, from_py = grid_to_pixel(self.move_from_gx, self.move_from_gy)
+                to_px, to_py = grid_to_pixel(self.move_to_gx, self.move_to_gy)
+                t = self.move_progress
+                self.px = from_px + (to_px - from_px) * t
+                self.py = from_py + (to_py - from_py) * t
+            # Still allow pump while moving
+            if self.pump_cooldown > 0:
+                self.pump_cooldown -= 1
+            if self.pump_anim_timer > 0:
+                self.pump_anim_timer -= 1
+                if self.pump_anim_timer == 0:
+                    self.pump_anim_frame = 0
+            return
+
+        # Not moving between tiles - check for new input
         dx, dy = 0, 0
         if keys[pygame.K_LEFT]:
             dx, dy = -1, 0
@@ -186,15 +222,21 @@ class DigDug:
             if 0 <= new_gx < GRID_COLS and 0 <= new_gy < GRID_ROWS:
                 # Check if tile is diggable (dirt) or already tunnel
                 if grid[new_gy][new_gx] == 1 or grid[new_gy][new_gx] == 0:
-                    # Move to new tile
-                    self.gx = new_gx
-                    self.gy = new_gy
-                    self.px, self.py = grid_to_pixel(self.gx, self.gy)
+                    # Start interpolated movement
+                    self.move_from_gx = self.gx
+                    self.move_from_gy = self.gy
+                    self.move_to_gx = new_gx
+                    self.move_to_gy = new_gy
+                    self.move_dx = dx
+                    self.move_dy = dy
+                    self.move_progress = self.speed / TILE_SIZE
                     self.direction = dx + dy * 2  # encode direction
-
-                    # Dig the tile (turn dirt into tunnel)
-                    if grid[self.gy][self.gx] == 1:
-                        grid[self.gy][self.gx] = 0
+                    # Update pixel position for first step
+                    from_px, from_py = grid_to_pixel(self.move_from_gx, self.move_from_gy)
+                    to_px, to_py = grid_to_pixel(self.move_to_gx, self.move_to_gy)
+                    t = self.move_progress
+                    self.px = from_px + (to_px - from_px) * t
+                    self.py = from_py + (to_py - from_py) * t
 
         # Pump cooldown
         if self.pump_cooldown > 0:
