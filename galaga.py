@@ -77,10 +77,6 @@ SCOUT_TYPE = 2  # Bottom rows
 DIVE_SPEED = 3
 DIVE_RECOVER_Y = 100  # Y to recover after dive
 
-# Tractor beam
-TRACTOR_BEAM_SPEED = 1.5
-TRACTOR_BEAM_LENGTH = 200
-
 # Scoring
 SCORE_BOSS = 150
 SCORE_FIGHTER = 100
@@ -101,8 +97,6 @@ PLAYING = 1
 GAME_OVER = 2
 STAGE_CLEAR = 3
 BONUS_STAGE = 4
-CAPTURED = 5  # Player is being tractored
-
 # ---------------------------------------------------------------------------
 # Enemy formation patterns (relative positions in grid)
 # ---------------------------------------------------------------------------
@@ -376,10 +370,6 @@ class Enemy:
         self.animation_timer = 0
         self.wing_angle = 0
 
-        # Tractor beam
-        self.tractoring = False
-        self.tractor_target = None
-
         # Set type-specific properties
         if self.type == BOSS_TYPE:
             self.width = 28
@@ -586,45 +576,6 @@ class Enemy:
         return pygame.Rect(self.x, self.y, self.width, self.height)
 
 
-class TractorBeam:
-    """Tractor beam effect for capturing the player."""
-    def __init__(self, x, y, target_y):
-        self.x = x
-        self.y = y
-        self.target_y = target_y
-        self.active = True
-        self.lines = []
-        self.phase = 0
-
-    def update(self):
-        if not self.active:
-            return
-        self.phase += 0.1
-        # Generate beam lines
-        self.lines = []
-        for i in range(10):
-            t = i / 10.0
-            by = self.y + (self.target_y - self.y) * t
-            bx = self.x + math.sin(self.phase + t * 4) * (4 + t * 6)
-            self.lines.append((bx, by))
-
-    def draw(self, screen):
-        if not self.active or len(self.lines) < 2:
-            return
-        # Draw beam as connected lines
-        for i in range(len(self.lines) - 1):
-            alpha = 255 - int((i / len(self.lines)) * 200)
-            color = (alpha, alpha, 255)
-            pygame.draw.line(screen, color, self.lines[i], self.lines[i + 1], 2)
-            # Side glow
-            pygame.draw.line(screen, (0, 0, alpha // 2),
-                             (self.lines[i][0] - 2, self.lines[i][1]),
-                             (self.lines[i + 1][0] - 2, self.lines[i + 1][1]), 1)
-            pygame.draw.line(screen, (0, 0, alpha // 2),
-                             (self.lines[i][0] + 2, self.lines[i][1]),
-                             (self.lines[i + 1][0] + 2, self.lines[i + 1][1]), 1)
-
-
 class Galaga:
     def __init__(self):
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -638,7 +589,6 @@ class Galaga:
             pygame.mixer.init()
             self.shoot_sound = self.create_sound(440, 0.1)
             self.explosion_sound = self.create_sound(100, 0.3)
-            self.capture_sound = self.create_sound(220, 0.5)
         except Exception:
             self.sound_enabled = False
 
@@ -671,9 +621,6 @@ class Galaga:
         self.dive_timer = 0
         self.dive_cooldown = 120  # frames between dive attacks
         self.enemies_diving = []
-        self.tractor_beam = None
-        self.captured_player = None
-        self.capture_timer = 0
         self.stage_clear_timer = 0
         self.bonus_stage_active = False
         self.bonus_enemies = []
@@ -776,73 +723,6 @@ class Galaga:
                     enemy.y + enemy.height,
                     ENEMY_BULLET_SPEED, False
                 ))
-
-        # Tractor beam logic (boss enemies can capture)
-        if self.tractor_beam is None and self.player.alive:
-            bosses = [e for e in self.enemies
-                      if e.alive and e.type == BOSS_TYPE
-                      and not e.entering and not e.diving
-                      and not e.recovering and not e.tractoring]
-            for boss in bosses:
-                if random.random() < 0.002:  # Rare chance
-                    if abs(boss.x - self.player.x) < 100:
-                        self.start_tractor_beam(boss)
-                        break
-
-    def start_tractor_beam(self, boss):
-        """Start tractor beam to capture player."""
-        self.tractor_beam = TractorBeam(
-            boss.x + boss.width // 2,
-            boss.y + boss.height,
-            self.player.y
-        )
-        boss.tractoring = True
-        self.state = CAPTURED
-        self.capture_timer = 0
-        if self.sound_enabled:
-            self.capture_sound.play()
-
-    def update_tractor_beam(self):
-        """Update tractor beam capture sequence."""
-        if self.tractor_beam is None:
-            return
-
-        self.capture_timer += 1
-        self.tractor_beam.update()
-
-        # Move player toward the boss
-        boss = None
-        for e in self.enemies:
-            if e.tractoring:
-                boss = e
-                break
-
-        if boss is None:
-            self.tractor_beam = None
-            self.state = PLAYING
-            return
-
-        # Pull player up
-        dx = boss.x + boss.width // 2 - self.player.x - self.player.width // 2
-        dy = boss.y + boss.height - self.player.y
-
-        self.player.x += dx * 0.02
-        self.player.y += dy * 0.02
-
-        # Check if player reached the boss (captured)
-        if abs(dy) < 10:
-            self.player.alive = False
-            self.captured_player = True
-            boss.tractoring = False
-            self.tractor_beam = None
-            self.state = PLAYING
-            self.lives -= 1
-            self.life_lost_timer = 60
-            if self.lives <= 0:
-                self.state = GAME_OVER
-                self.game_over_timer = 120
-                if self.score > self.high_score:
-                    self.high_score = self.score
 
     def update_bullets(self):
         """Update all bullets."""
@@ -996,12 +876,6 @@ class Galaga:
                 if self.respawn_timer <= 0:
                     self.player.reset()
 
-        elif self.state == CAPTURED:
-            self.update_tractor_beam()
-            self.update_enemies()
-            self.update_bullets()
-            self.update_particles()
-
         elif self.state == STAGE_CLEAR:
             self.stage_clear_timer -= 1
             self.update_particles()
@@ -1097,16 +971,12 @@ class Galaga:
                 ctrl = font_small.render(text, True, GRAY)
                 self.screen.blit(ctrl, (SCREEN_WIDTH // 2 - ctrl.get_width() // 2, 420 + i * 22))
 
-        elif self.state == PLAYING or self.state == CAPTURED or self.state == STAGE_CLEAR:
+        elif self.state == PLAYING or self.state == STAGE_CLEAR:
             # Draw enemies
             for enemy in self.enemies:
                 enemy.draw(self.screen)
             for enemy in self.enemies_diving:
                 enemy.draw(self.screen)
-
-            # Draw tractor beam
-            if self.tractor_beam:
-                self.tractor_beam.draw(self.screen)
 
             # Draw player
             self.player.draw(self.screen)
@@ -1135,12 +1005,6 @@ class Galaga:
                 self.screen.blit(clear_text,
                                  (SCREEN_WIDTH // 2 - clear_text.get_width() // 2,
                                   SCREEN_HEIGHT // 2 - 50))
-
-            if self.state == CAPTURED:
-                capture_text = font_medium.render("TRACTOR BEAM!", True, CYAN)
-                self.screen.blit(capture_text,
-                                 (SCREEN_WIDTH // 2 - capture_text.get_width() // 2,
-                                  SCREEN_HEIGHT // 2 - 80))
 
         elif self.state == GAME_OVER:
             # Draw final state
