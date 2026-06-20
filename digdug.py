@@ -484,6 +484,7 @@ class Enemy:
 
         cx, cy = self.px, self.py
         pump_scale = 1.0 + self.pump_size * 0.3
+        r = int(self.size * pump_scale)
 
         if self.type == 0:  # Pooka - red ball with goggles
             color = self.color
