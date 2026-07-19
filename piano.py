@@ -266,6 +266,7 @@ class Piano:
         Creates a long buffer (10 seconds) with seamless looping.
         The buffer length is an exact multiple of the wave period so that
         looping the sound buffer produces no clicks or pops.
+        Volume is kept low to prevent clipping when multiple notes play.
         """
         import numpy as np
 
@@ -286,11 +287,9 @@ class Piano:
         if attack > 0:
             wave[:attack] *= np.linspace(0, 1, attack)
 
-        # Add harmonics for richer sound
-        # Second harmonic
-        wave2 = np.sin(2 * np.pi * frequency * 2 * t) * 0.3
-        # Third harmonic
-        wave3 = np.sin(2 * np.pi * frequency * 3 * t) * 0.15
+        # Add harmonics for richer sound (lower volume to prevent clipping with chords)
+        wave2 = np.sin(2 * np.pi * frequency * 2 * t) * 0.2
+        wave3 = np.sin(2 * np.pi * frequency * 3 * t) * 0.1
         wave = wave + wave2 + wave3
 
         # Normalize
@@ -298,8 +297,9 @@ class Piano:
         if max_val > 0:
             wave = wave / max_val
 
-        # Convert to 16-bit PCM
-        wave = (wave * 32767 * 0.5).astype(np.int16)
+        # Convert to 16-bit PCM with lower volume to prevent clipping with multiple notes
+        # Using 0.25 so even 4 simultaneous notes sum to at most 1.0
+        wave = (wave * 32767 * 0.25).astype(np.int16)
 
         # Make it 2D for stereo (duplicate mono to both channels)
         stereo_wave = np.column_stack((wave, wave))
