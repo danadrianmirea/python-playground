@@ -260,28 +260,31 @@ class Piano:
             self.pressed_notes[note_index].stop()
             del self.pressed_notes[note_index]
 
-    def _generate_sound(self, frequency, duration=1.0, sample_rate=44100):
-        """Generate a sine wave sound at the given frequency."""
+    def _generate_sound(self, frequency, sample_rate=44100):
+        """Generate a sine wave sound at the given frequency.
+
+        Creates a long buffer (10 seconds) with seamless looping.
+        The buffer length is an exact multiple of the wave period so that
+        looping the sound buffer produces no clicks or pops.
+        """
         import numpy as np
 
-        # Calculate number of samples
-        num_samples = int(sample_rate * duration)
+        # Calculate samples per period for this frequency
+        period_samples = int(round(sample_rate / frequency))
 
-        # Generate sine wave
-        t = np.linspace(0, duration, num_samples, False)
+        # Generate exactly N periods for a ~10 second buffer
+        # This ensures the wave ends exactly at a zero-crossing
+        num_periods = int(10.0 * frequency)
+        num_samples = period_samples * num_periods
+
+        # Generate sine wave using integer indexing for precision
+        t = np.arange(num_samples, dtype=np.float64) / sample_rate
         wave = np.sin(2 * np.pi * frequency * t)
 
-        # Apply envelope (attack and release) to avoid clicks
-        attack = int(sample_rate * 0.01)  # 10ms attack
-        release = int(sample_rate * 0.05)  # 50ms release
-
-        # Attack envelope
+        # Apply attack envelope only (no release, so looping is seamless)
+        attack = int(sample_rate * 0.005)  # 5ms attack to avoid initial click
         if attack > 0:
             wave[:attack] *= np.linspace(0, 1, attack)
-
-        # Release envelope
-        if release > 0:
-            wave[-release:] *= np.linspace(1, 0, release)
 
         # Add harmonics for richer sound
         # Second harmonic
